@@ -156,17 +156,17 @@ $env:OPENEMS_INSTALL_PATH = "C:\Users\ee\AppData\Local\org.fairbeam.desktop\runt
 
 **Steps:**
 
-- [ ] Write `requirements.in` containing exactly `emerge==2.8.9`.
-- [ ] Generate the lock with `uv` (on PATH):
+- [x] Write `requirements.in` containing exactly `emerge==2.8.9`.
+- [x] Generate the lock with `uv` (on PATH):
   `uv pip compile python/fairbeam/emerge_lock/requirements.in --generate-hashes --python-version 3.13 --python-platform x86_64-pc-windows-msvc --only-binary :all: --no-header -o python/fairbeam/emerge_lock/win_amd64-cp313.txt`
   No extras. If any package has no `cp313`/`py3` win_amd64 wheel, stop with `BLOCKED` and name it.
-- [ ] Verify in a throwaway folder outside the repo:
+- [x] Verify in a throwaway folder outside the repo:
   `py -3.13 -m pip download --no-deps --require-hashes --only-binary=:all: -r python/fairbeam/emerge_lock/win_amd64-cp313.txt -d $env:TEMP\emerge-lock-check`
   Record the file count and total bytes (from `Get-ChildItem | Measure-Object Length -Sum`).
-- [ ] Add those two measured numbers and the command to the **Evidence log** at the bottom of this plan.
+- [x] Add those two measured numbers and the command to the **Evidence log** at the bottom of this plan.
   Also list the license field of `gmsh`, `mkl` and `emsutil` wheels (from their METADATA) there.
-- [ ] Delete the throwaway folder. Do not commit wheels.
-- [ ] Commit: `Add hash-locked EMerge 2.8.9 dependency set for the managed venv`
+- [x] Delete the throwaway folder. Do not commit wheels.
+- [x] Commit: `Add hash-locked EMerge 2.8.9 dependency set for the managed venv`
 
 **Done when:** the lock installs-by-download with `--require-hashes` and the evidence log has the measured size.
 
@@ -373,4 +373,7 @@ $env:OPENEMS_INSTALL_PATH = "C:\Users\ee\AppData\Local\org.fairbeam.desktop\runt
 Fill only with commands run and outputs observed. Date every entry.
 
 - 2026-11-04 (Planner): `pip index versions emerge` → latest 2.8.9. Wheel METADATA: `Requires-Python <3.14,>=3.10`; dependencies as listed in Shared facts. `emerge/__init__.py` header: GPL-2.0 or any later version.
+- 2026-11-04 (Task 1, Claude Sonnet 5.5): `uv 0.9.13`, `uv pip compile python/fairbeam/emerge_lock/requirements.in --generate-hashes --python-version 3.13 --python-platform x86_64-pc-windows-msvc --only-binary :all: --no-header -o python/fairbeam/emerge_lock/win_amd64-cp313.txt` → exit 0; 52 pinned packages, every one resolved as a wheel (no `BLOCKED`).
+- 2026-11-04 (Task 1): `py -3.13 -m pip download --no-deps --require-hashes --only-binary=:all: -r python/fairbeam/emerge_lock/win_amd64-cp313.txt -d $env:TEMP\emerge-lock-check` → exit 0, `Successfully downloaded` 52 packages. `Get-ChildItem ... | Measure-Object Length -Sum` → **Count 52, Sum 461988175 bytes (about 441 MiB)** of wheels. This is the download size only; the installed size is measured in Task 5. Throwaway folder deleted afterwards; no wheels committed.
+- 2026-11-04 (Task 1): License fields from wheel METADATA: `gmsh-4.14.1` → `License: GPLv2+` (classifier GPLv2+). `mkl-2026.2.0` → `License: Intel Simplified Software License` (classifier `License :: Other/Proprietary License`, `LICENSE.txt` in wheel). `emsutil-0.8.3` → **no license field, no classifier and no LICENSE file in the wheel** (METADATA only has name, summary, URLs and requirements). Open for the human/Planner: `mkl` (and its `intel-openmp`, `onemkl-license` companions) is proprietary-but-redistributable-by-Intel and is only installed on user request from PyPI; `emsutil` licensing needs checking upstream before Task 8 states a license posture.
 - 2026-11-04 (Planner): `.venv` Python 3.13.16; Elmer tests `-p "test_elmer_*.py"` → `Ran 33 tests ... OK` with `OPENEMS_INSTALL_PATH` set to the desktop runtime openEMS folder.
