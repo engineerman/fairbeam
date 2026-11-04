@@ -16,8 +16,8 @@ export default function EmergePlanarRun(props: { close: () => void }) {
   const [values, setValues] = createSignal({
     f_min_hz: String(number(draft.simulation?.f_min, 0.75)),
     f_max_hz: String(number(draft.simulation?.f_max, 1.25)),
-    points: "11",
-    air_height_mm: "8",
+    points: "15",
+    air_height_mm: "6.4",
     padding_mm: "10",
   });
   const [enclosure, setEnclosure] = createSignal<"shielded" | "open">("shielded");

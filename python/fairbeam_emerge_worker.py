@@ -5,9 +5,11 @@ process with that environment's interpreter). This is the only Fairbeam file tha
 it imports nothing from ``fairbeam``. Usage: ``python fairbeam_emerge_worker.py case.json``.
 
 It builds exactly the case described by ``case.json``, solves it in this process, and writes
-``raw.json`` next to the case. Threading uses EMerge 3 ``run_sweep(nthreads=…)`` or
-``run_sweep_distributed`` (thread workers) from ``case["nthreads"]``. The adapter checks the raw
-S-parameters; nothing here adjusts a result.
+``raw.json`` next to the case. Threading uses EMerge 3 ``run_sweep(nthreads=…)`` from
+``case["nthreads"]`` (one frequency at a time). Concurrent ``run_sweep_distributed`` factorizations
+are not used: on large planar meshes they duplicate SuperLU memory and have aborted under Windows
+(job ``20261104-204027-177887``). The adapter checks the raw S-parameters; nothing here adjusts a
+result.
 """
 import json
 import math
@@ -333,17 +335,13 @@ def _prepare_env(nthreads=1):
 
 
 def _run_frequency_sweep(sim, case):
-    """Run the MW frequency sweep with EMerge 3 threading / optional distributed workers."""
+    """Run the MW frequency sweep sequentially with EMerge 3 ``nthreads``.
+
+    Frequencies are solved one after another (same pattern as the RFSim hairpin script). The
+    thread budget still goes to SuperLU/OpenMP inside each solve. Parallel frequency workers are
+    avoided because each holds a full factorization and large planar cases OOM under Windows.
+    """
     budget = _nthreads(case)
-    frequencies = case.get("frequencies_hz") or case.get("frequency_hz") or []
-    n_freq = len(frequencies)
-    if n_freq >= 2 and budget >= 2:
-        n_workers = min(n_freq, max(1, budget // 2), 8)
-        per = max(1, budget // n_workers)
-        data = sim.mw.run_sweep_distributed(n_workers=n_workers, nthreads=per, worker_type="thread")
-        setup = {"mode": "distributed", "n_workers": n_workers, "nthreads": per,
-                 "threads_budget": budget, "worker_type": "thread"}
-        return data, setup
     data = sim.mw.run_sweep(nthreads=budget)
     return data, {"mode": "sequential", "nthreads": budget, "threads_budget": budget}
 
