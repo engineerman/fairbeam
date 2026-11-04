@@ -203,9 +203,9 @@ $env:OPENEMS_INSTALL_PATH = "C:\Users\ee\AppData\Local\org.fairbeam.desktop\runt
 
 **Steps:**
 
-- [ ] Implement module and tests.
-- [ ] Run: `-p "test_emerge_runtime.py"` (see Shared facts) → all pass. Run `-p "test_elmer_*.py"` → still pass.
-- [ ] Commit: `Add the managed EMerge virtual environment (opt-in, hash-locked)`
+- [x] Implement module and tests.
+- [x] Run: `-p "test_emerge_runtime.py"` (see Shared facts) → all pass. Run `-p "test_elmer_*.py"` → still pass.
+- [x] Commit: `Add the managed EMerge virtual environment (opt-in, hash-locked)`
 
 **Done when:** tests pass without network or EMerge.
 
