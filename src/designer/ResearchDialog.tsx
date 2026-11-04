@@ -24,7 +24,13 @@ const EMERGE_BUSY = new Set(["creating", "installing", "verifying"]);
 type Backend = ResearchBackend;
 const fixtureBackend = (backend: Backend) => backend === "elmer" || backend === "emerge";
 const name = (backend: Backend) => t(`research.backend.${backend}`);
-const jobName = (job: Job) => job.research?.settings.analysis === "driven" ? (job.name || t("elmerAntenna.option")) : job.research?.settings.closed_pec ? (job.name || t("elmerDesign.option")) : name(job.research?.backend ?? "periodic");
+const jobName = (job: Job) => {
+  const analysis = job.research?.settings.analysis;
+  if (analysis === "driven") return job.name || (job.research?.backend === "emerge" ? t("emergeAntenna.option") : t("elmerAntenna.option"));
+  if (analysis === "planar_two_port") return job.name || t("emergePlanar.option");
+  if (job.research?.settings.closed_pec) return job.name || t("elmerDesign.option");
+  return name(job.research?.backend ?? "periodic");
+};
 const db = (re: number, im: number) => 20 * Math.log10(Math.max(1e-15, Math.hypot(re, im)));
 const PHASE_LABELS: Record<string, string> = { building: "research.phase.building", simulating: "research.phase.simulating", results_exported: "research.phase.exported", validating: "research.phase.validating" };
 

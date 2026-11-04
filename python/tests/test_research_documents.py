@@ -240,6 +240,19 @@ class ResearchDocumentTests(unittest.TestCase):
             self.app.research_submit(refused)
         prepare.assert_not_called()
 
+    def test_emerge_planar_source_binding_is_admitted(self):
+        body = self.body(backend="emerge")
+        body["settings"]["analysis"] = "planar_two_port"
+        job = self.submit(body)
+        self.assertEqual(job.research["source"]["model_id"], self.file["id"])
+        self.assertEqual(job.research["backend"], "emerge")
+        self.assertEqual(job.research["settings"]["analysis"], "planar_two_port")
+        refused = self.body(backend="elmer")
+        refused["settings"]["analysis"] = "planar_two_port"
+        with mock.patch("fairbeam.research.prepare") as prepare, self.assertRaisesRegex(ApiError, "driven Elmer or EMerge"):
+            self.app.research_submit(refused)
+        prepare.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

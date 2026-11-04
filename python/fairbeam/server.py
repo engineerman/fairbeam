@@ -1857,8 +1857,17 @@ class App:
                         or not re.fullmatch(r"[0-9a-f]{64}", source["workspace_hash"])
                         or not isinstance(source.get("backup_scope"), str)):
                     raise ValueError("research source requires a workspace model, hash and backup scope")
-                if (body.get("backend") not in ("elmer", "emerge") or not isinstance(body.get("settings"), dict)
-                        or body["settings"].get("analysis") != "driven"):
+                settings = body.get("settings")
+                backend = body.get("backend")
+                analysis = settings.get("analysis") if isinstance(settings, dict) else None
+                # Driven Elmer/EMerge antenna and EMerge planar two-port bind to the workspace Design.
+                if not (
+                    isinstance(settings, dict)
+                    and (
+                        (backend == "elmer" and analysis == "driven")
+                        or (backend == "emerge" and analysis in ("driven", "planar_two_port"))
+                    )
+                ):
                     raise ValueError("workspace source binding is supported only for driven Elmer or EMerge runs")
                 self._require_backup_scope(source)
                 model_id = modelfiles.check_id(source.get("model_id"))

@@ -378,15 +378,22 @@ extruded conclusions change, update Shared facts and code from those Evidence-lo
 
 **Steps:**
 
-- [ ] Fixture through the CLI `planar` subcommand: shielded coarse, shielded fine, open coarse
+- [x] Fixture through the CLI `planar` subcommand: shielded coarse, shielded fine, open coarse
   (settings from frozen Shared facts, band 0.75–1.25 GHz). Prefer short/coarse first; then the
   deferred full-band long runs above.
-- [ ] Same fixture through the normal Fairbeam openEMS Run path (default settings). Record its best
+  (short shielded coarse + full-band shielded coarse/fine + open coarse; Evidence log Runs 1–4)
+- [x] Same fixture through the normal Fairbeam openEMS Run path (default settings). Record its best
   |S21| frequency/dB from its bundle.
-- [ ] One end-to-end run from the Run dialog (managed venv, queue, Results view shows S21).
-- [ ] Evidence log per run from result/manifest files only: best |S21| f and dB, S11 there, max
+  (GPU runtime; Evidence log Run 5 — note non-physical |S21|>1 / port-1-only)
+- [x] One end-to-end run from the Run dialog (managed venv, queue, Results view shows S21).
+  (job `20261104-191921-204dbc`; Evidence log Run 6. Source-binding + project-bundle publish
+  gates for `planar_two_port` were missing; fixed in `server.py` / `jobs.py` /
+  `document_workspace.py` before Results publish.)
+- [x] Evidence log per run from result/manifest files only: best |S21| f and dB, S11 there, max
   |S_ij|, column power max, reciprocity max, mesh, elapsed, status, leftover processes.
-- [ ] Any check failure or timeout → `BLOCKED` with logs. Do not change limits.
+  (Runs 1–6 logged)
+- [x] Any check failure or timeout → `BLOCKED` with logs. Do not change limits.
+  (none; Run 6 exported clean)
 - [ ] Commit: `Record native EMerge planar two-port runs`
 
 ---
@@ -459,3 +466,59 @@ Fill only with commands run and outputs observed. Date every entry.
 - 2026-11-04 (human): **Skip Run D.** Freeze timeout 3600 s and resource proxy 400000 by
   extrapolation from B (faster); defer full-band / 41-pt long sims to Task 6+. Shared facts
   frozen: sheets, PORT_PAD_MM=1.0, METAL_EDGE_MM=0.4, points 3–41, coarse=0.25, fine=0.15.
+- 2026-11-04 Task 6 Run 1 (CLI `planar`, managed EMerge 2.8.9): fixture
+  `emerge_hairpin.design.json`, shielded coarse sheets, short protocol 5 pts 0.95–1.15 GHz,
+  air_height_mm=6.4, approximate_metals. status **results_exported**; best |S21|
+  **1.050 GHz**, S21 **−0.82 dB**, S11 **−19.55 dB**; max |S_ij|=0.990; max col power=0.980;
+  max |S21−S12|=3.9e−5; mesh nodes=19194 tetrahedra=109920; elapsed_seconds=338.0.
+  Matches spike B shape (B: −0.86 dB / −17.58 dB at 1.05 GHz, 109892 tets, 311 s).
+  Artifacts: `%TEMP%\fairbeam-emerge-planar-task6\run_shielded_coarse_short\`
+  (`result.json`, `manifest.json`, `summary.csv`, `summary.json`, `sparams.png`, `worker.log`).
+- 2026-11-04 Task 6 Run 2 (CLI `planar`): shielded coarse sheets, **full-band** 15 pts
+  0.75–1.25 GHz. status **results_exported**; best |S21| **1.071429 GHz**, S21 **−0.63 dB**,
+  S11 **−30.45 dB**; max |S_ij|=0.996; max col power=0.993; max |S21−S12|=4.2e−5;
+  mesh nodes=19147 tetrahedra=109584; elapsed_seconds=971.7. Aligns with spike A peak
+  frequency (1.071429 GHz) and S21 (−0.62 dB). Artifacts:
+  `%TEMP%\fairbeam-emerge-planar-task6\run_shielded_coarse_fullband\`
+  (`result.json`, `sparams.png`, `summary.json`, `worker.log`).
+- 2026-11-04 Task 6 Run 3 (CLI `planar`): shielded **fine** sheets, full-band 15 pts
+  0.75–1.25 GHz. status **results_exported**; best |S21| **1.071429 GHz**, S21 **−0.63 dB**,
+  S11 **−31.27 dB**; max |S_ij|=0.996; max col power=0.993; max |S21−S12|=4.0e−5;
+  mesh nodes=19164 tetrahedra=109714 (~same as coarse; metal-edge size dominates);
+  elapsed_seconds=1054. Coarse→fine peak shift ≈ 0. Artifacts:
+  `%TEMP%\fairbeam-emerge-planar-task6\run_shielded_fine_fullband\`
+  (`result.json`, `sparams.png`, `summary.json`, `worker.log`).
+- 2026-11-04 Task 6 Run 4 (CLI `planar`): **open** coarse sheets, full-band 15 pts,
+  padding_mm=10. status **results_exported**; best |S21| **1.071429 GHz**, S21 **−0.51 dB**,
+  S11 **−34.20 dB**; max |S_ij|=0.999; max col power=0.999; max |S21−S12|=2.0e−5;
+  mesh nodes=19441 tetrahedra=111586; elapsed_seconds=1055. Same peak frequency as
+  shielded; slightly lower insertion loss. Artifacts:
+  `%TEMP%\fairbeam-emerge-planar-task6\run_open_coarse_fullband\`
+  (`result.json`, `sparams.png`, `summary.json`, `worker.log`).
+- 2026-11-04 Task 6 Run 5 (Fairbeam openEMS GPU, default design settings): fixture
+  `emerge_hairpin.design.json` via `fairbeam run --engine gpu --threads auto`
+  (gpu-runtime openEMS). `converged=True`, timesteps=614535, solver_time_s=107.4,
+  wall_time_total_s=109.8, mesh_total_cells=145152, `sparams.complete=false`
+  (excited=[1] only; design port 2 `excite: false`). From bundle: best |S21|
+  **1.025625 GHz**, S21 **+5.07 dB** (non-physical; column power max reported 3.40),
+  S11 there **−7.27 dB**; Fairbeam band note min S11 **−13.4 dB** @ **1.024 GHz**.
+  Artifacts: `%TEMP%\fairbeam-emerge-planar-task6\run_openems_gpu\`
+  (`emerge-hairpin-openems-gpu.json`, `sparams.png`, `summary.json`).
+  Concern: |S21|>1 on this default one-port-excitation path; RFSim bakeoff cited
+  Fairbeam openEMS best S21 −2.70 dB @ 1.086 GHz on pinned mesh — different setup.
+- 2026-11-04 Task 6 Run 6 (Run dialog → emerge-planar, managed EMerge 2.8.9): fixture
+  `emerge_hairpin`, shielded coarse sheets, short protocol 5 pts 0.95–1.15 GHz,
+  air_height_mm=6.4, approximate_metals, accept_lumped_terminals. job
+  `20261104-191921-204dbc`. First submit failed until `planar_two_port` source
+  binding was allowed (`server.py` / `jobs.py`). status **results_exported**;
+  best |S21| **1.050 GHz**, S21 **−0.82 dB**, S11 **−19.55 dB**; max |S_ij|=0.990;
+  max col power=0.980; max |S21−S12|=3.9e−5; mesh nodes=19194 tetrahedra=109920;
+  elapsed_seconds=320.0; leftover fairbeam_emerge_worker processes=0. Matches
+  CLI Run 1 / spike B. Bundle has `sparams.complete=true` and `s["2,1"]` (5 pts);
+  project publish initially skipped (`jobs.py` only listed driven schemas) — fixed
+  to include `fairbeam.emerge-planar-result/1` (+ `document_workspace.py`), then
+  published `public/projects/emerge-20261104-191921-204dbc.json`. Results load
+  confirmed S21 present (engine EMerge, complete true).
+  Artifacts: `.sim/jobs/20261104-191921-204dbc/` (`result.json`, `bundle.json`,
+  `worker.log`, `manifest.json`);
+  `public/projects/emerge-20261104-191921-204dbc.json`.
