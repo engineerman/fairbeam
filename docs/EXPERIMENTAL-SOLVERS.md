@@ -16,9 +16,9 @@ If an installed app reports `No module named fairbeam_elmer`, update or repair F
 
 Choose the **EMerge** backend in Simulation → Experimental solvers for the fixed WR-90 air-filled waveguide fixture only. Level A does not translate the current Design. Select `coarse` or `fine` resolution and submit; results are checked against the analytic straight-waveguide reference in the Research panel.
 
-On Windows, **Install EMerge** creates a pinned Python 3.13 virtual environment with `emerge==2.8.9` from PyPI (hash-locked). The Research panel shows the EMerge GPL-2.0-or-later notice and the Intel MKL proprietary license before the Install button. A measured managed install on 2026-11-04 was 1567317171 bytes (1494.7 MiB) and took 74.7 s; the wheel download set was 461988175 bytes (about 441 MiB). Leave the path blank to use that managed copy. A folder you enter, or `FAIRBEAM_EMERGE_PYTHON`, takes precedence. Nothing is installed system-wide, and EMerge is not bundled in the Fairbeam installer.
+On Windows, **Install EMerge** creates a pinned Python 3.13 virtual environment with `emerge==3.0.0b12` from PyPI (hash-locked). The Research panel shows the EMerge GPL-2.0-or-later notice and the Intel MKL proprietary license before the Install button. The locked download set is about 399 MiB (418619020 bytes, PyPI wheel sizes 2026-11-04). A measured managed install of `3.0.0b12` on 2026-11-04 was 1421133962 bytes (1355.3 MiB) after 80.9 s. Leave the path blank to use that managed copy. A folder you enter, or `FAIRBEAM_EMERGE_PYTHON`, takes precedence. Nothing is installed system-wide, and EMerge is not bundled in the Fairbeam installer.
 
-On macOS and Linux there is no managed installer. Create your own Python 3.10–3.13 environment with `emerge==2.8.9`, then enter that environment's folder (or its Python executable) in the path field, or set `FAIRBEAM_EMERGE_PYTHON`.
+On macOS and Linux there is no managed installer. Create your own Python 3.10–3.13 environment with `emerge==3.0.0b12`, then enter that environment's folder (or its Python executable) in the path field, or set `FAIRBEAM_EMERGE_PYTHON`.
 
 See [the EMerge experiment](EMERGE-EXPERIMENT.md) for the fixture definition, acceptance criteria and recorded native observations.
 

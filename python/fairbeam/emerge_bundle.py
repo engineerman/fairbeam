@@ -1,7 +1,7 @@
 """Export an EMerge driven Design result into the shared designer Results format.
 
 Geometry comes from the admitted design; no openEMS simulation is performed.
-EMerge 2.8.9 is natively ``exp(+i omega t)``, matching Fairbeam frames, so S is
+EMerge 3.0.0b12 is natively ``exp(+i omega t)``, matching Fairbeam frames, so S is
 not conjugated. Far field is empty in Level B / B2. Completion is never a validation claim.
 """
 import copy

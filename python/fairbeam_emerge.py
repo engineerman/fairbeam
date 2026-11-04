@@ -29,7 +29,7 @@ FREQUENCIES_HZ = (8e9, 9e9, 10e9, 11e9, 12e9)
 # default is 0.33 and EMerge warns above 0.334). PROVISIONAL until the Planner freezes them after
 # Task 5; ``fine`` is exactly 2x finer than ``coarse``.
 RESOLUTIONS = {"coarse": 0.25, "fine": 0.125}
-SUPPORTED_EMERGE = ("2.8.9",)
+SUPPORTED_EMERGE = ("3.0.0b12",)
 PHASOR = "exp(+i omega t)"
 NATIVE_PHASORS = ("exp(+i omega t)", "exp(-i omega t)")
 # Acceptance criteria owned by the Planner (docs/agent/plans/2026-11-04-emerge-level-a-fixture.md),

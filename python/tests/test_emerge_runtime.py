@@ -69,7 +69,7 @@ class ManagedEmerge(unittest.TestCase):
     def test_committed_lock_matches_the_pin(self):
         digest = hashlib.sha256(emerge_runtime.lock_path().read_bytes()).hexdigest()
         self.assertEqual(digest, emerge_runtime.PIN["lock_sha256"])
-        self.assertIn("emerge==2.8.9 ", emerge_runtime.lock_path().read_text(encoding="utf-8"))
+        self.assertIn("emerge==3.0.0b12 ", emerge_runtime.lock_path().read_text(encoding="utf-8"))
 
     def test_installs_into_the_state_folder_and_writes_the_marker_last(self):
         self.assertFalse(emerge_runtime.installed())
@@ -80,7 +80,7 @@ class ManagedEmerge(unittest.TestCase):
         self.assertTrue(status["installed"])
         self.assertEqual(status["state"], "done")
         marker = json.loads((home / "fairbeam-emerge.json").read_text(encoding="utf-8"))
-        self.assertEqual(marker, {"version": "2.8.9", "lock_sha256": emerge_runtime.PIN["lock_sha256"]})
+        self.assertEqual(marker, {"version": "3.0.0b12", "lock_sha256": emerge_runtime.PIN["lock_sha256"]})
         venv_args, pip_args = fake.calls[0][0], fake.calls[1][0]
         self.assertEqual(venv_args[:3], [sys.executable, "-m", "venv"])
         for flag in ("-I", "--no-deps", "--require-hashes", "--only-binary=:all:", "--no-input"):
@@ -110,7 +110,7 @@ class ManagedEmerge(unittest.TestCase):
     def test_wrong_package_version_is_not_accepted(self):
         fake = FakeSubprocess(self, pip_version="2.8.8")
         with mock.patch("subprocess.run", fake):
-            with self.assertRaisesRegex(ValueError, "does not hold emerge 2.8.9"):
+            with self.assertRaisesRegex(ValueError, "does not hold emerge 3.0.0b12"):
                 emerge_runtime.install()
         self.assertFalse(emerge_runtime.home().exists())
 
@@ -152,7 +152,7 @@ class ManagedEmerge(unittest.TestCase):
     def test_marker_for_another_lock_is_not_installed(self):
         self.run_install()
         marker = emerge_runtime.home() / "fairbeam-emerge.json"
-        marker.write_text(json.dumps({"version": "2.8.9", "lock_sha256": "0" * 64}), encoding="utf-8")
+        marker.write_text(json.dumps({"version": "3.0.0b12", "lock_sha256": "0" * 64}), encoding="utf-8")
         self.assertFalse(emerge_runtime.installed())
         marker.write_text("not json", encoding="utf-8")
         self.assertFalse(emerge_runtime.installed())
@@ -179,8 +179,8 @@ class ManagedEmerge(unittest.TestCase):
         for key in ("supported", "installed", "path", "version", "license", "source", "state", "error",
                     "estimated_bytes"):
             self.assertIn(key, status)
-        self.assertEqual(status["estimated_bytes"], 461988175)
-        self.assertEqual(status["version"], "2.8.9")
+        self.assertEqual(status["estimated_bytes"], emerge_runtime.ESTIMATED_BYTES)
+        self.assertEqual(status["version"], "3.0.0b12")
         self.assertFalse(status["installed"])
 
 

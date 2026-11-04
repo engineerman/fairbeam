@@ -96,7 +96,7 @@ class EmergeResearchAdmission(unittest.TestCase):
     def test_prepare_admits_patch_design_and_rejects_two_ports(self):
         with tempfile.TemporaryDirectory() as directory:
             exe, site = fake_venv(directory)
-            record = site / "emerge-2.8.9.dist-info" / "RECORD"
+            record = site / "emerge-3.0.0b12.dist-info" / "RECORD"
             record.write_text("emerge/__init__.py,sha256=abc,10\n", encoding="utf-8")
             design = blank_design("p", "Patch")
             spec = research.prepare({
@@ -117,7 +117,7 @@ class EmergeResearchAdmission(unittest.TestCase):
     def test_prepare_admits_planar_hairpin_fixture(self):
         with tempfile.TemporaryDirectory() as directory:
             exe, site = fake_venv(directory)
-            record = site / "emerge-2.8.9.dist-info" / "RECORD"
+            record = site / "emerge-3.0.0b12.dist-info" / "RECORD"
             record.write_text("emerge/__init__.py,sha256=abc,10\n", encoding="utf-8")
             design = json.loads(HAIRPIN.read_text(encoding="utf-8"))
             spec = research.prepare({
@@ -137,7 +137,7 @@ class EmergeResearchAdmission(unittest.TestCase):
                                   "settings": {"resolution": "coarse"}})
         with tempfile.TemporaryDirectory() as directory:
             exe, site = fake_venv(directory)
-            record = site / "emerge-2.8.9.dist-info" / "RECORD"
+            record = site / "emerge-3.0.0b12.dist-info" / "RECORD"
             record.write_text("emerge/__init__.py,sha256=abc,10\n", encoding="utf-8")
             spec = research.prepare({"backend": "emerge", "path": directory,
                                      "settings": {"resolution": "coarse"}})
@@ -154,7 +154,7 @@ class EmergeResearchAdmission(unittest.TestCase):
             result = research.probe({"backend": "emerge", "path": directory})
             self.assertTrue(result["available"])
             self.assertEqual(result["backend"], "emerge")
-            self.assertEqual(result["emerge_version"], "2.8.9")
+            self.assertEqual(result["emerge_version"], "3.0.0b12")
             self.assertTrue(result["version_supported"])
         with tempfile.TemporaryDirectory() as directory:
             self.assertFalse(research.probe({"backend": "emerge", "path": directory})["available"])
@@ -281,7 +281,7 @@ class EmergeResearchHttp(unittest.TestCase):
     def test_post_admits_emerge_run_against_fake_venv(self):
         with tempfile.TemporaryDirectory() as directory:
             fake_venv(directory)
-            (Path(directory) / "Lib" / "site-packages" / "emerge-2.8.9.dist-info" / "RECORD").write_text(
+            (Path(directory) / "Lib" / "site-packages" / "emerge-3.0.0b12.dist-info" / "RECORD").write_text(
                 "emerge/__init__.py,sha256=abc,10\n", encoding="utf-8")
             code, doc = self.request("POST", "/api/research/runs",
                                      {"backend": "emerge", "path": directory,

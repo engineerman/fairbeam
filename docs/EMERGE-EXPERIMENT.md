@@ -16,19 +16,19 @@ the `design` CLI subcommand. Both paths are opt-in experimental; Design results 
 
 Use Python 3.10+ from the repository, or install the Python package to obtain the separate
 `fairbeam-emerge` entry point. Point `--root` (or `FAIRBEAM_EMERGE_PYTHON`) at a virtual-environment
-folder that contains EMerge 2.8.9, or at that environment's Python executable. There is no PATH
+folder that contains EMerge 3.0.0b12, or at that environment's Python executable. There is no PATH
 lookup.
 
 ```powershell
-python python/fairbeam_emerge.py --root $env:LOCALAPPDATA\org.fairbeam.desktop\emerge\2.8.9 capabilities
-python python/fairbeam_emerge.py --root $env:LOCALAPPDATA\org.fairbeam.desktop\emerge\2.8.9 waveguide --experimental --resolution coarse --out E:/research/wr90-coarse
-python python/fairbeam_emerge.py --root $env:LOCALAPPDATA\org.fairbeam.desktop\emerge\2.8.9 waveguide --experimental --resolution fine --out E:/research/wr90-fine
+python python/fairbeam_emerge.py --root $env:LOCALAPPDATA\org.fairbeam.desktop\emerge\3.0.0b12 capabilities
+python python/fairbeam_emerge.py --root $env:LOCALAPPDATA\org.fairbeam.desktop\emerge\3.0.0b12 waveguide --experimental --resolution coarse --out E:/research/wr90-coarse
+python python/fairbeam_emerge.py --root $env:LOCALAPPDATA\org.fairbeam.desktop\emerge\3.0.0b12 waveguide --experimental --resolution fine --out E:/research/wr90-fine
 ```
 
 On Windows, **Install EMerge** in Simulation → Experimental solvers creates the managed environment
-above (hash-locked `emerge==2.8.9` and its dependencies from PyPI). Leave the path blank to use that
+above (hash-locked `emerge==3.0.0b12` and its dependencies from PyPI). Leave the path blank to use that
 copy after install. On other platforms, create your own Python 3.10–3.13 environment with
-`emerge==2.8.9` and enter its folder, or set `FAIRBEAM_EMERGE_PYTHON`.
+`emerge==3.0.0b12` and enter its folder, or set `FAIRBEAM_EMERGE_PYTHON`.
 
 `capabilities` does not launch the solver: availability means the environment and `emerge` dist-info
 were found, not that every native dependency has been exercised. `--experimental` is required for
@@ -49,9 +49,10 @@ next mode TE20 is at 13.11 GHz, so the band is single-mode. c0 = 299792458 m/s.
 
 The analytic reference uses Fairbeam's `exp(+i omega t)` phasor convention with reference planes at
 the port faces: k0 = 2πf/c0, β = sqrt(k0² − (π/a)²), S21 = S12 = exp(−i β L), S11 = S22 = 0.
-EMerge 2.8.9 uses the same native convention for this fixture; the adapter does not conjugate.
+EMerge 3.0.0b12 (and the earlier 2.8.9 pin) use the same native convention for this fixture; the
+adapter does not conjugate.
 
-Native Windows managed EMerge 2.8.9, recorded 2026-11-04, produced:
+Native Windows managed EMerge **2.8.9**, recorded 2026-11-04 (before the 3.0.0b12 pin), produced:
 
 | Resolution | Wavelength fraction | Nodes / tetrahedra | Solver elapsed | max \|S11\| | min \|S21\| | max phase error |
 |---|---|---|---|---|---|---|
@@ -109,7 +110,7 @@ exceeds 200000. Sweep: `f_min_hz`…`f_max_hz`, 3–21 linspace points. Schema
 
 ```powershell
 # after emerge_design.admit → case.json
-python python/fairbeam_emerge.py --root $env:LOCALAPPDATA\org.fairbeam.desktop\emerge\2.8.9 design --experimental --case case.json --out E:/research/patch-coarse
+python python/fairbeam_emerge.py --root $env:LOCALAPPDATA\org.fairbeam.desktop\emerge\3.0.0b12 design --experimental --case case.json --out E:/research/patch-coarse
 ```
 
 In the app, open **Run**, choose **EMerge · Experimental antenna** (shown when health `emerge` ≥ 2),
@@ -118,7 +119,8 @@ accept the finite feed, and submit. openEMS remains available in the same dialog
 ### Patch class — recorded native observations (2026-11-04)
 
 Built-in `blank_design("p", "Patch")`, `feed_width_mm=1`, `padding_mm=40`, 2.0–3.0 GHz × 11 points,
-`approximate_metals` false (template metal has no conductivity). Managed EMerge 2.8.9 on Windows:
+`approximate_metals` false (template metal has no conductivity). Managed EMerge **2.8.9** on Windows
+(recorded 2026-11-04, before the 3.0.0b12 pin):
 
 | Run | Resolution | Nodes / tets | Solver elapsed | S11 min (linspace) | max \|S11\| |
 |---|---|---|---|---|---|
@@ -138,14 +140,15 @@ stay experimental exports.
 ## License and distribution
 
 EMerge is installed only on request. The managed Windows path downloads the hash-locked dependency
-set in `python/fairbeam/emerge_lock/win_amd64-cp313.txt` (52 wheels, 461988175 bytes / about
-441 MiB download, measured 2026-11-04) into the app data folder. The installed managed folder for
-version 2.8.9 measured 1567317171 bytes (1494.7 MiB) after a 74.7 s install on 2026-11-04. Nothing
-from that set is shipped inside the Fairbeam installer.
+set in `python/fairbeam/emerge_lock/win_amd64-cp313.txt` (50 wheels for pin `3.0.0b12`, estimated
+download 418619020 bytes / about 399 MiB from PyPI wheel sizes on 2026-11-04) into the app data
+folder. Managed install of pin `3.0.0b12` on 2026-11-04 measured **1421133962 bytes (1355.3 MiB)**
+after an **80.9 s** install. An earlier `2.8.9` folder measured 1567317171 bytes (1494.7 MiB) after
+74.7 s. Nothing from that set is shipped inside the Fairbeam installer.
 
 Component license fields recorded from the installed packages and their upstream notices:
 
-- EMerge 2.8.9: GPL-2.0-or-later (package headers; wheel LICENSE also notes Gmsh-derived parts)
+- EMerge 3.0.0b12: GPL-2.0-or-later (package headers; wheel LICENSE is GPL-2 text)
 - gmsh: GPLv2+ (wheel METADATA)
 - emsutil 0.8.3: no license field in the wheel; the upstream repository LICENSE is MIT, while
   `material.py` and `pyvista/display.py` in the wheel carry GPL-2.0-or-later headers

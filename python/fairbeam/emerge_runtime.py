@@ -22,16 +22,17 @@ from pathlib import Path
 from . import appstate
 
 PIN = {
-    "version": "2.8.9",
+    "version": "3.0.0b12",
     "platform": "win32",
     "python": (3, 13),
     "lock": "win_amd64-cp313.txt",
-    "lock_sha256": "28fce6389021befba3b0aa9f0106143f560bbe870841089a75e2277cf80aace6",
+    "lock_sha256": "ea0ab14e5435cc9cb852ed4a4f8abd4a4a70e33f5d97cff43e14c035b41e9e91",
     "source": "https://github.com/FennisRobert/EMerge",
     "license": "GPL-2.0-or-later (see the installed package's LICENSE)",
 }
-# Total size of the locked wheels (Task 1 evidence log: 52 files). The installed size is larger.
-ESTIMATED_BYTES = 461988175
+# Total size of the locked wheels (PyPI wheel sizes for the 50 lock entries, 2026-11-04).
+# The installed size on disk is larger.
+ESTIMATED_BYTES = 418619020
 MARKER = "fairbeam-emerge.json"
 BUSY = ("creating", "installing", "verifying")
 PIP_TIMEOUT_S = 1800

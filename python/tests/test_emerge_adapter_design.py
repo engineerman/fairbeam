@@ -43,7 +43,7 @@ def synthetic_raw(case=None, *, s11=0.1, convention=NATIVE, frequencies=None):
     case = case or sample_case()
     frequencies = list(frequencies if frequencies is not None else case["frequencies_hz"])
     n = len(frequencies)
-    return {"kind": "design", "emerge_version": "2.8.9", "frequency_hz": frequencies,
+    return {"kind": "design", "emerge_version": "3.0.0b12", "frequency_hz": frequencies,
             "s11_re": [s11] * n, "s11_im": [0.0] * n, "z_ref": case["port"]["z0"],
             "phasor_convention": convention, "native_phasor_convention": convention,
             "elapsed_seconds": 2.5,
@@ -224,7 +224,7 @@ class DesignWorkerContract(unittest.TestCase):
     def test_build_design_raw_round_trips(self):
         case = sample_case()
         s11 = [0.1 + 0.2j, 0.05, -0.01 + 0.03j]
-        raw = self.worker.build_design_raw(case, "2.8.9", case["frequencies_hz"], s11,
+        raw = self.worker.build_design_raw(case, "3.0.0b12", case["frequencies_hz"], s11,
                                            {"nodes": 10, "tetrahedra": 5}, 1.25)
         json.dumps(raw, allow_nan=False)
         result = fem.assess_design(raw, case)

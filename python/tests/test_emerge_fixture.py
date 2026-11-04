@@ -20,7 +20,7 @@ NATIVE_PLUS = "exp(+i omega t)"
 NATIVE_MINUS = "exp(-i omega t)"
 
 
-def fake_venv(root, version="2.8.9", posix=False):
+def fake_venv(root, version="3.0.0b12", posix=False):
     """Create a minimal venv-shaped folder; nothing in it is executable."""
     root = Path(root)
     if posix:
@@ -50,7 +50,7 @@ def synthetic_raw(convention=NATIVE_PLUS, s11=0.0, flip=False):
         s21 = [v.conjugate() for v in s21]
     if convention == NATIVE_MINUS:
         s21 = [v.conjugate() for v in s21]
-    return {"emerge_version": "2.8.9", "frequency_hz": list(fem.FREQUENCIES_HZ),
+    return {"emerge_version": "3.0.0b12", "frequency_hz": list(fem.FREQUENCIES_HZ),
             "s11_re": [s11] * 5, "s11_im": [0.0] * 5,
             "s21_re": [v.real for v in s21], "s21_im": [v.imag for v in s21],
             "phasor_convention": convention, "elapsed_seconds": 1.5}
@@ -103,7 +103,7 @@ class Discovery(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             _, site = fake_venv(directory)
             with patch.object(fem.subprocess, "run") as launch:
-                self.assertEqual(fem.emerge_version(site), "2.8.9")
+                self.assertEqual(fem.emerge_version(site), "3.0.0b12")
                 launch.assert_not_called()
 
     def test_emerge_version_absent(self):
@@ -119,7 +119,7 @@ class Discovery(unittest.TestCase):
         self.assertTrue(caps["available"])
         self.assertEqual(caps["backend"], "emerge-experimental")
         self.assertEqual(caps["physics"], ["wr90_waveguide_fixture"])
-        self.assertEqual(caps["emerge_version"], "2.8.9")
+        self.assertEqual(caps["emerge_version"], "3.0.0b12")
         self.assertTrue(caps["version_supported"])
         self.assertEqual(caps["python"], str(exe.resolve()))
         self.assertEqual(len(caps["python_sha256"]), 64)
@@ -148,7 +148,7 @@ class Fixture(unittest.TestCase):
     def test_constants_match_plan(self):
         self.assertEqual((fem.A_M, fem.B_M, fem.L_M), (0.02286, 0.01016, 0.05))
         self.assertEqual(fem.FREQUENCIES_HZ, (8e9, 9e9, 10e9, 11e9, 12e9))
-        self.assertEqual(fem.SUPPORTED_EMERGE, ("2.8.9",))
+        self.assertEqual(fem.SUPPORTED_EMERGE, ("3.0.0b12",))
         self.assertEqual(set(fem.RESOLUTIONS), {"coarse", "fine"})
         self.assertEqual(fem.CRITERIA, {"s11_max": 0.02, "s21_min": 0.995,
                                         "phase_error_deg_max": 2.0, "passivity_max": 1.005})
@@ -279,7 +279,7 @@ class Assess(unittest.TestCase):
         raw = synthetic_raw()
         raw["mesh"] = {"nodes": 100, "tetrahedra": 400}
         result = fem.assess(raw)
-        self.assertEqual(result["emerge_version"], "2.8.9")
+        self.assertEqual(result["emerge_version"], "3.0.0b12")
         self.assertEqual(result["mesh"], {"nodes": 100, "tetrahedra": 400})
         self.assertEqual(result["elapsed_seconds"], 1.5)
 
@@ -392,7 +392,7 @@ class RunFixture(unittest.TestCase):
         manifest = self.manifest()
         self.assertEqual(manifest["schema"], "fairbeam-emerge-fixture-1")
         self.assertEqual(manifest["status"], "results_validated")
-        self.assertEqual(manifest["emerge_version"], "2.8.9")
+        self.assertEqual(manifest["emerge_version"], "3.0.0b12")
         for key in ("worker_sha256", "case_sha256", "python_sha256", "generator_sha256"):
             self.assertEqual(len(manifest[key]), 64, key)
         self.assertEqual(manifest["worker_exit_code"], 0)
@@ -577,7 +577,7 @@ class WorkerContract(unittest.TestCase):
         frequencies, s11, s21 = self.synthetic()  # synthetic data, not a solver result
         with tempfile.TemporaryDirectory() as directory:
             case = self.worker.load_case(self.case_path(directory))
-        raw = self.worker.build_raw(case, "2.8.9", [f * (1 + 1e-12) for f in frequencies], s11, s21,
+        raw = self.worker.build_raw(case, "3.0.0b12", [f * (1 + 1e-12) for f in frequencies], s11, s21,
                                     {"nodes": 10, "tetrahedra": 5}, 1.5)
         json.dumps(raw, allow_nan=False)
         self.assertEqual(raw["phasor_convention"], NATIVE_PLUS)
@@ -591,9 +591,9 @@ class WorkerContract(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             case = self.worker.load_case(self.case_path(directory))
         with self.assertRaises(ValueError):
-            self.worker.build_raw(case, "2.8.9", frequencies, s11, s21[:-1] + [complex("nan")], None, 1.0)
+            self.worker.build_raw(case, "3.0.0b12", frequencies, s11, s21[:-1] + [complex("nan")], None, 1.0)
         with self.assertRaises(ValueError):
-            self.worker.build_raw(case, "2.8.9", frequencies, s11[:-1], s21, None, 1.0)
+            self.worker.build_raw(case, "3.0.0b12", frequencies, s11[:-1], s21, None, 1.0)
 
 
 if __name__ == "__main__":

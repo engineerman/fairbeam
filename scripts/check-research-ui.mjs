@@ -24,9 +24,9 @@ try {
     let available = false, unavailable = false, detailConflict = false, ordinaryUnavailable = false, jobs = [], submitted;
     let healthEmerge = false;
     let emergeRuntime = {
-      supported: true, installed: false, path: "synthetic-emerge", version: "2.8.9",
+      supported: true, installed: false, path: "synthetic-emerge", version: "3.0.0b12",
       license: "GPL-2.0-or-later (synthetic)", source: "https://example.invalid/emerge-synthetic",
-      estimated_bytes: 461988175, state: "idle", error: "",
+      estimated_bytes: 418619020, state: "idle", error: "",
     };
     const requests = [];
     const historyQueries = [], ordinaryQueries = [];

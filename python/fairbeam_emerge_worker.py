@@ -381,7 +381,7 @@ def solve_fixture(case):
 def solve_design(case):
     """Build and solve an admitted Design case with EMerge. Imports EMerge, so call only in that env.
 
-    Citations (EMerge 2.8.9 under site-packages/emerge/_emerge/):
+    Citations (EMerge 3.0.0b12 under site-packages/emerge/_emerge/):
     - LumpedPort voltage direction: physics/microwave/bcs/port_bcs.py:1453-1493, 1559-1599
       (uniform E along ``direction`` / ``Vdirection``; ``height`` is the extent along that axis;
       ``sign`` from the case is applied by negating the Axis).
@@ -445,7 +445,7 @@ def solve_design(case):
 def solve_planar(case):
     """Build and solve an admitted planar two-port case with EMerge.
 
-    Physics mirror the Level B2 Task 1 spike on EMerge 2.8.9: substrate ``Box``, zero-thickness
+    Physics mirror the Level B2 Task 1 spike (originally measured on EMerge 2.8.9; pin is now 3.0.0b12): substrate ``Box``, zero-thickness
     ``XYPolygon.geo()`` PEC sheets, ``PEC`` on the substrate bottom, optional second-order ABC on
     the four sides and top when ``enclosure == "open"``, two ``LumpedPort`` strip-to-ground
     terminals (+z), and ``mesher.set_boundary_size`` on each trace (``metal_edge_m``, growth 3).

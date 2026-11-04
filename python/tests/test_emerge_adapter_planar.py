@@ -55,7 +55,7 @@ def synthetic_raw(case=None, *, s21=0.5, s11=0.1, s12=None, s22=0.1,
     n = len(frequencies)
     if s12 is None:
         s12 = s21
-    return {"kind": "planar", "emerge_version": "2.8.9", "frequency_hz": frequencies,
+    return {"kind": "planar", "emerge_version": "3.0.0b12", "frequency_hz": frequencies,
             "s": {
                 "1,1": {"re": [s11] * n, "im": [0.0] * n},
                 "2,1": {"re": [s21] * n, "im": [0.0] * n},
@@ -266,7 +266,7 @@ class PlanarWorkerContract(unittest.TestCase):
             "1,2": [0.5, 0.4 + 0.1j, 0.3],
             "2,2": [0.1, 0.05, 0.02],
         }
-        raw = self.worker.build_planar_raw(case, "2.8.9", case["frequencies_hz"], s_params,
+        raw = self.worker.build_planar_raw(case, "3.0.0b12", case["frequencies_hz"], s_params,
                                            {"nodes": 10, "tetrahedra": 5}, 1.25)
         json.dumps(raw, allow_nan=False)
         self.assertEqual(raw["trace_count"], len(case["traces"]))
