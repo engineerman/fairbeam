@@ -694,7 +694,7 @@ class App:
         ]}
 
     def health(self) -> dict:
-        return {"ok": True, "api": 1, "research": True, "elmer_driven": 2, "research_source": True, **self.versions, "cpu_count": self.cpu,
+        return {"ok": True, "api": 1, "research": True, "elmer_driven": 2, "emerge": 1, "research_source": True, **self.versions, "cpu_count": self.cpu,
                 "physical_cores": self.physical, "host_cpu": resources.host_cpu_name(),
                 "default_threads": resources.auto_threads(self.cpu, self.physical),
                 "throughput": resources.measured_throughput(self.projects_dir, resources.host_cpu_name()),
@@ -1836,6 +1836,17 @@ class App:
         except OSError as exc:
             raise ApiError(409, str(exc)) from exc
 
+    def emerge_runtime_status(self) -> dict:
+        from . import emerge_runtime
+        return emerge_runtime.status()
+
+    def emerge_runtime_install(self) -> dict:
+        from . import emerge_runtime
+        try:
+            return emerge_runtime.start_install()
+        except OSError as exc:
+            raise ApiError(409, str(exc)) from exc
+
     def research_submit(self, body: dict) -> dict:
         try:
             if isinstance(body, dict) and "source" in body:
@@ -2120,6 +2131,8 @@ class Handler(BaseHTTPRequestHandler):
             ("POST", r"/api/research/probe", lambda: self._json(200, app.research_probe(self._body()))),
             ("GET", r"/api/research/elmer/runtime", lambda: self._json(200, app.elmer_runtime_status())),
             ("POST", r"/api/research/elmer/install", lambda: self._json(202, app.elmer_runtime_install())),
+            ("GET", r"/api/research/emerge/runtime", lambda: self._json(200, app.emerge_runtime_status())),
+            ("POST", r"/api/research/emerge/install", lambda: self._json(202, app.emerge_runtime_install())),
             ("POST", r"/api/research/runs", lambda: self._json(201, app.research_submit(self._body()))),
             ("GET", r"/api/research/runs", lambda: self._json(200, app.research_runs(include_results=not summary))),
             ("GET", r"/api/research/runs/([\w.-]+)", lambda i: self._json(200, app.research_detail(i))),

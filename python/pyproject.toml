@@ -15,8 +15,12 @@ dependencies = ["numpy>=1.24", "h5py>=3.8"]
 [project.scripts]
 fairbeam = "fairbeam.cli:main"
 fairbeam-elmer = "fairbeam_elmer:main"
+fairbeam-emerge = "fairbeam_emerge:main"
 fairbeam-research-plan = "fairbeam.research_plan:main"
 
 [tool.setuptools]
 packages = ["fairbeam"]
-py-modules = ["fairbeam_elmer"]
+py-modules = ["fairbeam_elmer", "fairbeam_emerge", "fairbeam_emerge_worker"]
+
+[tool.setuptools.package-data]
+fairbeam = ["emerge_lock/*"]

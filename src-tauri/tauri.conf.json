@@ -49,7 +49,10 @@
     "resources": {
       "../dist/": "ui/",
       "../python/fairbeam/*.py": "python/fairbeam/",
+      "../python/fairbeam/emerge_lock/*": "python/fairbeam/emerge_lock/",
       "../python/fairbeam_elmer.py": "python/fairbeam_elmer.py",
+      "../python/fairbeam_emerge.py": "python/fairbeam_emerge.py",
+      "../python/fairbeam_emerge_worker.py": "python/fairbeam_emerge_worker.py",
       "../python/models/*.py": "models/",
       "../examples/designs/*_867.design.json": "models/",
       "../python/templates/*.py": "templates/",

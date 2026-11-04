@@ -236,6 +236,7 @@ async function copyResources(root) {
   const tracked = execFileSync('git', ['ls-files', '-z'], { cwd: repo }).toString('utf8').split('\0').filter(Boolean);
   const specs = [
     { prefix: 'python/fairbeam/', destination: 'python/fairbeam', extension: '.py' },
+    { prefix: 'python/fairbeam/emerge_lock/', destination: 'python/fairbeam/emerge_lock' },
     { prefix: 'python/models/', destination: 'models', extension: '.py' },
     // the 867 MHz example designs: read-only sources of their examples (tauri.conf.json resources)
     { prefix: 'examples/designs/', destination: 'models', extension: '_867.design.json' },
@@ -254,6 +255,8 @@ async function copyResources(root) {
   }
   for (const [source, destination] of [
     ['python/fairbeam_elmer.py', 'python/fairbeam_elmer.py'],
+    ['python/fairbeam_emerge.py', 'python/fairbeam_emerge.py'],
+    ['python/fairbeam_emerge_worker.py', 'python/fairbeam_emerge_worker.py'],
     ['runtime/pins.json', 'runtime/pins.json'],
     ['runtime/requirements.txt', 'runtime/requirements.txt'],
     ['runtime/install.py', 'runtime/install.py'],
