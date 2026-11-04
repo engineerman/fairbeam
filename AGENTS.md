@@ -4,6 +4,14 @@ This file is for any coding agent and for people new to the repository. The pull
 in [CONTRIBUTING.md](CONTRIBUTING.md); the rules for AI-assisted contributions are in
 [AI_POLICY.md](AI_POLICY.md).
 
+## Fork agent workflow (EMerge)
+
+On `feat/emerge-experimental`, planning and implementation use a split agent setup:
+capable model for plans, cheaper models for task execution. Start at
+[docs/agent/README.md](docs/agent/README.md). Cursor rules live under `.cursor/rules/`;
+the skill is `.cursor/skills/emerge-agent-workflow/`. Upstream contribution rules above
+still apply unchanged.
+
 ## Layout
 - `src/`: the SolidJS app. It is both the viewer and the designer.
 - `src-tauri/`: the desktop shell, in Rust (Tauri 2).
