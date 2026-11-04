@@ -303,7 +303,7 @@ version decision.
   |S21 − S12| = 0.05, wrong convention; Level A/B worker tests unchanged.
 - [x] Run `-p "test_emerge_*.py"` → pass.
 - [x] Commit: `Add the EMerge worker path for planar two-port Designs`
-  (`83502c3`; checkbox marked after that commit)
+  (`8a3a4fb`; checkbox marked after that commit)
 
 ---
 
@@ -320,22 +320,23 @@ version decision.
 
 **Steps:**
 
-- [ ] `research.prepare`: `backend == "emerge"` and `settings.analysis == "planar_two_port"` →
+- [x] `research.prepare`: `backend == "emerge"` and `settings.analysis == "planar_two_port"` →
   `emerge_planar.admit`; existing fixture and driven paths unchanged. `execute` →
   `run_planar`; `validate_result` branch for `fairbeam.emerge-planar-result/1`; bundle written like
   Level B.
-- [ ] `planar_result_bundle`: engine `EMerge`, method `Frequency-domain FEM (experimental)`,
+- [x] `planar_result_bundle`: engine `EMerge`, method `Frequency-domain FEM (experimental)`,
   boundaries per enclosure (`PEC` floor; `PEC` or `Second-order absorbing` elsewhere), `run: None`,
   `experimental` block, `results.sparams = {ports: [1, 2], z_ref, excited: [1, 2], complete: true,
   method: "FEM driven, all ports", s: {...}}`, `results.ports["1"|"2"]` with each diagonal S and
   Zin, `farfield: []`, no conjugation.
-- [ ] Before writing: confirm in `src/lib/sparams.ts` and the Results view that this `sparams`
+- [x] Before writing: confirm in `src/lib/sparams.ts` and the Results view that this `sparams`
   shape plots S21 and a two-port with empty far field renders. If not, `BLOCKED`.
-- [ ] `server.py`: health `"emerge": 3` (Level B UI gates on `>= 2`, still shown).
-- [ ] Tests: bundle `sparams.s["2,1"]` equals the input; `complete` true; Zin on a known S11;
+- [x] `server.py`: health `"emerge": 3` (Level B UI gates on `>= 2`, still shown).
+- [x] Tests: bundle `sparams.s["2,1"]` equals the input; `complete` true; Zin on a known S11;
   research admits the fixture against a fake venv; health 3; Level A/B tests unchanged.
-- [ ] Run `-p "test_emerge_*.py"`, `-p "test_research_*.py"` → pass.
-- [ ] Commit: `Wire EMerge planar two-port runs into research and shared results`
+- [x] Run `-p "test_emerge_*.py"`, `-p "test_research_*.py"` → pass.
+- [x] Commit: `Wire EMerge planar two-port runs into research and shared results`
+  (`23819d4`; checkbox marked after that commit)
 
 ---
 

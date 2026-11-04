@@ -694,7 +694,7 @@ class App:
         ]}
 
     def health(self) -> dict:
-        return {"ok": True, "api": 1, "research": True, "elmer_driven": 2, "emerge": 2, "research_source": True, **self.versions, "cpu_count": self.cpu,
+        return {"ok": True, "api": 1, "research": True, "elmer_driven": 2, "emerge": 3, "research_source": True, **self.versions, "cpu_count": self.cpu,
                 "physical_cores": self.physical, "host_cpu": resources.host_cpu_name(),
                 "default_threads": resources.auto_threads(self.cpu, self.physical),
                 "throughput": resources.measured_throughput(self.projects_dir, resources.host_cpu_name()),

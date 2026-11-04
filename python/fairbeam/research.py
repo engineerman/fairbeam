@@ -139,8 +139,12 @@ def prepare(body):
         record = site / f"emerge-{version}.dist-info" / "RECORD"
         pins = binary_pins((python,), extra=[fairbeam_emerge.WORKER, record])
         if body.get("design") is not None:
-            from .emerge_design import admit
-            normalized = admit(body["design"], settings)
+            if settings.get("analysis") == "planar_two_port":
+                from .emerge_planar import admit as admit_planar
+                normalized = admit_planar(body["design"], settings)
+            else:
+                from .emerge_design import admit
+                normalized = admit(body["design"], settings)
         else:
             if set(settings) != {"resolution"}:
                 raise ValueError("EMerge Level A settings must be exactly {resolution}")
@@ -238,6 +242,41 @@ def validate_result(value, backend):
                 raise ValueError(f"emerge Design |S11| exceeds {fairbeam_emerge.S11_ABS_MAX}")
             if value.get("status") == "results_validated":
                 raise ValueError("emerge Design never claims results_validated")
+        elif value.get("schema") == fairbeam_emerge.PLANAR_RESULT_SCHEMA:
+            if value.get("precision_converged") is not False:
+                raise ValueError("emerge planar never claims mesh convergence")
+            if value.get("gain_qualified") is not False:
+                raise ValueError("emerge planar never claims qualified gain")
+            if value.get("phasor_convention") != fairbeam_emerge.PHASOR:
+                raise ValueError("emerge planar phasor_convention must match Fairbeam frames")
+            native = value.get("native_phasor_convention")
+            if native is not None and native != fairbeam_emerge.PHASOR:
+                raise ValueError("emerge planar native_phasor_convention must be exp(+i omega t)")
+            s_block = value.get("s")
+            if not isinstance(s_block, dict):
+                raise ValueError("emerge planar s must be an object")
+            for key in ("1,1", "2,1", "1,2", "2,2"):
+                entry = s_block.get(key)
+                if not isinstance(entry, dict):
+                    raise ValueError(f"emerge planar s[{key}] must be an object")
+                for part in ("re", "im"):
+                    values = entry.get(part)
+                    if (not isinstance(values, list) or len(values) != len(frequencies)
+                            or any(isinstance(v, bool) or not isinstance(v, (float, int))
+                                   or not math.isfinite(v) for v in values)):
+                        raise ValueError(f"emerge planar s[{key}] complex trace is incomplete")
+                if any(abs(complex(r, i)) > fairbeam_emerge.S_ABS_MAX
+                       for r, i in zip(entry["re"], entry["im"])):
+                    raise ValueError(f"emerge planar |S{key}| exceeds {fairbeam_emerge.S_ABS_MAX}")
+            z_ref = value.get("z_ref")
+            if (not isinstance(z_ref, list) or len(z_ref) != 2
+                    or any(isinstance(v, bool) or not isinstance(v, (float, int))
+                           or not math.isfinite(v) or v <= 0 for v in z_ref)):
+                raise ValueError("emerge planar z_ref must be two positive finite numbers")
+            if value.get("enclosure") not in ("shielded", "open"):
+                raise ValueError("emerge planar enclosure must be shielded or open")
+            if value.get("status") == "results_validated":
+                raise ValueError("emerge planar never claims results_validated")
         elif value.get("schema") != fairbeam_emerge.RESULT_SCHEMA:
             raise ValueError("unsupported emerge research result schema")
         else:
@@ -339,9 +378,13 @@ def execute(snapshot, outdir, checksum):
     elif backend == "emerge":
         import fairbeam_emerge
         if spec.get("design") is not None:
-            result = fairbeam_emerge.run_design(
-                outdir, spec["normalized"], root=spec["path"], experimental=True)
-            # Adapter settings keep the resolution fraction; shared Results need the user settings.
+            if spec["normalized"].get("kind") == "planar":
+                result = fairbeam_emerge.run_planar(
+                    outdir, spec["normalized"], root=spec["path"], experimental=True)
+            else:
+                result = fairbeam_emerge.run_design(
+                    outdir, spec["normalized"], root=spec["path"], experimental=True)
+            # Adapter settings keep fractions/metres; shared Results need the user settings.
             result = {**result, "settings": dict(spec["settings"])}
         else:
             result = fairbeam_emerge.run_fixture(
@@ -364,6 +407,11 @@ def execute(snapshot, outdir, checksum):
         bundle_bytes = encode(result_bundle(spec['design'], value))
         (outdir / 'bundle.json').write_bytes(bundle_bytes)
         value['bundle_sha256'] = hashlib.sha256(bundle_bytes).hexdigest()
+    elif value.get('schema') == 'fairbeam.emerge-planar-result/1':
+        from .emerge_bundle import planar_result_bundle
+        bundle_bytes = encode(planar_result_bundle(spec['design'], value))
+        (outdir / 'bundle.json').write_bytes(bundle_bytes)
+        value['bundle_sha256'] = hashlib.sha256(bundle_bytes).hexdigest()
     target = outdir / "result.json"
     tmp = target.with_suffix(".json.tmp")
     tmp.write_bytes(encode(value))
@@ -378,7 +426,8 @@ def completed_result(value):
     if value.get("backend") == "stock":
         return value.get("schema") == "fairbeam.stock-result/1" and value.get("status") == "results_exported"
     if value.get("backend") == "emerge":
-        if value.get("schema") == "fairbeam.emerge-driven-result/1":
+        if value.get("schema") in ("fairbeam.emerge-driven-result/1",
+                                   "fairbeam.emerge-planar-result/1"):
             return value.get("status") == "results_exported"
         return (value.get("schema") == "fairbeam.emerge-fixture-result/1"
                 and value.get("status") == "results_validated")

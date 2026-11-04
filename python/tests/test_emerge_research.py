@@ -18,6 +18,8 @@ from fairbeam.server import App, make_server
 
 from test_emerge_fixture import fake_venv, synthetic_raw
 
+HAIRPIN = Path(__file__).resolve().parent / "fixtures" / "emerge_hairpin.design.json"
+
 
 def emerge_result(status="results_validated", **overrides):
     """Synthetic validated fixture result (not a solver run)."""
@@ -35,6 +37,14 @@ def design_settings(**over):
     return s
 
 
+def planar_settings(**over):
+    s = dict(analysis="planar_two_port", accept_lumped_terminals=True, enclosure="shielded",
+             air_height_mm=6.4, resolution="coarse", f_min_hz=0.75e9, f_max_hz=1.25e9, points=3,
+             approximate_metals=True)
+    s.update(over)
+    return s
+
+
 def emerge_design_result(**overrides):
     value = {
         "schema": fem.DESIGN_RESULT_SCHEMA, "backend": "emerge",
@@ -44,6 +54,28 @@ def emerge_design_result(**overrides):
         "z_ref": 50.0, "settings": design_settings(), "phasor_convention": fem.PHASOR,
         "native_phasor_convention": fem.PHASOR, "limitations": ["Experimental"],
         "pec_approximations": [],
+    }
+    value.update(overrides)
+    return value
+
+
+def emerge_planar_result(**overrides):
+    n = 3
+    value = {
+        "schema": fem.PLANAR_RESULT_SCHEMA, "backend": "emerge",
+        "research_schema": "fairbeam-research-result-1", "status": "results_exported",
+        "precision_converged": False, "gain_qualified": False,
+        "frequency_hz": [0.75e9, 1.0e9, 1.25e9],
+        "s": {
+            "1,1": {"re": [0.1] * n, "im": [0.0] * n},
+            "2,1": {"re": [0.5] * n, "im": [0.0] * n},
+            "1,2": {"re": [0.5] * n, "im": [0.0] * n},
+            "2,2": {"re": [0.1] * n, "im": [0.0] * n},
+        },
+        "z_ref": [50.0, 50.0], "enclosure": "shielded",
+        "settings": planar_settings(), "phasor_convention": fem.PHASOR,
+        "native_phasor_convention": fem.PHASOR, "limitations": ["Experimental"],
+        "pec_approximations": ["copper"],
     }
     value.update(overrides)
     return value
@@ -81,6 +113,21 @@ class EmergeResearchAdmission(unittest.TestCase):
                 research.prepare({
                     "backend": "emerge", "path": directory, "design": two,
                     "settings": design_settings()})
+
+    def test_prepare_admits_planar_hairpin_fixture(self):
+        with tempfile.TemporaryDirectory() as directory:
+            exe, site = fake_venv(directory)
+            record = site / "emerge-2.8.9.dist-info" / "RECORD"
+            record.write_text("emerge/__init__.py,sha256=abc,10\n", encoding="utf-8")
+            design = json.loads(HAIRPIN.read_text(encoding="utf-8"))
+            spec = research.prepare({
+                "backend": "emerge", "path": directory, "design": design,
+                "settings": planar_settings()})
+            self.assertEqual(spec["backend"], "emerge")
+            self.assertEqual(spec["normalized"]["kind"], "planar")
+            self.assertEqual(spec["path"], str(exe.resolve()))
+            self.assertEqual(len(spec["normalized"]["terminals"]), 2)
+            self.assertEqual(spec["normalized"]["enclosure"], "shielded")
 
     def test_prepare_refuses_unsupported_version_and_admits_fake_venv(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -124,12 +171,26 @@ class EmergeResearchValidation(unittest.TestCase):
         self.assertEqual(value["status"], "results_exported")
         self.assertTrue(research.completed_result(value))
 
+    def test_validate_result_accepts_planar_exported(self):
+        value = research.validate_result(emerge_planar_result(), "emerge")
+        self.assertEqual(value["status"], "results_exported")
+        self.assertEqual(value["schema"], fem.PLANAR_RESULT_SCHEMA)
+        self.assertTrue(research.completed_result(value))
+
     def test_validate_result_rejects_design_validated_and_oversize_s11(self):
         with self.assertRaisesRegex(ValueError, "results_validated"):
             research.validate_result(emerge_design_result(status="results_validated"), "emerge")
         with self.assertRaisesRegex(ValueError, r"\|S11\|"):
             research.validate_result(
                 emerge_design_result(s11_re=[1.1, 0.0, 0.0], s11_im=[0.0, 0.0, 0.0]), "emerge")
+
+    def test_validate_result_rejects_planar_validated_and_oversize_s(self):
+        with self.assertRaisesRegex(ValueError, "results_validated"):
+            research.validate_result(emerge_planar_result(status="results_validated"), "emerge")
+        bad = emerge_planar_result()
+        bad["s"] = {**bad["s"], "2,1": {"re": [1.1, 0.0, 0.0], "im": [0.0, 0.0, 0.0]}}
+        with self.assertRaisesRegex(ValueError, r"\|S2,1\|"):
+            research.validate_result(bad, "emerge")
 
     def test_validate_result_rejects_contradiction_schema_and_backend(self):
         bad = emerge_result()
@@ -161,6 +222,10 @@ class EmergeResearchValidation(unittest.TestCase):
         self.assertTrue(research.completed_result(exported))
         self.assertFalse(research.completed_result(
             emerge_design_result(status="validation_failed")))
+        planar = emerge_planar_result(status="results_exported")
+        self.assertTrue(research.completed_result(planar))
+        self.assertFalse(research.completed_result(
+            emerge_planar_result(status="validation_failed")))
 
 
 class EmergeResearchHttp(unittest.TestCase):
@@ -203,7 +268,7 @@ class EmergeResearchHttp(unittest.TestCase):
     def test_health_and_runtime_routes(self):
         code, health = self.request("GET", "/api/health")
         self.assertEqual(code, 200)
-        self.assertEqual(health["emerge"], 2)
+        self.assertEqual(health["emerge"], 3)
         with mock.patch("fairbeam.emerge_runtime.status", return_value={"supported": True, "installed": False}):
             code, status = self.request("GET", "/api/research/emerge/runtime")
         self.assertEqual(code, 200)
