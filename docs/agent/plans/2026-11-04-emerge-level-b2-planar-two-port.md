@@ -421,10 +421,27 @@ extruded conclusions change, update Shared facts and code from those Evidence-lo
 
 **Model tier:** Planner.
 
-- [ ] Review against Global Constraints with `docs/agent/prompts/reviewer.md`; AGENTS.md pre-PR
+- [x] Review against Global Constraints with `docs/agent/prompts/reviewer.md`; AGENTS.md pre-PR
   checks in a clean worktree (local `public/projects/*` and `python/models/*` files distort
   `check:designer` / `check:site`).
-- [ ] Mark B2 done; record open qualification gaps.
+- [x] Mark B2 done; record open qualification gaps.
+
+**Level B2 status:** done on `feat/emerge-experimental` (Task 7 docs `be49670`; pin `3.0.0b12`
+`f444b22`; multithread `6bea694`). Reviewer (Composer, 2026-11-04): **APPROVE** after fixing
+two research-test expectations for `nthreads` in `normalized` (leftover from multithread).
+
+Open qualification gaps (do not block Level B2 close):
+
+1. No S-parameter agreement claim vs Fairbeam openEMS: default openEMS path on the hairpin
+   fixture was non-physical (|S21| +5.07 dB, incomplete matrix, port-1-only excitation).
+2. 41-point / denser timing and resource-proxy re-measurement still deferred; Shared facts
+   timeout 3600 s / 400000 tets remain extrapolated from Task 1 short B.
+3. Hairpin qualification table in `docs/EMERGE-EXPERIMENT.md` is primarily managed **2.8.9**
+   evidence; 3.0.0b12 pin smoke (short shielded coarse ~219 s) is in the pin plan Evidence log,
+   not a full-band re-table.
+4. Pre-PR: untracked local `public/projects/emerge-*.json` and `python/models/*.design.json`
+   must stay uncommitted; use a clean worktree for `check:designer` / `check:site`.
+5. `npm run check:scenarios -- --skip-run` not re-run in this Task 8 pass (optional before PR).
 
 ---
 
@@ -526,3 +543,14 @@ Fill only with commands run and outputs observed. Date every entry.
   Artifacts: `.sim/jobs/20261104-191921-204dbc/` (`result.json`, `bundle.json`,
   `worker.log`, `manifest.json`);
   `public/projects/emerge-20261104-191921-204dbc.json`.
+- 2026-11-04 Task 8 (Composer, whole-branch review, no subagents): clean worktree
+  `%TEMP%\fairbeam-b2-review-wt` at `67da48a`. `npm run typecheck` OK;
+  `check:designer` + `check:exports` + `check:legal` OK (exit 0). Main tree with
+  `OPENEMS_INSTALL_PATH` + runtime venv: `check:emerge-planar`, `check:emerge-antenna`,
+  `check:research`, `check:i18n`, `check:links`, `check:site` OK. First
+  `-p "test_emerge_*.py"` failed 2 assertions (`normalized` now includes `nthreads`
+  from `6bea694`); fixed in `test_emerge_research.py`; re-run
+  `test_emerge_research.py` → 14 OK. Global Constraints: openEMS default; emerge
+  imports only in worker; planar reject/admit; experimental `results_exported`;
+  3.0.0b12 pin + multithread have separate plans with license recheck. Verdict
+  **APPROVE**. B2 marked done in SCOPE + this plan.

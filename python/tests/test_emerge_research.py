@@ -142,7 +142,9 @@ class EmergeResearchAdmission(unittest.TestCase):
             spec = research.prepare({"backend": "emerge", "path": directory,
                                      "settings": {"resolution": "coarse"}})
             self.assertEqual(spec["backend"], "emerge")
-            self.assertEqual(spec["normalized"], {"resolution": "coarse"})
+            self.assertEqual(spec["normalized"]["resolution"], "coarse")
+            self.assertIsInstance(spec["normalized"]["nthreads"], int)
+            self.assertGreaterEqual(spec["normalized"]["nthreads"], 1)
             self.assertEqual(spec["path"], str(exe.resolve()))
             self.assertIn(str(exe.resolve()), spec["binary_sha256"])
             self.assertIn(str(fem.WORKER.resolve()), spec["binary_sha256"])
@@ -290,7 +292,9 @@ class EmergeResearchHttp(unittest.TestCase):
             job = self.app.manager.get(doc["id"])
             self.assertEqual(job.research["backend"], "emerge")
             snapshot = json.loads((job.dir / "input" / "research.json").read_text(encoding="utf-8"))
-            self.assertEqual(snapshot["normalized"], {"resolution": "coarse"})
+            self.assertEqual(snapshot["normalized"]["resolution"], "coarse")
+            self.assertIsInstance(snapshot["normalized"]["nthreads"], int)
+            self.assertGreaterEqual(snapshot["normalized"]["nthreads"], 1)
             self.assertIsNone(snapshot["design"])
             self.assertEqual(job.status, "queued")
 

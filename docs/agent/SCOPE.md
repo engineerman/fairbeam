@@ -18,7 +18,7 @@ EMerge ([FennisRobert/EMerge](https://github.com/FennisRobert/EMerge/), PyPI `em
 - Map S11 (and maybe pattern) into Fairbeam result tabs; label experimental.
 - Success: one documented design class; openEMS still default; qualification notes honest.
 
-### B2 — Planar two-port microstrip (hairpin class)
+### B2 — Planar two-port microstrip (hairpin class) — done
 
 - One substrate box, ground at the bottom (metal z-flat box or domain-floor PEC), z-normal copper
   polygons (or z-flat boxes) on the substrate top, exactly two microstrip ports at board edges.
@@ -27,6 +27,9 @@ EMerge ([FennisRobert/EMerge](https://github.com/FennisRobert/EMerge/), PyPI `em
 - Rejects multilayer, vias, CPW, >2 ports, arbitrary PCB import; no silent geometry coercion.
 - Human decision (2026-11-04): integrate the hairpin class as Level B2 (plan
   `docs/agent/plans/2026-11-04-emerge-level-b2-planar-two-port.md`).
+- Closed 2026-11-04 on `feat/emerge-experimental`. Open qualification gaps stay in that plan's
+  Task 8 notes (no openEMS S-parameter agreement claim; 41-pt timing deferred; hairpin numbers
+  primarily from managed 2.8.9 before the 3.0.0b12 pin).
 
 ### C — Out of scope for now
 
