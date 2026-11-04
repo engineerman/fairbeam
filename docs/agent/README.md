@@ -57,4 +57,4 @@ docs/agent/
 
 ## Human gates
 
-Stop and ask before: shipping EMerge in the default installer, widening geometry beyond the plan, claiming validation, or combining EMerge source into the Fairbeam tree in a way that conflicts with GPL-2.0-only vs GPL-3.0-or-later.
+Stop and ask before: shipping EMerge in the default installer, widening geometry beyond the plan, claiming validation, or vendoring EMerge source or binaries into the Fairbeam tree (see the license posture in [SCOPE.md](SCOPE.md)).

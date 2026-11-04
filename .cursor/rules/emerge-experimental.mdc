@@ -9,6 +9,6 @@ alwaysApply: false
 - Ship **no** EMerge binary in the default Fairbeam installer. Optional "Install EMerge" (managed venv / pinned wheels) only, same spirit as Elmer's managed package.
 - Accept a **bounded geometry subset** first (axis-aligned boxes / PEC sheets). Reject unsupported geometry explicitly; never silently drop parts.
 - Normalize results into Fairbeam's existing result schema where possible; mark completion as exported/experimental, not validated production.
-- License: Fairbeam is GPL-3.0-or-later; EMerge is GPL-2.0-only. Prefer **external optional** install + adapter process/import isolation. Do not vendor EMerge source into Fairbeam as a combined GPL-3 product without maintainer+legal review.
+- License: Fairbeam is GPL-3.0-or-later; EMerge 2.8.9 is GPL-2.0-or-later (GPL-3-compatible; see `docs/agent/SCOPE.md`). Keep the **external optional** install + adapter process/import isolation anyway. Do not vendor EMerge source or ship its binaries without maintainer review.
 - Do not claim CST/HFSS/COMSOL parity; `npm run check:legal` still applies.
 - UI strings: both `src/i18n/en.json` and `tr.json`.
