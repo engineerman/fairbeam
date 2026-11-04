@@ -4815,6 +4815,7 @@
   "research.emerge.phaseError": "Faz hatası (°)",
   "research.emerge.criteria": "Kabul ölçütleri",
   "research.emerge.metrics": "Ölçülen özetler",
+  "research.emerge.passivity": "Pasiflik |S11|² + |S21|²",
   "research.emerge.validated": "Test durumu sonuçları analitik TE10 referansına göre doğrulandı.",
   "research.emerge.runtime.missing": "EMerge kurulu değil. Fairbeam, Windows için EMerge {version} içeren sabitlenmiş bir Python ortamı oluşturabilir (yaklaşık {size} MB indirme) ve sizin için kurabilir.",
   "research.emerge.runtime.install": "EMerge'i kur",

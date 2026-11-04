@@ -4899,6 +4899,7 @@
   "research.emerge.phaseError": "Phase error (°)",
   "research.emerge.criteria": "Acceptance criteria",
   "research.emerge.metrics": "Measured aggregates",
+  "research.emerge.passivity": "Passivity |S11|² + |S21|²",
   "research.emerge.validated": "Fixture results validated against the analytic TE10 reference.",
   "research.emerge.runtime.missing": "EMerge is not installed. Fairbeam can create a pinned Python environment with EMerge {version} for Windows (about {size} MB download) and set it up for you.",
   "research.emerge.runtime.install": "Install EMerge",

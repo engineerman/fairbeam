@@ -17,9 +17,9 @@ folder that contains EMerge 2.8.9, or at that environment's Python executable. T
 lookup.
 
 ```powershell
-python python/fairbeam_emerge.py --root %LOCALAPPDATA%\org.fairbeam.desktop\emerge\2.8.9 capabilities
-python python/fairbeam_emerge.py --root %LOCALAPPDATA%\org.fairbeam.desktop\emerge\2.8.9 waveguide --experimental --resolution coarse --out E:/research/wr90-coarse
-python python/fairbeam_emerge.py --root %LOCALAPPDATA%\org.fairbeam.desktop\emerge\2.8.9 waveguide --experimental --resolution fine --out E:/research/wr90-fine
+python python/fairbeam_emerge.py --root $env:LOCALAPPDATA\org.fairbeam.desktop\emerge\2.8.9 capabilities
+python python/fairbeam_emerge.py --root $env:LOCALAPPDATA\org.fairbeam.desktop\emerge\2.8.9 waveguide --experimental --resolution coarse --out E:/research/wr90-coarse
+python python/fairbeam_emerge.py --root $env:LOCALAPPDATA\org.fairbeam.desktop\emerge\2.8.9 waveguide --experimental --resolution fine --out E:/research/wr90-fine
 ```
 
 On Windows, **Install EMerge** in Simulation → Experimental solvers creates the managed environment
@@ -113,7 +113,7 @@ notes before the Install button.
 
 ```powershell
 $env:PYTHONPATH = "python"
-$env:OPENEMS_INSTALL_PATH = "C:\Users\ee\AppData\Local\org.fairbeam.desktop\runtime\openEMS"
+$env:OPENEMS_INSTALL_PATH = "$env:LOCALAPPDATA\org.fairbeam.desktop\runtime\openEMS"
 .\.venv\Scripts\python.exe -m unittest discover -s python/tests -p "test_emerge_*.py" -q
 ```
 

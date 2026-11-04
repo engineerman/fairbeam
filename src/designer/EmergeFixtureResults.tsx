@@ -38,11 +38,11 @@ export default function EmergeFixtureResults(props: { result: ResearchResult }) 
       <dt>{t("research.emerge.criteria")}</dt>
       <dd>|S11| ≤ {fmt.fixed(criteria().s11_max ?? NaN, 3)}, |S21| ≥ {fmt.fixed(criteria().s21_min ?? NaN, 3)},
         {" "}{t("research.emerge.phaseError")} ≤ {fmt.fixed(criteria().phase_error_deg_max ?? NaN, 1)}°,
-        {" "}passivity ≤ {fmt.fixed(criteria().passivity_max ?? NaN, 3)}</dd>
+        {" "}{t("research.emerge.passivity")} ≤ {fmt.fixed(criteria().passivity_max ?? NaN, 3)}</dd>
       <dt>{t("research.emerge.metrics")}</dt>
       <dd>|S11|max = {fmt.fixed(metrics().s11_max ?? NaN, 5)}, |S21|min = {fmt.fixed(metrics().s21_min ?? NaN, 5)},
         {" "}{t("research.emerge.phaseError")} = {fmt.fixed(metrics().phase_error_deg_max ?? NaN, 3)}°,
-        {" "}passivity = {fmt.fixed(metrics().passivity_max ?? NaN, 5)}</dd>
+        {" "}{t("research.emerge.passivity")} = {fmt.fixed(metrics().passivity_max ?? NaN, 5)}</dd>
     </dl>
   </section>;
 }
