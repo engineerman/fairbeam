@@ -1,6 +1,6 @@
 # Deneysel çözücüler
 
-Varsayılan çözücü openEMS'tir. **Elmer FEM — Deneysel özmodlar**, **Elmer FEM · Deneysel anten** ve sabit **EMerge** WR-90 dalga kılavuzu fikstürü, geometri ve sonuç desteği daha sınırlı, isteğe bağlı araştırma yollarıdır. Arka ucun kurulması veya bir çalıştırmanın tamamlanması, tasarımınızın sayısal doğruluğunu kanıtlamaz.
+Varsayılan çözücü openEMS'tir. **Elmer FEM — Deneysel özmodlar**, **Elmer FEM · Deneysel anten**, sabit **EMerge** WR-90 dalga kılavuzu fikstürü ve **EMerge · Deneysel anten** (sınırlı Tasarım alt kümesi), geometri ve sonuç desteği daha sınırlı, isteğe bağlı araştırma yollarıdır. Arka ucun kurulması veya bir çalıştırmanın tamamlanması, tasarımınızın sayısal doğruluğunu kanıtlamaz.
 
 ## Masaüstü uygulamasında kurulum
 
@@ -21,6 +21,14 @@ Windows'ta **EMerge'i kur**, PyPI'dan hash kilitli `emerge==2.8.9` ile sabitlenm
 macOS ve Linux'ta yönetilen kurucu yoktur. `emerge==2.8.9` içeren kendi Python 3.10–3.13 ortamınızı oluşturun, ardından yol alanına o ortamın klasörünü (veya Python yürütülebilir dosyasını) girin ya da `FAIRBEAM_EMERGE_PYTHON` ayarlayın.
 
 Fikstür tanımı, kabul ölçütleri ve kaydedilmiş yerel gözlemler için [EMerge deneyine](EMERGE-EXPERIMENT.md) bakın.
+
+## EMerge · Deneysel anten
+
+Çalıştırma sunucusu `emerge` ≥ 2 bildiriyorsa **Simülasyon çalıştır** penceresinde Elmer seçeneklerinden sonra **EMerge · Deneysel anten** görünür. Elmer'in uyarılmış anten yolundakiyle aynı sınırlı sınıfı kabul eder: eksenlere paralel dielektrik kutular, PEC levhalar, tek Ayrık port, açıkça kabul edilen sonlu besleme genişliği, isteğe bağlı `approximate_metals` ve kayıp varsa sabit `tan_d`. Ek portlar, dirençler, toplu elemanlar, dönüşümler, kesiler, boşluklar, örtüşmeler ve kutu olmayan ilkeller reddedilir. Dış sınır: dolgulu hava kutusunun soğurucu yüzleri (PML değil). Uzak alan ve kazanç belgesi yoktur; durum `results_exported`'tur.
+
+Çözünürlükler `f_max`teki dalga boyu kesirleridir: `coarse` = 0,25, `fine` = 0,15. İşçi zaman aşımı 1800 saniyedir; ucuz bir hacim vekili aşırı büyük alanları başlatmadan reddeder. S11 ve Zin, openEMS'in yerine geçmeden paylaşılan Sonuçlar görünümünde yer alır.
+
+Yerleşik Patch şablonu için 2026-11-04 yerel çalıştırmalarında EMerge S11 minimumu 2,30 GHz'te kaydedildi (2–3 GHz, 11 nokta; coarse −7,427 dB, fine −6,349 dB). Aynı şablonun Fairbeam openEMS çalıştırmasında S11 minimumu 2,453981250 GHz (−45,574 dB) idi. EMerge Tasarım yolu bu openEMS sonucuyla uyum iddia etmez. Ayrıntılar: [EMerge deneyi](EMERGE-EXPERIMENT.md).
 
 ## Mevcut tasarımın özmodları
 

@@ -1,6 +1,6 @@
 # Experimental solvers
 
-openEMS is the default solver. **Elmer FEM — Experimental eigenmodes**, **Elmer FEM · Experimental antenna**, and the fixed **EMerge** WR-90 waveguide fixture are opt-in research paths with narrower geometry and result support. Installing a backend or completing a run does not establish numerical accuracy for your design.
+openEMS is the default solver. **Elmer FEM — Experimental eigenmodes**, **Elmer FEM · Experimental antenna**, the fixed **EMerge** WR-90 waveguide fixture, and **EMerge · Experimental antenna** (bounded Design subset) are opt-in research paths with narrower geometry and result support. Installing a backend or completing a run does not establish numerical accuracy for your design.
 
 ## Setup in the desktop app
 
@@ -21,6 +21,25 @@ On Windows, **Install EMerge** creates a pinned Python 3.13 virtual environment 
 On macOS and Linux there is no managed installer. Create your own Python 3.10–3.13 environment with `emerge==2.8.9`, then enter that environment's folder (or its Python executable) in the path field, or set `FAIRBEAM_EMERGE_PYTHON`.
 
 See [the EMerge experiment](EMERGE-EXPERIMENT.md) for the fixture definition, acceptance criteria and recorded native observations.
+
+## EMerge · Experimental antenna
+
+When the run server reports health `emerge` ≥ 2, **Run** offers **EMerge · Experimental antenna**
+after the Elmer options. It admits the same bounded class as Elmer's driven antenna path:
+axis-aligned dielectric boxes, PEC sheets, one Discrete port, explicit finite feed width, optional
+`approximate_metals`, and constant `tan_d` when loss is present. Rejects extra ports, resistors,
+lumped elements, transforms, cuts, voids, overlaps and non-box primitives. Outer boundary: absorbing
+faces on a padded air box (not PML). No far field and no gain certificate; status is
+`results_exported`.
+
+Resolutions are wavelength fractions at `f_max`: `coarse` = 0.25, `fine` = 0.15. Worker timeout is
+1800 s; a cheap volume proxy refuses oversized domains before launch. S11 and Zin appear in the
+shared Results view next to (never instead of) openEMS.
+
+For the built-in Patch template, recorded 2026-11-04 native runs placed the EMerge S11 minimum at
+2.30 GHz (−7.427 dB coarse, −6.349 dB fine on an 11-point 2–3 GHz sweep). Fairbeam's own openEMS run
+of the same template had its S11 minimum at 2.453981250 GHz (−45.574 dB). EMerge Design does not
+claim agreement with that openEMS result. Details: [EMerge experiment](EMERGE-EXPERIMENT.md).
 
 ## Eigenmodes of the current design
 

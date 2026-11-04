@@ -341,10 +341,10 @@ the Elmer components.
 
 **Steps:**
 
-- [ ] Admitted subset, rejects, settings, limitations, the Patch class result and the openEMS
+- [x] Admitted subset, rejects, settings, limitations, the Patch class result and the openEMS
   comparison (Fairbeam's own solver only).
-- [ ] Run `npm run check:legal`, `npm run check:links`, `npm run check:site`.
-- [ ] Commit: `Document the experimental EMerge Design subset`
+- [x] Run `npm run check:legal`, `npm run check:links`, `npm run check:site`.
+- [x] Commit: `Document the experimental EMerge Design subset`
 
 ---
 

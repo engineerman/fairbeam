@@ -1,13 +1,16 @@
-# Experimental external EMerge waveguide fixture
+# Experimental external EMerge (waveguide fixture and Design subset)
 
 Fairbeam includes a separate, opt-in `fairbeam-emerge` research command. It discovers an external
-EMerge Python environment and runs one fixed, lossless, air-filled WR-90 rectangular waveguide with
-two waveguide ports. This standalone command does not import `fairbeam`, openEMS or CSXCAD. Only a
-worker process started inside the EMerge environment imports EMerge. The same fixed fixture is
-available through the [experimental research panel](RESEARCH-SOLVERS.md). Level A accepts no user
-design: any other geometry, frequency list or resolution is rejected. Normal Fairbeam projects,
+EMerge Python environment. Only a worker process started inside that environment imports EMerge;
+the Fairbeam process does not import `emerge`, `gmsh` or `emsutil`. Normal Fairbeam projects,
 runtime setup and the default openEMS simulation path are unchanged. No EMerge wheels are bundled
 in the Fairbeam installer or installed without an explicit user action.
+
+**Level A** runs one fixed, lossless, air-filled WR-90 rectangular waveguide with two waveguide
+ports (no user Design). **Level B** admits a bounded Design subset (axis-aligned dielectric boxes,
+PEC sheets, one discrete port) through the Run dialog option **EMerge · Experimental antenna** and
+the `design` CLI subcommand. Both paths are opt-in experimental; Design results are exported as
+`results_exported`, never `results_validated`.
 
 ## Run
 
@@ -80,12 +83,57 @@ Acceptance (frozen from these runs; the coarse case is the worst case) requires:
 
 Pass → `status: "results_validated"`; fail → `"validation_failed"` (raw output kept).
 `precision_converged` is always `false`. This is a coarse feasibility fixture, not a
-mesh-convergence certificate. No antenna S-parameter bundle, driven-port Design translation,
-radiation boundary, far field, lossy materials or arbitrary project geometry are supported.
+mesh-convergence certificate. The fixture path still does not translate an arbitrary project
+geometry; Design translation is the separate Level B path below.
 
 Raw worker inputs (`case.json`), `raw.json`, `result.json`, `manifest.json` and `worker.log` remain
-in each run directory. Manifests record the worker and Python SHA-256 hashes. Machine-readable
-results are separate research files, not viewer antenna bundles.
+in each run directory. Manifests record the worker and Python SHA-256 hashes. Fixture results are
+separate research files; Design runs also write a shared Results bundle (S11 / Zin, empty far field).
+
+## Level B: bounded Design subset (driven discrete port)
+
+Admission mirrors Elmer's driven rules for the same geometry class: axis-aligned dielectric boxes
+and PEC sheets, exactly one lumped (Discrete) port, no resistors / lumped elements / transforms /
+cuts / voids, no overlapping dielectrics. An ideal line feed is widened only with explicit
+`accept_finite_feed` and `feed_width_mm`. Finite-conductivity metals require explicit
+`approximate_metals`. Nonzero `tan_d` is admitted as EMerge's constant loss tangent (recorded as a
+limitation). The air box is the parts+feed bounding box plus `padding_mm` on every side, with
+second-order absorbing boundaries on all six faces (not PML). Unsupported geometry raises
+`ValueError`; nothing is dropped silently.
+
+Frozen settings (Task 5 / Task 6): resolutions `coarse` = 0.25 and `fine` = 0.15 (wavelength
+fraction at `f_max`); worker timeout 1800 s; refuse before launch when the air-box volume proxy
+exceeds 200000. Sweep: `f_min_hz`…`f_max_hz`, 3–21 linspace points. Schema
+`fairbeam.emerge-driven-result/1`, status `results_exported`, `precision_converged: false`,
+`gain_qualified: false`, no far field.
+
+```powershell
+# after emerge_design.admit → case.json
+python python/fairbeam_emerge.py --root $env:LOCALAPPDATA\org.fairbeam.desktop\emerge\2.8.9 design --experimental --case case.json --out E:/research/patch-coarse
+```
+
+In the app, open **Run**, choose **EMerge · Experimental antenna** (shown when health `emerge` ≥ 2),
+accept the finite feed, and submit. openEMS remains available in the same dialog.
+
+### Patch class — recorded native observations (2026-11-04)
+
+Built-in `blank_design("p", "Patch")`, `feed_width_mm=1`, `padding_mm=40`, 2.0–3.0 GHz × 11 points,
+`approximate_metals` false (template metal has no conductivity). Managed EMerge 2.8.9 on Windows:
+
+| Run | Resolution | Nodes / tets | Solver elapsed | S11 min (linspace) | max \|S11\| |
+|---|---|---|---|---|---|
+| EMerge Design | coarse (0.25) | 474 / 1975 | 11.517 s | 2.30 GHz, −7.427 dB | 0.982634 |
+| EMerge Design | fine (0.15) | 1141 / 5245 | 16.469 s | 2.30 GHz, −6.349 dB | 0.984801 |
+
+Same template through Fairbeam's normal openEMS Run path (design mesh 20 cells/wavelength, band
+`f0*0.6`–`f0*1.3`, 801 frequency points): S11 minimum **2.453981250 GHz** at **−45.574 dB**,
+`mesh.total_cells=112320`, solver 35.2 s, converged.
+
+Level B does **not** claim S11 agreement between EMerge Design and openEMS for this class. The
+EMerge linspace minimum sat at 2.30 GHz on both meshes (about 6.3% below the openEMS minimum
+frequency); match depth was far shallower. Coarse→fine kept the same frequency bin while `|S11|`
+there rose from 0.425 to 0.481. Port model and absorbing-boundary differences are expected; results
+stay experimental exports.
 
 ## License and distribution
 
