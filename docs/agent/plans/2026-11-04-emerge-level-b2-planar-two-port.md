@@ -412,7 +412,8 @@ extruded conclusions change, update Shared facts and code from those Evidence-lo
 - [x] Docs: admitted subset, rejects, settings, enclosure meaning, limitations, the recorded result
   and the Fairbeam openEMS comparison. Run `npm run check:legal`, `npm run check:links`,
   `npm run check:site`.
-- [ ] Commit: `Document the experimental EMerge planar two-port subset`
+- [x] Commit: `Document the experimental EMerge planar two-port subset`
+  (`be49670`; checkbox marked after that commit)
 
 ---
 
