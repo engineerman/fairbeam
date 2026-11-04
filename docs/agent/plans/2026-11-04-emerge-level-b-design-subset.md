@@ -293,15 +293,15 @@ the Elmer components.
 
 **Steps:**
 
-- [ ] Patch template, 2.0–3.0 GHz, 11 points, `approximate_metals: true` if the template metal
+- [x] Patch template, 2.0–3.0 GHz, 11 points, `approximate_metals: true` if the template metal
   has conductivity, `feed_width_mm` 1, `padding_mm` 40: run `coarse`, then `fine` through the CLI
   `design` subcommand (case from `emerge_design.admit`).
-- [ ] Run the same template once with openEMS (the normal Run path, coarse settings), and record
+- [x] Run the same template once with openEMS (the normal Run path, coarse settings), and record
   its S11 minimum frequency and depth from its result files.
-- [ ] Record per run in the evidence log, from result/manifest files only: S11 minimum frequency and
+- [x] Record per run in the evidence log, from result/manifest files only: S11 minimum frequency and
   |S11| dB there, mesh nodes/tetrahedra, elapsed seconds, max `|S11|`, status, leftover processes.
-- [ ] If a run fails, times out, or `|S11| > 1.01`: `BLOCKED`, attach logs. Do not change limits.
-- [ ] Commit only the evidence log: `Record first native EMerge Design runs`
+- [x] If a run fails, times out, or `|S11| > 1.01`: `BLOCKED`, attach logs. Do not change limits.
+- [x] Commit only the evidence log: `Record first native EMerge Design runs`
 
 **Done when:** evidence log holds both EMerge runs and the openEMS reference run.
 
@@ -373,3 +373,36 @@ Fill only with commands run and outputs observed. Date every entry.
 - 2026-11-04 (Planner): API names and lines in Shared facts were read from the installed managed
   venv `%LOCALAPPDATA%\org.fairbeam.desktop\emerge\2.8.9\Lib\site-packages` (EMerge 2.8.9). No
   EMerge run was made for this plan.
+- 2026-11-04 (Task 5, Composer): Patch template metal is `{name: copper, kind: metal}` with no
+  conductivity/thickness → `approximate_metals` left false. Admitted cases with
+  `accept_finite_feed=true`, `feed_width_mm=1`, `padding_mm=40`, `f_min_hz=2e9`, `f_max_hz=3e9`,
+  `points=11` → temp
+  `C:\Users\ee\AppData\Local\Temp\fairbeam-emerge-design-cases-20261104-145705\patch-{coarse,fine}.case.json`
+  (coarse resolution 0.25, fine 0.15; 1 box, 2 sheets, 11 frequencies).
+- 2026-11-04 (Task 5): EMerge Design **coarse**
+  `--root %LOCALAPPDATA%\org.fairbeam.desktop\emerge\2.8.9 design --experimental --case …\patch-coarse.case.json
+  --out C:\Users\ee\AppData\Local\Temp\fairbeam-emerge-design-coarse-20261104-145716` → exit 0, wall
+  **18.6 s**. `manifest.status` / `result.status` = `results_exported`, EMerge **2.8.9**,
+  `phasor_convention` / `native_phasor_convention` = `exp(+i omega t)`, mesh **474 nodes / 1975 tets**,
+  `result.elapsed_seconds` **11.517**, `manifest.worker_seconds` **18.414**. From `result.json`:
+  S11 min at **2.30 GHz**, `|S11|=0.425269` (**−7.427 dB**); `max_|S11|=0.982634` (< 1.01);
+  `|S11|` all `[0.983, 0.961, 0.836, 0.425, 0.912, 0.963, 0.976, 0.980, 0.982, 0.982, 0.979]`.
+  After run: no leftover emerge-venv `python` processes. `pec_approximations: []`.
+- 2026-11-04 (Task 5): EMerge Design **fine**
+  `--out C:\Users\ee\AppData\Local\Temp\fairbeam-emerge-design-fine-20261104-145753` → exit 0, wall
+  **18.5 s**. `results_exported`, mesh **1141 nodes / 5245 tets**, `result.elapsed_seconds` **16.469**,
+  `manifest.worker_seconds` **18.411**. From `result.json`: S11 min at **2.30 GHz**,
+  `|S11|=0.481434` (**−6.349 dB**); `max_|S11|=0.984801`;
+  `|S11|` all `[0.985, 0.972, 0.925, 0.481, 0.786, 0.940, 0.967, 0.975, 0.978, 0.979, 0.978]`.
+  After run: no leftover emerge-venv `python` processes. Warm numba (Level A cache); both Design
+  solves finished well under the 1800 s provisional timeout.
+- 2026-11-04 (Task 5): openEMS reference — wrote `blank_design("p","Patch")` to
+  `%TEMP%\fairbeam-patch-ref.design.json` (design mesh `cells_per_wavelength: 20`, band
+  `f0*0.6`–`f0*1.3`). `python -m fairbeam run … --out
+  C:\Users\ee\AppData\Local\Temp\fairbeam-openems-patch-20261104-145846 --sim-root …-sim-…
+  --engine cpu --threads auto` → exit 0, wall **38.1 s**. Bundle `p.json`: `run.converged=True`,
+  `run.solver_time_s=35.2`, `run.wall_time_total_s=37.72`, `run.timesteps=15252`,
+  `mesh.total_cells=112320`, `mesh.auto.settings.cells_per_wavelength=20`. From
+  `results.sparams.s["1,1"]` vs `results.frequency` (801 pts): S11 min at **2.453981250 GHz**,
+  `|S11|=0.005264` (**−45.574 dB**); `max_|S11|=0.998555`. Band record:
+  `s11_min_db=-45.574` @ `f_center=2453981250`. No leftover emerge/openEMS python processes after.
