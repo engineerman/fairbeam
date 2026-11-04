@@ -26,8 +26,8 @@ _LOG = logging.getLogger(__name__)
 
 
 def _research_source(model: str, metadata: dict | None) -> dict | None:
-    """Only server-bound driven runs have portable source provenance."""
-    if (not isinstance(metadata, dict) or metadata.get("backend") != "elmer"
+    """Only server-bound driven Elmer/EMerge runs have portable source provenance."""
+    if (not isinstance(metadata, dict) or metadata.get("backend") not in ("elmer", "emerge")
             or not isinstance(metadata.get("settings"), dict) or metadata["settings"].get("analysis") != "driven"):
         return None
     source = metadata.get("source")
@@ -419,7 +419,7 @@ class DocumentWorkspace:
             if doc.digest(source_raw) != job.research.get("snapshot_sha256"):
                 raise doc.DocumentError("The completed research input changed")
             spec = json.loads(source_raw, object_pairs_hook=doc._unique_object)
-            if (spec.get("source") != admitted or spec.get("backend") != "elmer"
+            if (spec.get("source") != admitted or spec.get("backend") not in ("elmer", "emerge")
                     or spec.get("settings", {}).get("analysis") != "driven"):
                 raise doc.DocumentError("The completed research source identity changed")
             design = spec.get("design")
@@ -427,8 +427,10 @@ class DocumentWorkspace:
             if source_hash != admitted["design_sha256"]:
                 raise doc.DocumentError("The completed research design differs from its original source")
             research_result, checksum = load_result(job)
+            expected_schema = ("fairbeam.elmer-driven-result/1" if spec.get("backend") == "elmer"
+                               else "fairbeam.emerge-driven-result/1")
             if (checksum != job.research.get("result_sha256")
-                    or research_result.get("schema") != "fairbeam.elmer-driven-result/1"
+                    or research_result.get("schema") != expected_schema
                     or research_result.get("input_sha256") != job.research["snapshot_sha256"]):
                 raise doc.DocumentError("The completed research result identity changed")
         else:
