@@ -30,6 +30,7 @@ EMerge ([FennisRobert/EMerge](https://github.com/FennisRobert/EMerge/), PyPI `em
 - Fairbeam: GPL-3.0-or-later. New fork code (adapter, worker, UI, tests, docs) uses the same license; the fork cannot relicense upstream Fairbeam code.
 - EMerge 2.8.9: **GPL-2.0-or-later** (source headers: "version 2 ... or (at your option) any later version"; wheel LICENSE: Gmsh-derived parts GPL-2.0+ with the Gmsh additional permission, `lib.py` CC0). That allows use under GPL-3.0, so it is compatible with Fairbeam. Recheck when the pinned version changes.
 - Human decision (2026-11-04): prefer the broadest license terms the upstream projects permit, which is the GPL-2.0-or-later reading above.
+- Managed install dependencies (fetched from PyPI on request, never shipped): gmsh GPL-2.0-or-later; emsutil MIT upstream with some GNU-headed files; Intel MKL and its runtime packages under the proprietary Intel Simplified Software License. Human decision (2026-11-04): keep MKL and disclose its license before install.
 - Still required: optional external install + adapter in a separate process (Elmer style). The installer bundles nothing. Vendoring EMerge source or shipping its binaries needs maintainer review, because Fairbeam would then carry EMerge's (and gmsh/MKL's) distribution and corresponding-source obligations.
 
 ## Reference inside Fairbeam
