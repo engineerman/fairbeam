@@ -227,7 +227,8 @@ this plan (Evidence log, Shared facts constants). Spike script lives outside the
   full 41-pt / full-band fine deferred to end (Task 6+ long-sim note below).
 - [x] Planner (same task, capable model): freeze trace model, `PORT_PAD_MM`, `METAL_EDGE_MM`,
   point limit, timeout and resource proxy from these runs; write them into Shared facts.
-- [ ] Commit: `Scope EMerge planar two-port and record the 2.8.9 hairpin spike`
+- [x] Commit: `Scope EMerge planar two-port and record the 2.8.9 hairpin spike`
+  (`5b599bb`; checkbox marked after that commit)
 
 **Done when:** Shared facts constants are frozen from recorded runs, or the plan is `BLOCKED` on the
 version decision.
@@ -252,20 +253,20 @@ version decision.
 
 **Steps:**
 
-- [ ] Fixture: hairpin Design from the Reference design class values (copy polygons from the RFSim
+- [x] Fixture: hairpin Design from the Reference design class values (copy polygons from the RFSim
   `hairpin_spec.json`; ports as in the local Fairbeam hairpin Design).
-- [ ] Tests first: fixture admitted with `approximate_metals: true`; rejected without it; terminal
+- [x] Tests first: fixture admitted with `approximate_metals: true`; rejected without it; terminal
   1 plate at y = −29 mm spans x −15.414…−12.874 mm and z 0…1.6 mm; air floor = substrate bottom;
   shielded domain has 1 mm pad in −y only beyond the terminals; `open` adds `padding_mm` on sides
   and top; input not mutated.
-- [ ] Reject tests (one each): one port, three ports, a lumped port, a cpw port, port with
+- [x] Reject tests (one each): one port, three ports, a lumped port, a cpw port, port with
   `direction: "z"`, port face not on substrate edge, terminal edge not covered by a trace, resistor,
   transform, cut, polygon at wrong elevation, polygon with `normal: "x"`, metal box with volume,
   two dielectric boxes, missing ground, `padding_mm` with `shielded`, missing `padding_mm` with
   `open`, unknown setting, `accept_lumped_terminals: false`, `points` 2 and 42, `f_min >= f_max`,
   too-large domain.
-- [ ] `ast` isolation test: no `emerge`, `gmsh`, `emsutil` imports.
-- [ ] Run `cd python && python -m unittest discover -s tests -p "test_emerge_*.py" -q` → pass.
+- [x] `ast` isolation test: no `emerge`, `gmsh`, `emsutil` imports.
+- [x] Run `cd python && python -m unittest discover -s tests -p "test_emerge_*.py" -q` → pass.
 - [ ] Commit: `Admit planar two-port microstrip Designs for EMerge`
 
 **Done when:** admission tests pass without EMerge; Level B tests unchanged.

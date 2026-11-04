@@ -1,0 +1,405 @@
+{
+  "schema": "fairbeam.design/1",
+  "model": {
+    "id": "emerge-hairpin",
+    "name": "EMerge planar hairpin fixture",
+    "description": "Reference single-layer microstrip two-port (hairpin class) for experimental EMerge planar admission: 50.828 x 58 mm FR4-like substrate 1.6 mm, eps_r 4.34, tan_d 0.0026 at 0.95 GHz, five copper polygons, two microstrip ports at y = -29 mm. Geometry from the RFSim hairpin_spec / CGrassin openEMS rebuild.",
+    "reference": "https://github.com/CGrassin/hairpin_filter"
+  },
+  "params": [
+    {
+      "key": "f0",
+      "default": 0.95,
+      "label": "Design frequency",
+      "unit": "GHz",
+      "min": 0.1,
+      "max": 10
+    },
+    {
+      "key": "sub_h",
+      "default": 1.6,
+      "label": "Substrate thickness",
+      "unit": "mm",
+      "min": 0.1,
+      "max": 5
+    },
+    {
+      "key": "eps_r",
+      "default": 4.34,
+      "label": "Substrate permittivity",
+      "min": 1,
+      "max": 20
+    },
+    {
+      "key": "tan_d",
+      "default": 0.0026,
+      "label": "Loss tangent",
+      "min": 0,
+      "max": 0.2
+    },
+    {
+      "key": "f_min",
+      "default": 0.75,
+      "label": "Band start",
+      "unit": "GHz",
+      "min": 0.1,
+      "max": 10
+    },
+    {
+      "key": "f_max",
+      "default": 1.25,
+      "label": "Band stop",
+      "unit": "GHz",
+      "min": 0.2,
+      "max": 20
+    }
+  ],
+  "simulation": {
+    "f_min": "f_min",
+    "f_max": "f_max",
+    "boundaries": [
+      "MUR",
+      "MUR",
+      "MUR",
+      "MUR",
+      "PEC",
+      "MUR"
+    ],
+    "end_criteria_db": -40,
+    "max_timesteps": 800000
+  },
+  "materials": [
+    {
+      "name": "substrate",
+      "kind": "dielectric",
+      "eps_r": "eps_r",
+      "tan_d": "tan_d",
+      "tan_d_freq": "f0"
+    },
+    {
+      "name": "air",
+      "kind": "dielectric",
+      "eps_r": 1,
+      "tan_d": 0
+    },
+    {
+      "name": "gnd",
+      "kind": "metal"
+    },
+    {
+      "name": "copper",
+      "kind": "metal",
+      "conductivity": 58000000,
+      "thickness": 0.035
+    }
+  ],
+  "parts": [
+    {
+      "name": "substrate",
+      "label": "Substrate",
+      "material": "substrate",
+      "primitives": [
+        {
+          "kind": "box",
+          "priority": 0,
+          "start": [
+            -25.414,
+            -29,
+            0
+          ],
+          "stop": [
+            25.414,
+            29,
+            "sub_h"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "gnd",
+      "label": "Ground plane (coincident with PEC z-; required for Fairbeam MSL)",
+      "material": "gnd",
+      "primitives": [
+        {
+          "kind": "box",
+          "priority": 10,
+          "start": [
+            -25.414,
+            -29,
+            0
+          ],
+          "stop": [
+            25.414,
+            29,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "copper",
+      "label": "Hairpin copper",
+      "material": "copper",
+      "primitives": [
+        {
+          "kind": "polygon",
+          "normal": "z",
+          "elevation": "sub_h",
+          "priority": 10,
+          "exact": true,
+          "points": [
+            [
+              -15.414,
+              -29
+            ],
+            [
+              -12.874,
+              -29
+            ],
+            [
+              -12.874,
+              19
+            ],
+            [
+              -15.414,
+              19
+            ]
+          ]
+        },
+        {
+          "kind": "polygon",
+          "normal": "z",
+          "elevation": "sub_h",
+          "priority": 10,
+          "exact": true,
+          "points": [
+            [
+              -12.62,
+              -19
+            ],
+            [
+              -12.62,
+              19
+            ],
+            [
+              -10.08,
+              21.54
+            ],
+            [
+              -8.08,
+              21.54
+            ],
+            [
+              -5.54,
+              19
+            ],
+            [
+              -5.54,
+              -19
+            ],
+            [
+              -8.08,
+              -19
+            ],
+            [
+              -8.08,
+              19
+            ],
+            [
+              -10.08,
+              19
+            ],
+            [
+              -10.08,
+              -19
+            ]
+          ]
+        },
+        {
+          "kind": "polygon",
+          "normal": "z",
+          "elevation": "sub_h",
+          "priority": 10,
+          "exact": true,
+          "points": [
+            [
+              -3.54,
+              -19
+            ],
+            [
+              -1,
+              -21.54
+            ],
+            [
+              1,
+              -21.54
+            ],
+            [
+              3.54,
+              -19
+            ],
+            [
+              3.54,
+              19
+            ],
+            [
+              1,
+              19
+            ],
+            [
+              1,
+              -19
+            ],
+            [
+              -1,
+              -19
+            ],
+            [
+              -1,
+              19
+            ],
+            [
+              -3.54,
+              19
+            ]
+          ]
+        },
+        {
+          "kind": "polygon",
+          "normal": "z",
+          "elevation": "sub_h",
+          "priority": 10,
+          "exact": true,
+          "points": [
+            [
+              5.54,
+              -19
+            ],
+            [
+              5.54,
+              19
+            ],
+            [
+              8.08,
+              21.54
+            ],
+            [
+              10.08,
+              21.54
+            ],
+            [
+              12.62,
+              19
+            ],
+            [
+              12.62,
+              -19
+            ],
+            [
+              10.08,
+              -19
+            ],
+            [
+              10.08,
+              19
+            ],
+            [
+              8.08,
+              19
+            ],
+            [
+              8.08,
+              -19
+            ]
+          ]
+        },
+        {
+          "kind": "polygon",
+          "normal": "z",
+          "elevation": "sub_h",
+          "priority": 10,
+          "exact": true,
+          "points": [
+            [
+              12.874,
+              -29
+            ],
+            [
+              15.414,
+              -29
+            ],
+            [
+              15.414,
+              19
+            ],
+            [
+              12.874,
+              19
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "ports": [
+    {
+      "number": 1,
+      "type": "microstrip",
+      "conductor": "copper",
+      "direction": "y",
+      "excitation_direction": "z",
+      "feed_shift": 2,
+      "measurement_shift": "10/3",
+      "reference_ohm": 50,
+      "termination": "open",
+      "excite": true,
+      "start": [
+        -15.414,
+        -29,
+        "sub_h"
+      ],
+      "stop": [
+        -12.874,
+        -19,
+        0
+      ]
+    },
+    {
+      "number": 2,
+      "type": "microstrip",
+      "conductor": "copper",
+      "direction": "y",
+      "excitation_direction": "z",
+      "feed_shift": 0,
+      "measurement_shift": "10/3",
+      "reference_ohm": 50,
+      "termination": "open",
+      "excite": false,
+      "start": [
+        12.874,
+        -29,
+        "sub_h"
+      ],
+      "stop": [
+        15.414,
+        -19,
+        0
+      ]
+    }
+  ],
+  "resistors": [],
+  "mesh": {
+    "mode": "design",
+    "overrides": {},
+    "thin_metal": "sheet"
+  },
+  "far_field": {
+    "enabled": false
+  },
+  "monitors": {
+    "currents": [
+      "f0"
+    ],
+    "field_planes": []
+  }
+}
