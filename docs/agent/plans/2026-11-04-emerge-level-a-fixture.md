@@ -234,9 +234,9 @@ $env:OPENEMS_INSTALL_PATH = "C:\Users\ee\AppData\Local\org.fairbeam.desktop\runt
 
 **Steps:**
 
-- [ ] Implement module and tests (temporarily set `RESOLUTIONS` in tests via `mock.patch.dict`).
-- [ ] Run `-p "test_emerge_*.py"` → pass.
-- [ ] Commit: `Add the standalone EMerge fixture adapter (solver-free)`
+- [x] Implement module and tests (temporarily set `RESOLUTIONS` in tests via `mock.patch.dict`).
+- [x] Run `-p "test_emerge_*.py"` → pass.
+- [x] Commit: `Add the standalone EMerge fixture adapter (solver-free)`
 
 **Done when:** all adapter logic is tested without EMerge installed.
 
