@@ -25,7 +25,7 @@ const withThreads = <T extends { threads: number }>(b: T) => ({ ...b, threads: b
 
 export interface Health {
   elmer_driven?: number;
-  /** Experimental EMerge: 1 = waveguide fixture, 2 = fixture + Design driven path. */
+  /** Experimental EMerge: 1 = waveguide fixture, 2 = fixture + Design driven, 3 = + planar two-port. */
   emerge?: number;
   research_source?: boolean;
   research?: boolean;

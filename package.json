@@ -105,6 +105,8 @@
     "check:run-queue": "node scripts/check-run-queue.mjs",
     "check:research": "node scripts/check-research-ui.mjs",
     "check:emerge-antenna": "node scripts/check-emerge-antenna-ui.mjs",
+    "check:emerge-planar": "node scripts/check-emerge-planar-ui.mjs",
+
     "check:tab-keys": "node --experimental-strip-types scripts/check-tab-keys.mjs",
     "check:state-lifecycle": "node --experimental-strip-types scripts/check-designer-state.mjs && node --experimental-strip-types scripts/check-viewport-lifecycle.mjs",
     "check:browser-manual": "node scripts/check-manual-browser.mjs",

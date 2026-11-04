@@ -336,7 +336,7 @@ version decision.
   research admits the fixture against a fake venv; health 3; Level A/B tests unchanged.
 - [x] Run `-p "test_emerge_*.py"`, `-p "test_research_*.py"` → pass.
 - [x] Commit: `Wire EMerge planar two-port runs into research and shared results`
-  (`23819d4`; checkbox marked after that commit)
+  (`27cdd38`; checkbox marked after that commit)
 
 ---
 
@@ -349,20 +349,21 @@ version decision.
 
 **Steps:**
 
-- [ ] Option `emerge-planar` ("EMerge FEM · Experimental planar two-port") after `emerge-driven`,
+- [x] Option `emerge-planar` ("EMerge FEM · Experimental planar two-port") after `emerge-driven`,
   only when `health.emerge >= 3`.
-- [ ] Form: required `accept_lumped_terminals` checkbox (text: each microstrip port becomes a
+- [x] Form: required `accept_lumped_terminals` checkbox (text: each microstrip port becomes a
   lumped strip-to-ground terminal at the board edge for this run only; feed and measurement shifts
   unused; the saved Design and openEMS settings stay unchanged), enclosure select with a one-line
   explanation of each, air height, padding (only for open), resolution, band, points,
   `approximate_metals`. Show limitations before submit: experimental, not a convergence
   certificate, reference plane at the board edge, no far field.
-- [ ] i18n `emergePlanar.*` in both languages.
-- [ ] Check script: hidden without `emerge: 3`; acceptance required; padding hidden and not sent
+- [x] i18n `emergePlanar.*` in both languages.
+- [x] Check script: hidden without `emerge: 3`; acceptance required; padding hidden and not sent
   with `shielded`; submitted body shape; EN and TR.
-- [ ] Run `npm run typecheck`, `npm run check:i18n`, `npm run check:legal`,
+- [x] Run `npm run typecheck`, `npm run check:i18n`, `npm run check:legal`,
   `npm run check:emerge-planar`, `npm run check:emerge-antenna`, `npm run check:research`.
-- [ ] Commit: `Add the experimental EMerge planar two-port option to the Run dialog`
+- [x] Commit: `Add the experimental EMerge planar two-port option to the Run dialog`
+  (`e136f39`; checkbox marked after that commit)
 
 ---
 

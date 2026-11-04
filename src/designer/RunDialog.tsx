@@ -25,6 +25,8 @@ import NumberField from "../components/NumberField";
 import ElmerDesignRun from "./ElmerDesignRun";
 import ElmerAntennaRun from "./ElmerAntennaRun";
 import EmergeAntennaRun from "./EmergeAntennaRun";
+import EmergePlanarRun from "./EmergePlanarRun";
+
 
 /** i18n keys of the engine names */
 const ENGINE_LABEL: Record<string, string> = { cpu: "run.engine.cpu", gpu: "run.engine.gpu" };
@@ -118,7 +120,7 @@ export default function RunDialog() {
             <p class="muted">
               <b>{draft.model?.name}</b>
               <Show when={dirty()}> · {t("run.unsavedFirst")}</Show>
-              . {solver() === "openems" ? t("run.dockNote") : t(solver() === "elmer-driven" ? "elmerAntenna.resultHint" : solver() === "emerge-driven" ? "emergeAntenna.resultHint" : "elmerDesign.resultHint")}
+              . {solver() === "openems" ? t("run.dockNote") : t(solver() === "elmer-driven" ? "elmerAntenna.resultHint" : solver() === "emerge-driven" ? "emergeAntenna.resultHint" : solver() === "emerge-planar" ? "emergePlanar.resultHint" : "elmerDesign.resultHint")}
             </p>
           </div>
           <button class="icon-btn" onClick={close} aria-label={t("common.close")}><X size={16} /></button>
@@ -128,8 +130,9 @@ export default function RunDialog() {
             <option value="openems">openEMS</option><option value="elmer">{t("elmerDesign.option")}</option>
             <option value="elmer-driven">{t("elmerAntenna.option")}</option>
             <Show when={(health()?.emerge ?? 0) >= 2}><option value="emerge-driven">{t("emergeAntenna.option")}</option></Show>
+            <Show when={(health()?.emerge ?? 0) >= 3}><option value="emerge-planar">{t("emergePlanar.option")}</option></Show>
           </select></label></div>
-        <Show when={solver() === "openems"} fallback={<Show when={solver() === "elmer-driven"} fallback={<Show when={solver() === "emerge-driven"} fallback={<ElmerDesignRun close={close} useOpenEMS={() => setSolver("openems")} />}><EmergeAntennaRun close={close} /></Show>}><ElmerAntennaRun close={close} /></Show>}>
+        <Show when={solver() === "openems"} fallback={<Show when={solver() === "elmer-driven"} fallback={<Show when={solver() === "emerge-driven"} fallback={<Show when={solver() === "emerge-planar"} fallback={<ElmerDesignRun close={close} useOpenEMS={() => setSolver("openems")} />}><EmergePlanarRun close={close} /></Show>}><EmergeAntennaRun close={close} /></Show>}><ElmerAntennaRun close={close} /></Show>}>
         <form class="rd-body" id="rd-form" onSubmit={run}>
           <Show when={errors().length}>
             <div class="status-block status-critical" role="alert">
