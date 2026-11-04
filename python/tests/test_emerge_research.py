@@ -1,4 +1,5 @@
 """EMerge research admission and result contracts; EMerge is never installed or run here."""
+import copy
 import http.client
 import json
 from pathlib import Path
@@ -11,6 +12,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import fairbeam_emerge as fem
 from fairbeam import research
+from fairbeam.design import blank_design
 from fairbeam.jobs import JobManager
 from fairbeam.server import App, make_server
 
@@ -26,19 +28,59 @@ def emerge_result(status="results_validated", **overrides):
     return value
 
 
+def design_settings(**over):
+    s = dict(analysis="driven", accept_finite_feed=True, feed_width_mm=1., padding_mm=40.,
+             resolution="coarse", f_min_hz=2e9, f_max_hz=3e9, points=3)
+    s.update(over)
+    return s
+
+
+def emerge_design_result(**overrides):
+    value = {
+        "schema": fem.DESIGN_RESULT_SCHEMA, "backend": "emerge",
+        "research_schema": "fairbeam-research-result-1", "status": "results_exported",
+        "precision_converged": False, "gain_qualified": False,
+        "frequency_hz": [2e9, 2.5e9, 3e9], "s11_re": [0.1, 0.2, 0.1], "s11_im": [0.0, 0.0, 0.0],
+        "z_ref": 50.0, "settings": design_settings(), "phasor_convention": fem.PHASOR,
+        "native_phasor_convention": fem.PHASOR, "limitations": ["Experimental"],
+        "pec_approximations": [],
+    }
+    value.update(overrides)
+    return value
+
+
 class EmergeResearchAdmission(unittest.TestCase):
-    def test_prepare_refuses_design_extra_settings_and_unknown_resolution(self):
+    def test_prepare_fixture_refuses_extra_settings_and_unknown_resolution(self):
         with tempfile.TemporaryDirectory() as directory:
             fake_venv(directory)
             base = {"backend": "emerge", "path": directory, "settings": {"resolution": "coarse"}}
-            with self.assertRaisesRegex(ValueError, "fixed waveguide fixture"):
-                research.prepare({**base, "design": {"solids": []}})
             with self.assertRaisesRegex(ValueError, "exactly"):
                 research.prepare({**base, "settings": {"resolution": "coarse", "mesh_size": 0.1}})
             with self.assertRaisesRegex(ValueError, "exactly"):
                 research.prepare({**base, "settings": {}})
             with self.assertRaisesRegex(ValueError, "resolution"):
                 research.prepare({**base, "settings": {"resolution": "ultra"}})
+
+    def test_prepare_admits_patch_design_and_rejects_two_ports(self):
+        with tempfile.TemporaryDirectory() as directory:
+            exe, site = fake_venv(directory)
+            record = site / "emerge-2.8.9.dist-info" / "RECORD"
+            record.write_text("emerge/__init__.py,sha256=abc,10\n", encoding="utf-8")
+            design = blank_design("p", "Patch")
+            spec = research.prepare({
+                "backend": "emerge", "path": directory, "design": design,
+                "settings": design_settings()})
+            self.assertEqual(spec["backend"], "emerge")
+            self.assertEqual(spec["normalized"]["kind"], "design")
+            self.assertEqual(spec["path"], str(exe.resolve()))
+            self.assertEqual(spec["design"]["model"]["id"], "p")
+            two = copy.deepcopy(design)
+            two["ports"].append(copy.deepcopy(two["ports"][0]))
+            two["ports"][1]["number"] = 2
+            with self.assertRaises(ValueError):
+                research.prepare({
+                    "backend": "emerge", "path": directory, "design": two,
+                    "settings": design_settings()})
 
     def test_prepare_refuses_unsupported_version_and_admits_fake_venv(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -77,6 +119,18 @@ class EmergeResearchValidation(unittest.TestCase):
         self.assertEqual(value["status"], "results_validated")
         self.assertTrue(research.completed_result(value))
 
+    def test_validate_result_accepts_design_exported(self):
+        value = research.validate_result(emerge_design_result(), "emerge")
+        self.assertEqual(value["status"], "results_exported")
+        self.assertTrue(research.completed_result(value))
+
+    def test_validate_result_rejects_design_validated_and_oversize_s11(self):
+        with self.assertRaisesRegex(ValueError, "results_validated"):
+            research.validate_result(emerge_design_result(status="results_validated"), "emerge")
+        with self.assertRaisesRegex(ValueError, r"\|S11\|"):
+            research.validate_result(
+                emerge_design_result(s11_re=[1.1, 0.0, 0.0], s11_im=[0.0, 0.0, 0.0]), "emerge")
+
     def test_validate_result_rejects_contradiction_schema_and_backend(self):
         bad = emerge_result()
         bad["metrics"] = {**bad["metrics"], "s11_max": 0.5}
@@ -103,6 +157,10 @@ class EmergeResearchValidation(unittest.TestCase):
         self.assertFalse(research.completed_result(value))
         value = emerge_result(schema="other")
         self.assertFalse(research.completed_result(value))
+        exported = emerge_design_result(status="results_exported")
+        self.assertTrue(research.completed_result(exported))
+        self.assertFalse(research.completed_result(
+            emerge_design_result(status="validation_failed")))
 
 
 class EmergeResearchHttp(unittest.TestCase):
@@ -145,7 +203,7 @@ class EmergeResearchHttp(unittest.TestCase):
     def test_health_and_runtime_routes(self):
         code, health = self.request("GET", "/api/health")
         self.assertEqual(code, 200)
-        self.assertEqual(health["emerge"], 1)
+        self.assertEqual(health["emerge"], 2)
         with mock.patch("fairbeam.emerge_runtime.status", return_value={"supported": True, "installed": False}):
             code, status = self.request("GET", "/api/research/emerge/runtime")
         self.assertEqual(code, 200)

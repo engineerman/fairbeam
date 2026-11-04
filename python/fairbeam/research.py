@@ -131,11 +131,6 @@ def prepare(body):
         normalized = settings
     elif backend == "emerge":
         import fairbeam_emerge
-        if body.get("design") is not None:
-            raise ValueError("EMerge Level A runs only the fixed waveguide fixture")
-        if set(settings) != {"resolution"}:
-            raise ValueError("EMerge Level A settings must be exactly {resolution}")
-        fairbeam_emerge.validate_case(settings["resolution"])
         python, site = fairbeam_emerge.discover(emerge_python(path))
         version = fairbeam_emerge.emerge_version(site)
         if version not in fairbeam_emerge.SUPPORTED_EMERGE:
@@ -143,7 +138,14 @@ def prepare(body):
         path = str(python)
         record = site / f"emerge-{version}.dist-info" / "RECORD"
         pins = binary_pins((python,), extra=[fairbeam_emerge.WORKER, record])
-        normalized = {"resolution": settings["resolution"]}
+        if body.get("design") is not None:
+            from .emerge_design import admit
+            normalized = admit(body["design"], settings)
+        else:
+            if set(settings) != {"resolution"}:
+                raise ValueError("EMerge Level A settings must be exactly {resolution}")
+            fairbeam_emerge.validate_case(settings["resolution"])
+            normalized = {"resolution": settings["resolution"]}
     else:
         if backend == "stock":
             from . import stock_cell as cell_backend
@@ -215,32 +217,54 @@ def validate_result(value, backend):
         return validate_stock_result(value)
     if backend == "emerge":
         import fairbeam_emerge
-        if value.get("schema") != fairbeam_emerge.RESULT_SCHEMA:
+        if value.get("schema") == fairbeam_emerge.DESIGN_RESULT_SCHEMA:
+            if value.get("precision_converged") is not False:
+                raise ValueError("emerge Design never claims mesh convergence")
+            if value.get("gain_qualified") is not False:
+                raise ValueError("emerge Design never claims qualified gain")
+            if value.get("phasor_convention") != fairbeam_emerge.PHASOR:
+                raise ValueError("emerge Design phasor_convention must match Fairbeam frames")
+            native = value.get("native_phasor_convention")
+            if native is not None and native != fairbeam_emerge.PHASOR:
+                raise ValueError("emerge Design native_phasor_convention must be exp(+i omega t)")
+            for key in ("s11_re", "s11_im"):
+                values = value.get(key)
+                if (not isinstance(values, list) or len(values) != len(frequencies)
+                        or any(isinstance(v, bool) or not isinstance(v, (float, int)) or not math.isfinite(v)
+                               for v in values)):
+                    raise ValueError("emerge Design complex trace is incomplete")
+            if any(abs(complex(r, i)) > fairbeam_emerge.S11_ABS_MAX
+                   for r, i in zip(value["s11_re"], value["s11_im"])):
+                raise ValueError(f"emerge Design |S11| exceeds {fairbeam_emerge.S11_ABS_MAX}")
+            if value.get("status") == "results_validated":
+                raise ValueError("emerge Design never claims results_validated")
+        elif value.get("schema") != fairbeam_emerge.RESULT_SCHEMA:
             raise ValueError("unsupported emerge research result schema")
-        expected = list(fairbeam_emerge.FREQUENCIES_HZ)
-        if [float(f) for f in frequencies] != expected:
-            raise ValueError("emerge result frequencies must equal the fixture list")
-        for key in ("s11_re", "s11_im", "s21_re", "s21_im", "analytic_s21_re", "analytic_s21_im"):
-            values = value.get(key)
-            if (not isinstance(values, list) or len(values) != len(expected)
-                    or any(isinstance(v, bool) or not isinstance(v, (float, int)) or not math.isfinite(v)
-                           for v in values)):
-                raise ValueError("emerge result complex trace is incomplete")
-        if value.get("precision_converged") is not False:
-            raise ValueError("emerge fixture never claims mesh convergence")
-        metrics, criteria = value.get("metrics"), value.get("criteria")
-        required = ("s11_max", "s21_min", "phase_error_deg_max", "passivity_max")
-        if (not isinstance(metrics, dict) or not isinstance(criteria, dict)
-                or any(isinstance(metrics.get(k), bool) or not isinstance(metrics.get(k), (int, float))
-                       or not math.isfinite(metrics.get(k)) for k in required)
-                or any(isinstance(criteria.get(k), bool) or not isinstance(criteria.get(k), (int, float))
-                       or not math.isfinite(criteria.get(k)) for k in required)):
-            raise ValueError("emerge result metrics/criteria missing")
-        if value.get("status") == "results_validated" and (
-                metrics["s11_max"] > criteria["s11_max"] or metrics["s21_min"] < criteria["s21_min"]
-                or metrics["phase_error_deg_max"] > criteria["phase_error_deg_max"]
-                or metrics["passivity_max"] > criteria["passivity_max"]):
-            raise ValueError("emerge validated status contradicts reference criteria")
+        else:
+            expected = list(fairbeam_emerge.FREQUENCIES_HZ)
+            if [float(f) for f in frequencies] != expected:
+                raise ValueError("emerge result frequencies must equal the fixture list")
+            for key in ("s11_re", "s11_im", "s21_re", "s21_im", "analytic_s21_re", "analytic_s21_im"):
+                values = value.get(key)
+                if (not isinstance(values, list) or len(values) != len(expected)
+                        or any(isinstance(v, bool) or not isinstance(v, (float, int)) or not math.isfinite(v)
+                               for v in values)):
+                    raise ValueError("emerge result complex trace is incomplete")
+            if value.get("precision_converged") is not False:
+                raise ValueError("emerge fixture never claims mesh convergence")
+            metrics, criteria = value.get("metrics"), value.get("criteria")
+            required = ("s11_max", "s21_min", "phase_error_deg_max", "passivity_max")
+            if (not isinstance(metrics, dict) or not isinstance(criteria, dict)
+                    or any(isinstance(metrics.get(k), bool) or not isinstance(metrics.get(k), (int, float))
+                           or not math.isfinite(metrics.get(k)) for k in required)
+                    or any(isinstance(criteria.get(k), bool) or not isinstance(criteria.get(k), (int, float))
+                           or not math.isfinite(criteria.get(k)) for k in required)):
+                raise ValueError("emerge result metrics/criteria missing")
+            if value.get("status") == "results_validated" and (
+                    metrics["s11_max"] > criteria["s11_max"] or metrics["s21_min"] < criteria["s21_min"]
+                    or metrics["phase_error_deg_max"] > criteria["phase_error_deg_max"]
+                    or metrics["passivity_max"] > criteria["passivity_max"]):
+                raise ValueError("emerge validated status contradicts reference criteria")
     elif backend == "periodic":
         if value.get("schema") != "fairbeam.periodic-result/1":
             raise ValueError("unsupported periodic research result schema")
@@ -314,8 +338,14 @@ def execute(snapshot, outdir, checksum):
             result = fairbeam_elmer.run_cavity(outdir, root=spec["path"], mesh_size=spec["normalized"]["mesh_size"], experimental=True)
     elif backend == "emerge":
         import fairbeam_emerge
-        result = fairbeam_emerge.run_fixture(
-            outdir, root=spec["path"], resolution=spec["normalized"]["resolution"], experimental=True)
+        if spec.get("design") is not None:
+            result = fairbeam_emerge.run_design(
+                outdir, spec["normalized"], root=spec["path"], experimental=True)
+            # Adapter settings keep the resolution fraction; shared Results need the user settings.
+            result = {**result, "settings": dict(spec["settings"])}
+        else:
+            result = fairbeam_emerge.run_fixture(
+                outdir, root=spec["path"], resolution=spec["normalized"]["resolution"], experimental=True)
     elif backend == "stock":
         from . import stock_cell
         result = stock_cell.run(spec["normalized"], outdir, executable=spec["path"])
@@ -326,6 +356,11 @@ def execute(snapshot, outdir, checksum):
     value["input_sha256"] = hashlib.sha256(raw).hexdigest()
     if value.get('schema') == 'fairbeam.elmer-driven-result/1':
         from .elmer_bundle import result_bundle
+        bundle_bytes = encode(result_bundle(spec['design'], value))
+        (outdir / 'bundle.json').write_bytes(bundle_bytes)
+        value['bundle_sha256'] = hashlib.sha256(bundle_bytes).hexdigest()
+    elif value.get('schema') == 'fairbeam.emerge-driven-result/1':
+        from .emerge_bundle import result_bundle
         bundle_bytes = encode(result_bundle(spec['design'], value))
         (outdir / 'bundle.json').write_bytes(bundle_bytes)
         value['bundle_sha256'] = hashlib.sha256(bundle_bytes).hexdigest()
@@ -343,6 +378,8 @@ def completed_result(value):
     if value.get("backend") == "stock":
         return value.get("schema") == "fairbeam.stock-result/1" and value.get("status") == "results_exported"
     if value.get("backend") == "emerge":
+        if value.get("schema") == "fairbeam.emerge-driven-result/1":
+            return value.get("status") == "results_exported"
         return (value.get("schema") == "fairbeam.emerge-fixture-result/1"
                 and value.get("status") == "results_validated")
     return value.get("status") == "results_validated" or (

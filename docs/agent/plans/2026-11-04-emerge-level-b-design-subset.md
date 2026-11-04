@@ -231,26 +231,26 @@ code into the repo.
 
 **Steps:**
 
-- [ ] `research.prepare`: for `backend == "emerge"` with a design, call `emerge_design.admit`
+- [x] `research.prepare`: for `backend == "emerge"` with a design, call `emerge_design.admit`
   (Level A fixture path unchanged when `design` is `None`). Store the case in the snapshot.
-- [ ] `execute`: design → `fairbeam_emerge.run_design`. `validate_result`: new branch for
+- [x] `execute`: design → `fairbeam_emerge.run_design`. `validate_result`: new branch for
   `fairbeam.emerge-driven-result/1` before the fixture check. `completed_result`: `emerge` + that
   schema + `results_exported`.
-- [ ] `emerge_bundle.result_bundle(design, result)` mirroring `elmer_bundle.py`: engine `EMerge`,
-  method `Frequency-domain FEM (experimental)`, boundaries `Absorbing (first order)` or what Task 2
-  found, `run: None`, `experimental` block with limitations and settings, port widened by
-  `feed_width_mm`, S11 not conjugated, `zin = z_ref (1+S11)/(1-S11)` with the singular check,
-  `farfield: []`.
-- [ ] Before writing the bundle, find every consumer of `bundle.results.farfield` in `src/` and
+- [x] `emerge_bundle.result_bundle(design, result)` mirroring `elmer_bundle.py`: engine `EMerge`,
+  method `Frequency-domain FEM (experimental)`, boundaries `Second-order absorbing` (Task 2:
+  AbsorbingBoundary order=2), `run: None`, `experimental` block with limitations and settings, port
+  widened by `feed_width_mm`, S11 not conjugated, `zin = z_ref (1+S11)/(1-S11)` with the singular
+  check, `farfield: []`.
+- [x] Before writing the bundle, find every consumer of `bundle.results.farfield` in `src/` and
   confirm an empty list renders (no crash, no pattern tab claim). If a non-empty far field is
   required, stop with `BLOCKED`.
-- [ ] `execute` writes `bundle.json` + `bundle_sha256` for the new schema, like Elmer driven.
-- [ ] `server.py`: health `"emerge": 2`.
-- [ ] Tests: bundle preserves the design, `run is None`, no conjugation, Zin value on a known S11,
+- [x] `execute` writes `bundle.json` + `bundle_sha256` for the new schema, like Elmer driven.
+- [x] `server.py`: health `"emerge": 2`.
+- [x] Tests: bundle preserves the design, `run is None`, no conjugation, Zin value on a known S11,
   empty far field; research admits the Patch template against a fake venv and rejects a two-port
   design; health is 2; Level A fixture tests unchanged.
-- [ ] Run `-p "test_emerge_*.py"`, `-p "test_elmer_*.py"`, `-p "test_research_*.py"` → pass.
-- [ ] Commit: `Wire EMerge Design runs into the research queue and shared results`
+- [x] Run `-p "test_emerge_*.py"`, `-p "test_elmer_*.py"`, `-p "test_research_*.py"` → pass.
+- [x] Commit: `Wire EMerge Design runs into the research queue and shared results`
 
 **Done when:** a synthetic driven result becomes a valid shared bundle in tests.
 
