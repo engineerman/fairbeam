@@ -34,9 +34,9 @@ class ResearchDocumentTests(unittest.TestCase):
         self.app.backup_scope = backup_scope_for(self.models)
         self.app.manager = self.manager
 
-    def body(self, file=None):
+    def body(self, file=None, backend="elmer"):
         file = file or self.file
-        return {"backend": "elmer", "path": "unused", "settings": {"analysis": "driven"},
+        return {"backend": backend, "path": "unused", "settings": {"analysis": "driven"},
                 "design": copy.deepcopy(file["design"]),
                 "source": {"model_id": file["id"], "workspace_hash": file["hash"], "backup_scope": self.app.backup_scope}}
 
@@ -229,6 +229,29 @@ class ResearchDocumentTests(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertNotIn("backup_scope", records[0])
         self.assertEqual(warnings, [])
+
+    def test_emerge_driven_source_binding_is_admitted(self):
+        job = self.submit(self.body(backend="emerge"))
+        self.assertEqual(job.research["source"]["model_id"], self.file["id"])
+        self.assertEqual(job.research["backend"], "emerge")
+        refused = self.body(backend="emerge")
+        refused["settings"]["analysis"] = "modes"
+        with mock.patch("fairbeam.research.prepare") as prepare, self.assertRaisesRegex(ApiError, "driven Elmer or EMerge"):
+            self.app.research_submit(refused)
+        prepare.assert_not_called()
+
+    def test_emerge_planar_source_binding_is_admitted(self):
+        body = self.body(backend="emerge")
+        body["settings"]["analysis"] = "planar_two_port"
+        job = self.submit(body)
+        self.assertEqual(job.research["source"]["model_id"], self.file["id"])
+        self.assertEqual(job.research["backend"], "emerge")
+        self.assertEqual(job.research["settings"]["analysis"], "planar_two_port")
+        refused = self.body(backend="elmer")
+        refused["settings"]["analysis"] = "planar_two_port"
+        with mock.patch("fairbeam.research.prepare") as prepare, self.assertRaisesRegex(ApiError, "driven Elmer or EMerge"):
+            self.app.research_submit(refused)
+        prepare.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ import sys
 
 MAX_SNAPSHOT_BYTES = 1024 * 1024
 MAX_RESULT_BYTES = 4 * 1024 * 1024
-BACKENDS = ("periodic", "stock", "elmer")
+BACKENDS = ("periodic", "stock", "elmer", "emerge")
 
 
 def encode(value):
@@ -37,7 +37,7 @@ def binary_pins(executables, extra=()):
 
 def backend_name(value):
     if value not in BACKENDS:
-        raise ValueError("backend must be periodic, stock or elmer")
+        raise ValueError("backend must be periodic, stock, elmer or emerge")
     return value
 
 
@@ -61,6 +61,18 @@ def elmer_root(path):
     return str(elmer_runtime.home()) if elmer_runtime.installed() else path
 
 
+def emerge_python(path):
+    """The EMerge Python environment: the given path, FAIRBEAM_EMERGE_PYTHON, or the managed venv.
+
+    No PATH lookup. When only the environment variable is set, return ``path`` (None) so
+    ``fairbeam_emerge.discover`` reads the variable itself, matching Elmer's env hand-off.
+    """
+    if path or os.environ.get("FAIRBEAM_EMERGE_PYTHON"):
+        return path
+    from . import emerge_runtime
+    return str(emerge_runtime.home()) if emerge_runtime.installed() else path
+
+
 def probe(body):
     if not isinstance(body, dict) or set(body) - {"backend", "path"}:
         raise ValueError("probe expects only backend and path")
@@ -69,6 +81,9 @@ def probe(body):
     if backend == "elmer":
         import fairbeam_elmer
         result = fairbeam_elmer.capabilities(elmer_root(path))
+    elif backend == "emerge":
+        import fairbeam_emerge
+        result = fairbeam_emerge.capabilities(emerge_python(path))
     elif backend == "stock":
         from . import stock_cell
         result = stock_cell.probe(path)
@@ -114,6 +129,31 @@ def prepare(body):
                  for ext in (".dll", ".so", ".dylib")]
         pins = binary_pins((solver, grid), extra)
         normalized = settings
+    elif backend == "emerge":
+        import fairbeam_emerge
+        python, site = fairbeam_emerge.discover(emerge_python(path))
+        version = fairbeam_emerge.emerge_version(site)
+        if version not in fairbeam_emerge.SUPPORTED_EMERGE:
+            raise ValueError(f"unsupported EMerge version: {version!r}")
+        path = str(python)
+        record = site / f"emerge-{version}.dist-info" / "RECORD"
+        pins = binary_pins((python,), extra=[fairbeam_emerge.WORKER, record])
+        if body.get("design") is not None:
+            if settings.get("analysis") == "planar_two_port":
+                from .emerge_planar import admit as admit_planar
+                normalized = admit_planar(body["design"], settings)
+            else:
+                from .emerge_design import admit
+                normalized = admit(body["design"], settings)
+        else:
+            if set(settings) != {"resolution"}:
+                raise ValueError("EMerge Level A settings must be exactly {resolution}")
+            fairbeam_emerge.validate_case(settings["resolution"])
+            normalized = {"resolution": settings["resolution"]}
+        from . import resources
+        cpu = os.cpu_count() or 1
+        nthreads = resources.auto_threads(cpu, resources.physical_cores(cpu))
+        normalized = {**normalized, "nthreads": nthreads}
     else:
         if backend == "stock":
             from . import stock_cell as cell_backend
@@ -183,7 +223,92 @@ def validate_result(value, backend):
     if backend == "stock":
         from .stock_cell import validate_result as validate_stock_result
         return validate_stock_result(value)
-    if backend == "periodic":
+    if backend == "emerge":
+        import fairbeam_emerge
+        if value.get("schema") == fairbeam_emerge.DESIGN_RESULT_SCHEMA:
+            if value.get("precision_converged") is not False:
+                raise ValueError("emerge Design never claims mesh convergence")
+            if value.get("gain_qualified") is not False:
+                raise ValueError("emerge Design never claims qualified gain")
+            if value.get("phasor_convention") != fairbeam_emerge.PHASOR:
+                raise ValueError("emerge Design phasor_convention must match Fairbeam frames")
+            native = value.get("native_phasor_convention")
+            if native is not None and native != fairbeam_emerge.PHASOR:
+                raise ValueError("emerge Design native_phasor_convention must be exp(+i omega t)")
+            for key in ("s11_re", "s11_im"):
+                values = value.get(key)
+                if (not isinstance(values, list) or len(values) != len(frequencies)
+                        or any(isinstance(v, bool) or not isinstance(v, (float, int)) or not math.isfinite(v)
+                               for v in values)):
+                    raise ValueError("emerge Design complex trace is incomplete")
+            if any(abs(complex(r, i)) > fairbeam_emerge.S11_ABS_MAX
+                   for r, i in zip(value["s11_re"], value["s11_im"])):
+                raise ValueError(f"emerge Design |S11| exceeds {fairbeam_emerge.S11_ABS_MAX}")
+            if value.get("status") == "results_validated":
+                raise ValueError("emerge Design never claims results_validated")
+        elif value.get("schema") == fairbeam_emerge.PLANAR_RESULT_SCHEMA:
+            if value.get("precision_converged") is not False:
+                raise ValueError("emerge planar never claims mesh convergence")
+            if value.get("gain_qualified") is not False:
+                raise ValueError("emerge planar never claims qualified gain")
+            if value.get("phasor_convention") != fairbeam_emerge.PHASOR:
+                raise ValueError("emerge planar phasor_convention must match Fairbeam frames")
+            native = value.get("native_phasor_convention")
+            if native is not None and native != fairbeam_emerge.PHASOR:
+                raise ValueError("emerge planar native_phasor_convention must be exp(+i omega t)")
+            s_block = value.get("s")
+            if not isinstance(s_block, dict):
+                raise ValueError("emerge planar s must be an object")
+            for key in ("1,1", "2,1", "1,2", "2,2"):
+                entry = s_block.get(key)
+                if not isinstance(entry, dict):
+                    raise ValueError(f"emerge planar s[{key}] must be an object")
+                for part in ("re", "im"):
+                    values = entry.get(part)
+                    if (not isinstance(values, list) or len(values) != len(frequencies)
+                            or any(isinstance(v, bool) or not isinstance(v, (float, int))
+                                   or not math.isfinite(v) for v in values)):
+                        raise ValueError(f"emerge planar s[{key}] complex trace is incomplete")
+                if any(abs(complex(r, i)) > fairbeam_emerge.S_ABS_MAX
+                       for r, i in zip(entry["re"], entry["im"])):
+                    raise ValueError(f"emerge planar |S{key}| exceeds {fairbeam_emerge.S_ABS_MAX}")
+            z_ref = value.get("z_ref")
+            if (not isinstance(z_ref, list) or len(z_ref) != 2
+                    or any(isinstance(v, bool) or not isinstance(v, (float, int))
+                           or not math.isfinite(v) or v <= 0 for v in z_ref)):
+                raise ValueError("emerge planar z_ref must be two positive finite numbers")
+            if value.get("enclosure") not in ("shielded", "open"):
+                raise ValueError("emerge planar enclosure must be shielded or open")
+            if value.get("status") == "results_validated":
+                raise ValueError("emerge planar never claims results_validated")
+        elif value.get("schema") != fairbeam_emerge.RESULT_SCHEMA:
+            raise ValueError("unsupported emerge research result schema")
+        else:
+            expected = list(fairbeam_emerge.FREQUENCIES_HZ)
+            if [float(f) for f in frequencies] != expected:
+                raise ValueError("emerge result frequencies must equal the fixture list")
+            for key in ("s11_re", "s11_im", "s21_re", "s21_im", "analytic_s21_re", "analytic_s21_im"):
+                values = value.get(key)
+                if (not isinstance(values, list) or len(values) != len(expected)
+                        or any(isinstance(v, bool) or not isinstance(v, (float, int)) or not math.isfinite(v)
+                               for v in values)):
+                    raise ValueError("emerge result complex trace is incomplete")
+            if value.get("precision_converged") is not False:
+                raise ValueError("emerge fixture never claims mesh convergence")
+            metrics, criteria = value.get("metrics"), value.get("criteria")
+            required = ("s11_max", "s21_min", "phase_error_deg_max", "passivity_max")
+            if (not isinstance(metrics, dict) or not isinstance(criteria, dict)
+                    or any(isinstance(metrics.get(k), bool) or not isinstance(metrics.get(k), (int, float))
+                           or not math.isfinite(metrics.get(k)) for k in required)
+                    or any(isinstance(criteria.get(k), bool) or not isinstance(criteria.get(k), (int, float))
+                           or not math.isfinite(criteria.get(k)) for k in required)):
+                raise ValueError("emerge result metrics/criteria missing")
+            if value.get("status") == "results_validated" and (
+                    metrics["s11_max"] > criteria["s11_max"] or metrics["s21_min"] < criteria["s21_min"]
+                    or metrics["phase_error_deg_max"] > criteria["phase_error_deg_max"]
+                    or metrics["passivity_max"] > criteria["passivity_max"]):
+                raise ValueError("emerge validated status contradicts reference criteria")
+    elif backend == "periodic":
         if value.get("schema") != "fairbeam.periodic-result/1":
             raise ValueError("unsupported periodic research result schema")
         for key in ("s11_real", "s11_imag", "s21_real", "s21_imag"):
@@ -254,6 +379,20 @@ def execute(snapshot, outdir, checksum):
             result = run(spec["design"], spec["settings"], outdir, spec["path"])
         else:
             result = fairbeam_elmer.run_cavity(outdir, root=spec["path"], mesh_size=spec["normalized"]["mesh_size"], experimental=True)
+    elif backend == "emerge":
+        import fairbeam_emerge
+        if spec.get("design") is not None:
+            if spec["normalized"].get("kind") == "planar":
+                result = fairbeam_emerge.run_planar(
+                    outdir, spec["normalized"], root=spec["path"], experimental=True)
+            else:
+                result = fairbeam_emerge.run_design(
+                    outdir, spec["normalized"], root=spec["path"], experimental=True)
+            # Adapter settings keep fractions/metres; shared Results need the user settings.
+            result = {**result, "settings": dict(spec["settings"])}
+        else:
+            result = fairbeam_emerge.run_fixture(
+                outdir, root=spec["path"], resolution=spec["normalized"]["resolution"], experimental=True)
     elif backend == "stock":
         from . import stock_cell
         result = stock_cell.run(spec["normalized"], outdir, executable=spec["path"])
@@ -265,6 +404,16 @@ def execute(snapshot, outdir, checksum):
     if value.get('schema') == 'fairbeam.elmer-driven-result/1':
         from .elmer_bundle import result_bundle
         bundle_bytes = encode(result_bundle(spec['design'], value))
+        (outdir / 'bundle.json').write_bytes(bundle_bytes)
+        value['bundle_sha256'] = hashlib.sha256(bundle_bytes).hexdigest()
+    elif value.get('schema') == 'fairbeam.emerge-driven-result/1':
+        from .emerge_bundle import result_bundle
+        bundle_bytes = encode(result_bundle(spec['design'], value))
+        (outdir / 'bundle.json').write_bytes(bundle_bytes)
+        value['bundle_sha256'] = hashlib.sha256(bundle_bytes).hexdigest()
+    elif value.get('schema') == 'fairbeam.emerge-planar-result/1':
+        from .emerge_bundle import planar_result_bundle
+        bundle_bytes = encode(planar_result_bundle(spec['design'], value))
         (outdir / 'bundle.json').write_bytes(bundle_bytes)
         value['bundle_sha256'] = hashlib.sha256(bundle_bytes).hexdigest()
     target = outdir / "result.json"
@@ -280,6 +429,12 @@ def completed_result(value):
     # Exported Design eigenmodes carry only completion checks, never a validation claim.
     if value.get("backend") == "stock":
         return value.get("schema") == "fairbeam.stock-result/1" and value.get("status") == "results_exported"
+    if value.get("backend") == "emerge":
+        if value.get("schema") in ("fairbeam.emerge-driven-result/1",
+                                   "fairbeam.emerge-planar-result/1"):
+            return value.get("status") == "results_exported"
+        return (value.get("schema") == "fairbeam.emerge-fixture-result/1"
+                and value.get("status") == "results_validated")
     return value.get("status") == "results_validated" or (
         value.get("backend") == "elmer" and value.get("schema") in ("fairbeam.elmer-design-result/1", "fairbeam.elmer-driven-result/1")
         and value.get("status") == "results_exported")

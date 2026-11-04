@@ -1,6 +1,6 @@
 # Experimental solvers in the app
 
-The regular **Run** dialog offers openEMS (the default), **Elmer FEM — Experimental eigenmodes**, and **Elmer FEM · Experimental antenna**. Elmer Design runs use the ordinary run server and serial queue, with their own settings and result history. The installed openEMS runtime, its run path, project format and antenna results are unchanged. The Simulation ribbon's **Experimental solvers** command also retains the fixed research fixtures and runtime setup. No additional solver is downloaded or installed automatically.
+The regular **Run** dialog offers openEMS (the default), **Elmer FEM — Experimental eigenmodes**, **Elmer FEM · Experimental antenna**, (when health `emerge` ≥ 2) **EMerge · Experimental antenna**, and (when health `emerge` ≥ 3) **EMerge FEM · Experimental planar two-port**. Elmer and EMerge Design runs use the ordinary run server and serial queue, with their own settings and result history. The installed openEMS runtime, its run path, project format and antenna results are unchanged. The Simulation ribbon's **Experimental solvers** command also retains the fixed research fixtures and runtime setup, including the opt-in **EMerge** WR-90 waveguide fixture. No additional solver is downloaded or installed automatically.
 
 This is an opt-in research integration, not a production Floquet port or general FEM antenna solver. Windows native execution has been exercised; macOS native execution and packaging still need qualification.
 
@@ -113,6 +113,28 @@ Minimal Windows smoke: an air-filled Design box from (0,0,0) to (100,50,200) mm,
 Select a native package containing `bin/ElmerSolver` and `bin/ElmerGrid` (or its binary directory). The reference experiment runs a fixed 0.10 × 0.05 × 0.20 m vacuum PEC cavity, at mesh targets 0.025 or 0.0125 m. This reference fixture does not translate the current Design; use the Run dialog workflow above for that. It reports eigenfrequencies, the TE101 exact-frequency error and complex field-shape correlation. It has no driven ports, antenna S parameters, radiation boundary or far-field output.
 
 See [the Elmer experiment](ELMER-EXPERIMENT.md) for the analytical definition, standalone command, native observations and distribution evidence. The standalone command remains independent of the app queue; do not run it concurrently with another solver. Third-party binaries are external and are not redistributed by this integration.
+
+## EMerge WR-90 waveguide fixture
+
+Select the **EMerge** backend in Simulation → Experimental solvers. This Level A path runs only the fixed WR-90 air-filled rectangular waveguide (a = 22.86 mm, b = 10.16 mm, L = 50.0 mm, PEC walls, vacuum fill, TE10 ports at both ends, frequencies 8–12 GHz). It does not translate the current Design. Supported resolutions are `coarse` (wavelength fraction 0.25) and `fine` (0.125). On Windows, **Install EMerge** builds the managed `emerge==3.0.0b12` environment into the app data folder after you accept the license notes; leave the path blank to use it. Otherwise enter a Python 3.10–3.13 environment that already has `emerge==3.0.0b12`, or set `FAIRBEAM_EMERGE_PYTHON`.
+
+Results report complex S11/S21 against the analytic `exp(−i β L)` reference under Fairbeam's `exp(+i omega t)` convention. A passed run is `results_validated`; `precision_converged` remains false. The fixture itself has no antenna viewer bundle or far-field output.
+
+Native Windows managed EMerge 2.8.9 on 2026-11-04 (before the 3.0.0b12 pin): coarse mesh 163 nodes / 397 tetrahedra, max |S11| = 0.005462, min |S21| = 0.999896, max phase error 0.789°, solver 160.945 s; fine mesh 667 / 2305, max |S11| = 0.000119, min |S21| = 0.999993, max phase error 0.037°, solver 9.223 s. Both were `results_validated`. A measured managed install of pin `3.0.0b12` on 2026-11-04 was 1421133962 bytes (1355.3 MiB).
+
+See [the EMerge experiment](EMERGE-EXPERIMENT.md) for the analytic definition, standalone `fairbeam-emerge` command, full per-frequency table, acceptance criteria and license notes. The standalone command remains independent of the app queue; do not run it concurrently with another solver. EMerge and its dependencies stay external optional installs and are not redistributed inside the Fairbeam installer.
+
+## EMerge · Experimental antenna (Design subset)
+
+Choose **EMerge · Experimental antenna** in **Run** when health `emerge` ≥ 2. Admission is the bounded axis-aligned dielectric / PEC / one Discrete port class (same reject list as Elmer driven, without Elmer's mesher). Settings: finite feed acceptance, `feed_width_mm`, `padding_mm`, `coarse`/`fine` (0.25 / 0.15 wavelength fraction at `f_max`), band and 3–21 points, optional `approximate_metals`. Constant `tan_d` is allowed and recorded. Outer ABC on a padded air box; no PML, no far field, no gain. Status `results_exported` only. Worker timeout 1800 s; volume proxy limit 200000.
+
+Patch template native Windows evidence (2026-11-04), 2.0–3.0 GHz × 11 points, `feed_width_mm=1`, `padding_mm=40`: EMerge coarse 474 / 1975 tets, S11 min 2.30 GHz (−7.427 dB); fine 1141 / 5245, S11 min 2.30 GHz (−6.349 dB). Fairbeam openEMS on the same template: S11 min 2.453981250 GHz (−45.574 dB). No Design `results_validated` path; no claim of openEMS S11 agreement. Full table and limitations: [EMerge experiment](EMERGE-EXPERIMENT.md).
+
+## EMerge FEM · Experimental planar two-port (hairpin class)
+
+Choose **EMerge FEM · Experimental planar two-port** in **Run** when health `emerge` ≥ 3. Admission is the single-layer microstrip two-port class: one substrate box, ground at the bottom, z-normal copper polygons or z-flat boxes on the substrate top, exactly two microstrip ports at board edges. Settings: required `accept_lumped_terminals`, `enclosure` (`shielded` or `open`), `air_height_mm`, `padding_mm` (open only), `coarse`/`fine` (0.25 / 0.15 wavelength fraction at `f_max`), band and 3–41 points, optional `approximate_metals`. Trace metals become zero-thickness PEC sheets when approximated. Worker timeout 3600 s; tetrahedra proxy limit 400000. Status `results_exported` only; complete 2 × 2 `sparams` in shared Results; no far field, no gain.
+
+Hairpin fixture native Windows evidence (2026-11-04, managed EMerge 2.8.9 before the 3.0.0b12 pin), 0.75–1.25 GHz × 15 points, sheet copper, `air_height_mm=6.4`: shielded coarse best |S21| 1.071429 GHz (−0.63 dB, S11 −30.45 dB, 109584 tets, 971.7 s); shielded fine same peak frequency and −0.63 dB (109714 tets, 1054 s); open coarse (`padding_mm=10`) same peak at −0.51 dB (111586 tets, 1055 s). Coarse→fine peak shift 0 on that grid. Fairbeam openEMS GPU on the same fixture (default settings, port 1 only excited) reported non-physical |S21| +5.07 dB at 1.025625 GHz; Level B2 does not claim S-parameter agreement with that path. Full table and qualification: [EMerge experiment](EMERGE-EXPERIMENT.md).
 
 ## Reproducibility and recovery
 

@@ -149,6 +149,37 @@ class SharedResearchQueue(ResearchFixtures, unittest.TestCase):
             else:self.assertTrue((manager.projects_dir/job.bundle).is_file())
             manager.shutdown(timeout=5)
 
+    def test_emerge_planar_bundle_is_published(self):
+        manager=self.manager(autostart=False)
+        def command(job):
+            value=dict(schema='fairbeam.emerge-planar-result/1', backend='emerge',
+                research_schema='fairbeam-research-result-1',status='results_exported',
+                precision_converged=False, gain_qualified=False,
+                frequency_hz=[1e9], s={'1,1':{'re':[0],'im':[0]},'2,1':{'re':[0],'im':[0]},
+                                       '1,2':{'re':[0],'im':[0]},'2,2':{'re':[0],'im':[0]}},
+                z_ref=[50.,50.], enclosure='shielded', settings={}, mesh={'nodes':1,'tetrahedra':1},
+                elapsed_seconds=1., phasor_convention='exp(+i omega t)',
+                native_phasor_convention='exp(+i omega t)', limitations=[], pec_approximations=[],
+                input_sha256=job.research['snapshot_sha256'])
+            bundle=json.dumps(dict(model={'id':'emerge-hairpin'},
+                                   experimental={'input_sha256':value['input_sha256']},
+                                   results={'sparams':{'complete':True,'s':{'2,1':{'re':[0],'im':[0]}}}})).encode()
+            value['bundle_sha256']=hashlib.sha256(bundle).hexdigest()
+            script=WRITER+"\n(out/'bundle.json').write_bytes(bytes.fromhex(sys.argv[3]))\n"
+            return [sys.executable,'-c',script,str(job.dir/'research'),json.dumps(value),bundle.hex()]
+        manager.command_factory=command
+        spec=self.spec(backend='emerge')
+        spec['settings']={'analysis':'planar_two_port'}
+        spec['design']={'model':{'id':'emerge-hairpin','name':'hairpin'}}
+        job=manager.submit(model='emerge_hairpin',model_id='emerge-hairpin',model_path='',
+                           kind='research',research_input=spec)
+        manager.worker.start()
+        self.assertTrue(wait_for(lambda:job.terminal))
+        self.assertEqual(job.status,'done',job.error)
+        self.assertEqual(job.bundle,f'emerge-{job.id}.json')
+        self.assertTrue((manager.projects_dir/job.bundle).is_file())
+        manager.shutdown(timeout=5)
+
     def test_research_and_antenna_jobs_use_one_serial_queue(self):
         m=self.manager();first=m.submit(model='dipole',model_path='not-real',params={'hang':True})
         self.assertTrue(wait_for(lambda:first.status=='running'))

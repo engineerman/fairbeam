@@ -5,11 +5,19 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { Eye, ListX, Square, X } from "lucide-solid";
 import { isTerminal, type Job } from "./api";
+import { isDesignBoundResearch } from "./researchState";
 import { cancelJob, clearQueue, jobs, live, serverActivity, stopping } from "./store";
 import { ago, paramSummary, StatusBadge } from "./status";
 import { t } from "../i18n";
 
-export const jobName = (j: Job) => j.kind === "research" ? (j.research?.settings.analysis === "driven" ? `${j.model_id ?? j.model} · Elmer FEM` : `${t("research.title")} · ${t(`research.backend.${j.research?.backend ?? "periodic"}`)}`) : j.label ?? j.model_id ?? j.model;
+export const jobName = (j: Job) => {
+  if (j.kind !== "research") return j.label ?? j.model_id ?? j.model;
+  if (isDesignBoundResearch(j)) {
+    const solver = j.research?.backend === "emerge" ? "EMerge FEM" : "Elmer FEM";
+    return j.name || `${j.model_id ?? j.model} · ${solver}`;
+  }
+  return `${t("research.title")} · ${t(`research.backend.${j.research?.backend ?? "periodic"}`)}`;
+};
 
 /** A run's engine and threads as its row says it: "GPU" for a GPU run (its solver does not use a
  * thread count, the job's 1 is a placeholder), else "CPU · 2 threads" ("CPU · Auto" before the run
