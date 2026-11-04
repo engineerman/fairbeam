@@ -84,9 +84,10 @@ function StockResults(props: { result: ResearchResult }) {
 
 function ResearchResults(props: { job: Job }) {
   return <Show when={props.job.result}>{r => <div class="stack-lg">
-    <Show when={r().status !== "results_validated" && r().schema !== "fairbeam.emerge-fixture-result/1"}><p class="status-block status-warn"><CircleAlert size={14} />{t(r().schema === "fairbeam.elmer-driven-result/1" ? "elmerAntenna.qa" : r().backend === "stock" && r().status === "results_exported" ? "research.stock.qa" : "research.qaUnvalidated")}</p></Show>
+    <Show when={r().status !== "results_validated" && r().schema !== "fairbeam.emerge-fixture-result/1"}><p class="status-block status-warn"><CircleAlert size={14} />{t(r().schema === "fairbeam.elmer-driven-result/1" ? "elmerAntenna.qa" : r().schema === "fairbeam.emerge-driven-result/1" ? "emergeAntenna.qa" : r().backend === "stock" && r().status === "results_exported" ? "research.stock.qa" : "research.qaUnvalidated")}</p></Show>
     <Show when={r().schema !== "fairbeam.emerge-fixture-result/1"} fallback={<EmergeFixtureResults result={r()} />}>
     <Show when={r().schema !== "fairbeam.elmer-driven-result/1"} fallback={<ElmerAntennaResults result={r()} />}>
+    <Show when={r().schema !== "fairbeam.emerge-driven-result/1"} fallback={<div class="stack"><p class="note">{t("emergeAntenna.resultHint")}</p><p class="note">{t("emergeAntenna.resultsNote")}</p></div>}>
     <Show when={props.job.research?.backend === "periodic" || props.job.research?.backend === "stock"} fallback={<>
       <p class="note">{t(r().schema === "fairbeam.elmer-design-result/1" ? "elmerDesign.resultHint" : "research.elmer.resultNote")}</p>
       <Show when={r().schema !== "fairbeam.elmer-design-result/1"}>
@@ -101,6 +102,7 @@ function ResearchResults(props: { job: Job }) {
         <For each={r().frequency_hz}>{(f, i) => <tr><td>{fmt.int(i() + 1)}</td><td class="num">{fmt.fixed(f / 1e9, 6)}</td></tr>}</For>
       </tbody></table>
     </>}><PeriodicResults result={r()} /><Show when={props.job.research?.backend === "stock"}><StockResults result={r()} /></Show></Show>
+    </Show>
     </Show>
     </Show>
     <details><summary>{t("research.provenance")}</summary><pre class="code research-json">{JSON.stringify({ research: props.job.research, result: r() }, null, 2)}</pre></details>

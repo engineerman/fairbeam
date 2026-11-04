@@ -267,21 +267,21 @@ the Elmer components.
 
 **Steps:**
 
-- [ ] `RunDialog.tsx`: `<option value="emerge-driven">` after the Elmer options, only when
+- [x] `RunDialog.tsx`: `<option value="emerge-driven">` after the Elmer options, only when
   `health.emerge >= 2`.
-- [ ] `EmergeAntennaRun.tsx`: finite-feed acceptance checkbox (required), feed width, padding,
+- [x] `EmergeAntennaRun.tsx`: finite-feed acceptance checkbox (required), feed width, padding,
   resolution `coarse`/`fine`, band and points, `approximate_metals`, EMerge path/managed runtime
   hint, submit to the research queue with `backend: "emerge"` and the design. Show the
   limitations before submit: experimental, absorbing boundary not PML, no far field, no gain,
   not a convergence certificate, constant loss tangent.
-- [ ] Results reuse the shared Results view through the bundle; no new results component unless
+- [x] Results reuse the shared Results view through the bundle; no new results component unless
   Task 3 found one is required.
-- [ ] i18n `emergeAntenna.*` in both languages, no hardcoded English.
-- [ ] Check script: option hidden without `emerge: 2`; acceptance required; submitted body shape;
+- [x] i18n `emergeAntenna.*` in both languages, no hardcoded English.
+- [x] Check script: option hidden without `emerge: 2`; acceptance required; submitted body shape;
   synthetic result labelled synthetic; EN and TR.
-- [ ] Run `npm run typecheck`, `npm run check:i18n`, `npm run check:legal`,
+- [x] Run `npm run typecheck`, `npm run check:i18n`, `npm run check:legal`,
   `npm run check:emerge-antenna`, `npm run check:research`, `npm run check:designer`.
-- [ ] Commit: `Add the experimental EMerge antenna option to the Run dialog`
+- [x] Commit: `Add the experimental EMerge antenna option to the Run dialog`
 
 **Done when:** checks pass and the option is hidden on servers without `emerge: 2`.
 

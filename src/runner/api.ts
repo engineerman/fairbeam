@@ -25,7 +25,7 @@ const withThreads = <T extends { threads: number }>(b: T) => ({ ...b, threads: b
 
 export interface Health {
   elmer_driven?: number;
-  /** Present when the run server exposes the experimental EMerge research backend. */
+  /** Experimental EMerge: 1 = waveguide fixture, 2 = fixture + Design driven path. */
   emerge?: number;
   research_source?: boolean;
   research?: boolean;
