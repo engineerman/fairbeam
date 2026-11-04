@@ -13,12 +13,20 @@ export interface ElmerRuntime {
   supported: boolean; installed: boolean; path: string; version: string; size: number; license: string; source: string;
   state: "idle" | "downloading" | "unpacking" | "done" | "failed"; received: number; total: number; error: string;
 }
+/** The optional managed EMerge venv (python/fairbeam/emerge_runtime.py). */
+export interface EmergeRuntime {
+  supported: boolean; installed: boolean; path: string; version: string; license: string; source: string;
+  estimated_bytes: number;
+  state: "idle" | "creating" | "installing" | "verifying" | "done" | "failed"; error: string;
+}
 export interface Preflight { level: "ok" | "warn" | "refuse" | "unknown"; messages: string[]; estimate_bytes: number | null; free_bytes: number | null }
 /** threads 0 is Auto in the UI; the server takes "auto" */
 const withThreads = <T extends { threads: number }>(b: T) => ({ ...b, threads: b.threads === 0 ? "auto" : b.threads });
 
 export interface Health {
   elmer_driven?: number;
+  /** Present when the run server exposes the experimental EMerge research backend. */
+  emerge?: number;
   research_source?: boolean;
   research?: boolean;
   ok: boolean;
@@ -399,7 +407,7 @@ export interface OptDone {
 }
 
 /** Experimental results are never ordinary antenna bundles. */
-export type ResearchBackend = "periodic" | "stock" | "elmer";
+export type ResearchBackend = "periodic" | "stock" | "elmer" | "emerge";
 export interface ResearchResult {
   farfield?: { frequency_hz: number; theta_deg: number[]; phi_deg: number[]; directivity: number[][]; peak_directivity_dbi: number; gain_qualified: false };
   schema?: string;
@@ -410,6 +418,18 @@ export interface ResearchResult {
   s11_imag?: number[];
   s21_real?: number[];
   s21_imag?: number[];
+  /** EMerge fixture traces use _re/_im (see fairbeam.emerge-fixture-result/1). */
+  s11_re?: number[];
+  s11_im?: number[];
+  s21_re?: number[];
+  s21_im?: number[];
+  analytic_s21_re?: number[];
+  analytic_s21_im?: number[];
+  metrics?: {
+    s11_max?: number; s21_min?: number; phase_error_deg_max?: number; passivity_max?: number;
+    s11_abs?: number[]; s21_abs?: number[]; phase_error_deg?: number[]; passivity?: number[];
+  };
+  criteria?: { s11_max?: number; s21_min?: number; phase_error_deg_max?: number; passivity_max?: number };
   reflection_phase_deg?: (number | null)[];
   material?: { requested: boolean; available: boolean; qualified: false; thickness_mm: number; reason?: string | null;
     reliable?: boolean[]; eps_real?: (number | null)[]; eps_imag?: (number | null)[];
@@ -562,6 +582,8 @@ export const api = {
     call<{ backend: string; available: boolean; reason?: string }>("POST", "/research/probe", { backend, path }, signal),
   elmerRuntime: (signal?: AbortSignal) => call<ElmerRuntime>("GET", "/research/elmer/runtime", undefined, signal),
   elmerInstall: (signal?: AbortSignal) => call<ElmerRuntime>("POST", "/research/elmer/install", {}, signal),
+  emergeRuntime: (signal?: AbortSignal) => call<EmergeRuntime>("GET", "/research/emerge/runtime", undefined, signal),
+  emergeInstall: (signal?: AbortSignal) => call<EmergeRuntime>("POST", "/research/emerge/install", {}, signal),
   researchRuns: (signal?: AbortSignal) => call<{ runs: Job[] }>("GET", "/research/runs?summary=1", undefined, signal),
   researchRun: (id: string, signal?: AbortSignal) => call<Job>("GET", `/research/runs/${encodeURIComponent(id)}`, undefined, signal),
   researchStart: (body: { backend: ResearchBackend; path: string; settings: Record<string, unknown>; design?: Design;
