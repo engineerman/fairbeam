@@ -69,13 +69,18 @@ Copy this block verbatim into implementer and reviewer prompts.
   metres; `height` is the extent along `direction`.
 - `AbsorbingBoundary(face, order=2, origin=None, abctype="B")`
   (`physics/microwave/bcs/boundary_conditions.py:125`). The docstring says only first order is
-  supported while the default is `order=2`; Task 2 reads the assembly code and records which order
-  actually runs.
+  supported while the default is `order=2`. **Task 2 (2026-11-04):** assembler applies the
+  second-order correction when `bc.order == 2` (`assembler.py:668-675`, `:1025-1030`,
+  `:1268-1273`). Level B therefore runs the constructor defaults (`order=2`, `abctype="B"`).
 - `PEC(face)` (`boundary_conditions.py:39`), `geo.Box` (`geo/shapes.py:52`), `geo.Plate(origin, u,
   v)` (`geo/shapes.py:233`), `XYPlate` (`:193`), `GeoObject.set_material(Material)`
   (`geometry.py:911`), `emsutil.Material` (`emsutil/material.py:335`).
 - Overlap resolution uses per-object priorities (`geometry.py:596-617`, `_base_priority` 10,
-  `_priority = base + sub/2`). Task 2 confirms how a dielectric box inside the air box wins.
+  `_priority = base + sub/2`). **Task 2:** highest `_priority` wins per tag
+  (`simstate.py:114-123`); air uses `background()` (`geometry.py:978-980`) so dielectric boxes at
+  default priority 10 keep their material. PEC/port `Plate` surfaces are registered GeoObjects and
+  are fragmented with volumes inside `mesher.submit_objects` (`mesher.py:227-264`); no separate
+  embed call is required before `commit_geometry`.
 - Loss: the assembler uses a constant loss tangent, `er*(1 - 1j*tand)`
   (`physics/microwave/assembly/assembler.py:494`).
 
@@ -154,27 +159,27 @@ Checks: frequencies equal the settings linspace, finite traces, `|S11| <= 1.01` 
 
 **Steps:**
 
-- [ ] `admit(design, settings) -> dict`: validate settings (exact key set above), then the admitted
+- [x] `admit(design, settings) -> dict`: validate settings (exact key set above), then the admitted
   subset rules in the same order and with the same wording as Elmer where the rule is the same.
   Do not deep-modify the input (copy first, as Elmer does).
-- [ ] Output case (metres, floats): `{"kind": "design", "boxes": [{"lo", "hi", "eps_r", "mu_r",
+- [x] Output case (metres, floats): `{"kind": "design", "boxes": [{"lo", "hi", "eps_r", "mu_r",
   "tan_d"}], "sheets": [{"lo", "hi", "normal_axis"}], "port": {"lo", "hi", "direction_axis",
   "sign", "width", "height", "z0"}, "air": {"lo", "hi"}, "frequencies_hz": [...], "resolution":
   <value>, "phasor_convention_out": "exp(+i omega t)", "limitations": [...],
   "pec_approximations": [...]}`.
-- [ ] Resource-limit proxy (Shared facts) raises before launch.
-- [ ] Tests: Patch template admitted; feed width applied on the right axis; input unchanged;
+- [x] Resource-limit proxy (Shared facts) raises before launch.
+- [x] Tests: Patch template admitted; feed width applied on the right axis; input unchanged;
   rejects for two ports, resistor, lumped element, transform, cut, curved/rotated primitive,
   metal box with volume, flat dielectric, overlapping dielectrics, missing `tan_d_freq`, conductive
   metal without `approximate_metals`, unknown setting, `points` 2 and 22, `f_min >= f_max`, feed
   not touching PEC, PEC crossing gap, too-large domain.
-- [ ] **Parity test:** a list of at least 10 designs (accepted and rejected variants of the Patch
+- [x] **Parity test:** a list of at least 10 designs (accepted and rejected variants of the Patch
   template). For each, `elmer_driven.prepare(d, cell_mm=40, padding_mm=40)` and
   `emerge_design.admit(d, settings)` must both accept or both reject. Skip only Elmer's
   10000-cell limit (use a large `cell_mm`).
-- [ ] `ast` isolation test: `emerge_design.py` imports no `emerge`, `gmsh`, `emsutil`.
-- [ ] Run `-p "test_emerge_*.py"` and `-p "test_elmer_*.py"` (Level A plan's command) → pass.
-- [ ] Commit: `Admit a bounded Design subset for the EMerge driven port`
+- [x] `ast` isolation test: `emerge_design.py` imports no `emerge`, `gmsh`, `emsutil`.
+- [x] Run `-p "test_emerge_*.py"` and `-p "test_elmer_*.py"` (Level A plan's command) → pass.
+- [x] Commit: `Admit a bounded Design subset for the EMerge driven port` (`1cdbc09`)
 
 **Done when:** admission and parity tests pass without EMerge.
 
@@ -191,26 +196,26 @@ code into the repo.
 
 **Steps:**
 
-- [ ] Read and cite (file:line in the commit body): `LumpedPort` voltage direction and sign, how
+- [x] Read and cite (file:line in the commit body): `LumpedPort` voltage direction and sign, how
   `AbsorbingBoundary` `order`/`abctype` are used in assembly, how priorities resolve a dielectric
   box inside the air box and a PEC `Plate` on a dielectric face, and whether `Plate` surfaces need
   fragmenting with the volumes before `commit_geometry`.
-- [ ] Worker: branch on `case["kind"]`; keep the Level A fixture branch byte-for-byte in behavior.
+- [x] Worker: branch on `case["kind"]`; keep the Level A fixture branch byte-for-byte in behavior.
   Design branch builds the air box, dielectric boxes (`Material(er, ur, tand)`), PEC plates, the
   port plate with `LumpedPort(width, height, direction, Z0)`, `AbsorbingBoundary` on the six air
   faces, then the same single-process sweep and S post-processing settings as Level A (capping,
   column normalization and reciprocity off). Writes `raw.json` with `s11_re/s11_im`, mesh counts,
   `native_phasor_convention`.
-- [ ] Adapter: `run_design(out, case, *, root=None, experimental=False)` with the same discipline
+- [x] Adapter: `run_design(out, case, *, root=None, experimental=False)` with the same discipline
   as `run_fixture` (fresh dir, manifest per status, worker copy + SHA-256, `-I -X utf8`, thread env,
   timeout from Shared facts, `worker.log` always). `assess_design(raw, case)` checks the result
   schema rules and returns `results_exported`. CLI `design --experimental --case case.json --out
   DIR`. Stdlib only.
-- [ ] Tests (no EMerge): `run_design` opt-in, existing out dir refused, failure and timeout keep
+- [x] Tests (no EMerge): `run_design` opt-in, existing out dir refused, failure and timeout keep
   logs; `assess_design` rejects wrong frequencies, non-finite values, `|S11| > 1.01`, wrong
   convention; worker isolation test still passes.
-- [ ] Run `-p "test_emerge_*.py"` → pass.
-- [ ] Commit: `Add the EMerge worker path for admitted Designs`
+- [x] Run `-p "test_emerge_*.py"` → pass.
+- [x] Commit: `Add the EMerge worker path for admitted Designs`
 
 **Done when:** adapter is tested without EMerge and the source citations are in the commit body.
 

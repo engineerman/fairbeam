@@ -1,12 +1,12 @@
-"""EMerge worker for the fixed WR-90 waveguide fixture.
+"""EMerge worker for the fixed WR-90 waveguide fixture and admitted Design cases.
 
 Runs INSIDE the external EMerge environment (``fairbeam_emerge.py`` starts it as a separate
 process with that environment's interpreter). This is the only Fairbeam file that imports EMerge;
 it imports nothing from ``fairbeam``. Usage: ``python fairbeam_emerge_worker.py case.json``.
 
-It builds exactly the fixture described by ``case.json``, solves it in this process (no worker
+It builds exactly the case described by ``case.json``, solves it in this process (no worker
 threads or processes of EMerge's own), and writes ``raw.json`` next to the case. The adapter checks
-the raw S-parameters against the analytic reference; nothing here adjusts a result.
+the raw S-parameters; nothing here adjusts a result.
 """
 import json
 import math
@@ -20,6 +20,12 @@ NATIVE_PHASOR = "exp(+i omega t)"
 FREQUENCY_RTOL = 1e-9
 THREAD_VARIABLES = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMBA_NUM_THREADS",
                     "VECLIB_NUM_THREADS", "NUMEXPR_NUM_THREADS")
+# AbsorbingBoundary: constructor default is order=2 / abctype="B"
+# (physics/microwave/bcs/boundary_conditions.py:138-160). The docstring claims only first order is
+# supported, but assembler.py:668-675 / 1025-1030 / 1268-1273 applies the second-order correction
+# when bc.order == 2. Level B therefore runs the default second-order ABC.
+ABC_ORDER = 2
+ABC_TYPE = "B"
 
 
 def _number(value):
@@ -27,9 +33,17 @@ def _number(value):
 
 
 def load_case(path):
-    """Read and structurally check ``case.json``; the adapter owns the fixture values."""
+    """Read and structurally check ``case.json``; the adapter owns the fixture/design values."""
     case = json.loads(Path(path).read_text(encoding="utf-8"))
-    if not isinstance(case, dict) or case.get("schema") != CASE_SCHEMA:
+    if not isinstance(case, dict):
+        raise ValueError("case.json must be an object")
+    if case.get("kind") == "design":
+        return _load_design_case(case)
+    return _load_fixture_case(case)
+
+
+def _load_fixture_case(case):
+    if case.get("schema") != CASE_SCHEMA:
         raise ValueError(f"case.json must have schema {CASE_SCHEMA}")
     if case.get("physics") != "wr90_waveguide_fixture":
         raise ValueError("case.json physics must be wr90_waveguide_fixture")
@@ -60,6 +74,71 @@ def load_case(path):
     return case
 
 
+def _point3(value, label):
+    if (not isinstance(value, list) or len(value) != 3 or not all(map(_number, value))):
+        raise ValueError(f"{label} must be three finite numbers")
+    return [float(v) for v in value]
+
+
+def _load_design_case(case):
+    if case.get("phasor_convention_out") != NATIVE_PHASOR:
+        raise ValueError("phasor_convention_out must be exp(+i omega t)")
+    if not _number(case.get("resolution")) or not 0 < case["resolution"] <= 0.5:
+        raise ValueError("resolution must be a wavelength fraction in (0, 0.5]")
+    frequencies = case.get("frequencies_hz")
+    if (not isinstance(frequencies, list) or len(frequencies) < 3
+            or not all(map(_number, frequencies)) or any(f <= 0 for f in frequencies)
+            or frequencies != sorted(frequencies)):
+        raise ValueError("frequencies_hz must be ascending positive finite numbers (at least 3)")
+    boxes = case.get("boxes")
+    if not isinstance(boxes, list) or not boxes:
+        raise ValueError("boxes must be a non-empty list")
+    for i, box in enumerate(boxes):
+        if not isinstance(box, dict):
+            raise ValueError(f"boxes[{i}] must be an object")
+        lo, hi = _point3(box.get("lo"), f"boxes[{i}].lo"), _point3(box.get("hi"), f"boxes[{i}].hi")
+        if any(hi[k] <= lo[k] for k in range(3)):
+            raise ValueError(f"boxes[{i}] must have positive volume")
+        for key in ("eps_r", "mu_r", "tan_d"):
+            if not _number(box.get(key)) or (key != "tan_d" and box[key] <= 0) or box["tan_d"] < 0:
+                raise ValueError(f"boxes[{i}].{key} must be a valid material number")
+    sheets = case.get("sheets")
+    if not isinstance(sheets, list) or not sheets:
+        raise ValueError("sheets must be a non-empty list")
+    for i, sheet in enumerate(sheets):
+        if not isinstance(sheet, dict):
+            raise ValueError(f"sheets[{i}] must be an object")
+        lo, hi = _point3(sheet.get("lo"), f"sheets[{i}].lo"), _point3(sheet.get("hi"), f"sheets[{i}].hi")
+        axis = sheet.get("normal_axis")
+        if axis not in (0, 1, 2) or type(axis) is not int:
+            raise ValueError(f"sheets[{i}].normal_axis must be 0, 1 or 2")
+        if hi[axis] != lo[axis] or any(hi[k] <= lo[k] for k in range(3) if k != axis):
+            raise ValueError(f"sheets[{i}] must be a finite plate normal to axis {axis}")
+    port = case.get("port")
+    if not isinstance(port, dict):
+        raise ValueError("port must be an object")
+    lo, hi = _point3(port.get("lo"), "port.lo"), _point3(port.get("hi"), "port.hi")
+    axis = port.get("direction_axis")
+    if axis not in (0, 1, 2) or type(axis) is not int:
+        raise ValueError("port.direction_axis must be 0, 1 or 2")
+    if port.get("sign") not in (1, -1):
+        raise ValueError("port.sign must be 1 or -1")
+    for key in ("width", "height", "z0"):
+        if not _number(port.get(key)) or port[key] <= 0:
+            raise ValueError(f"port.{key} must be a positive finite number")
+    if hi[axis] - lo[axis] <= 0:
+        raise ValueError("port must span a nonzero gap along its direction")
+    air = case.get("air")
+    if not isinstance(air, dict):
+        raise ValueError("air must be an object")
+    air_lo, air_hi = _point3(air.get("lo"), "air.lo"), _point3(air.get("hi"), "air.hi")
+    if any(air_hi[k] <= air_lo[k] for k in range(3)):
+        raise ValueError("air must have positive volume")
+    if not isinstance(case.get("limitations"), list) or not isinstance(case.get("pec_approximations"), list):
+        raise ValueError("limitations and pec_approximations must be lists")
+    return case
+
+
 def match_frequencies(expected, computed):
     """Check EMerge's frequency axis against the case values (relative 1e-9); return the case values."""
     computed = [float(f) for f in computed]
@@ -81,7 +160,7 @@ def _series(values, name, count):
 
 
 def build_raw(case, emerge_version, frequencies, s11, s21, mesh, elapsed_seconds):
-    """Assemble ``raw.json`` content. S-parameters are EMerge's, unmodified."""
+    """Assemble fixture ``raw.json`` content. S-parameters are EMerge's, unmodified."""
     expected = case["frequency_hz"]
     frequencies = match_frequencies(expected, frequencies)
     s11 = _series(s11, "S11", len(frequencies))
@@ -100,14 +179,56 @@ def build_raw(case, emerge_version, frequencies, s11, s21, mesh, elapsed_seconds
     return raw
 
 
-def solve(case):
-    """Build and solve the fixture with EMerge. Imports EMerge, so call it only in the EMerge environment."""
+def build_design_raw(case, emerge_version, frequencies, s11, mesh, elapsed_seconds):
+    """Assemble design ``raw.json`` content. S11 is EMerge's, unmodified."""
+    expected = case["frequencies_hz"]
+    frequencies = match_frequencies(expected, frequencies)
+    s11 = _series(s11, "S11", len(frequencies))
+    raw = {"kind": "design", "emerge_version": str(emerge_version), "frequency_hz": frequencies,
+           "s11_re": [v.real for v in s11], "s11_im": [v.imag for v in s11],
+           "z_ref": float(case["port"]["z0"]),
+           "phasor_convention": NATIVE_PHASOR,
+           "native_phasor_convention": NATIVE_PHASOR,
+           "elapsed_seconds": float(elapsed_seconds),
+           "solver_setup": {"resolution": case["resolution"],
+                            "resolution_name": case.get("resolution_name"),
+                            "parallel": False, "multi_processing": False,
+                            "abc_order": ABC_ORDER, "abc_type": ABC_TYPE,
+                            "sparam_cap_single": False, "sparam_cap_column": False,
+                            "sparam_enforce_reciprocity": False},
+           "limitations": list(case["limitations"]),
+           "pec_approximations": list(case["pec_approximations"])}
+    if mesh:
+        raw["mesh"] = {"nodes": int(mesh["nodes"]), "tetrahedra": int(mesh["tetrahedra"])}
+    return raw
+
+
+def _prepare_env():
     for name in THREAD_VARIABLES:  # EMerge's import only uses setdefault (OMP 1, MKL 4, NUMBA 4); force 1
         os.environ[name] = "1"
     os.environ.setdefault("MPLBACKEND", "Agg")
     os.environ.setdefault("PYVISTA_OFF_SCREEN", "true")
     os.environ["EMERGE_BASE_PATH"] = str(Path.cwd())  # keep any EMerge output inside the case folder
 
+
+def _box(em, lo, hi):
+    return em.geo.Box(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2], position=tuple(lo))
+
+
+def _plate(em, lo, hi, normal_axis):
+    """Build a rectangular ``Plate`` from axis-aligned bounds (metres)."""
+    u_axis, v_axis = [k for k in range(3) if k != normal_axis]
+    origin = tuple(lo)
+    u = [0.0, 0.0, 0.0]
+    v = [0.0, 0.0, 0.0]
+    u[u_axis] = hi[u_axis] - lo[u_axis]
+    v[v_axis] = hi[v_axis] - lo[v_axis]
+    return em.geo.Plate(origin, tuple(u), tuple(v))
+
+
+def solve_fixture(case):
+    """Build and solve the WR-90 fixture with EMerge. Imports EMerge, so call only in that env."""
+    _prepare_env()
     import numpy as np
     import emerge as em
 
@@ -146,6 +267,77 @@ def solve(case):
     s21 = np.asarray(grid.S(2, 1)).reshape(-1)  # S(i, j): response at port i to a drive at port j
     return build_raw(case, em.__version__, frequencies.tolist(), s11.tolist(), s21.tolist(), mesh,
                      time.monotonic() - started)
+
+
+def solve_design(case):
+    """Build and solve an admitted Design case with EMerge. Imports EMerge, so call only in that env.
+
+    Citations (EMerge 2.8.9 under site-packages/emerge/_emerge/):
+    - LumpedPort voltage direction: physics/microwave/bcs/port_bcs.py:1453-1493, 1559-1599
+      (uniform E along ``direction`` / ``Vdirection``; ``height`` is the extent along that axis;
+      ``sign`` from the case is applied by negating the Axis).
+    - AbsorbingBoundary order/abctype: bcs/boundary_conditions.py:135-188; assembler applies
+      second-order correction when ``order == 2`` (assembler.py:668-675). Defaults used: order=2,
+      abctype="B".
+    - Priority: geometry.py:596-617, 924-980 — highest ``_priority`` wins for overlapping volumes;
+      air uses ``background()`` so dielectric boxes (default priority 10) keep their material.
+    - Plate on a dielectric face: geo/shapes.py:233-287; mesher.submit_objects fragments all
+      registered GeoObject dimtags together (mesher.py:227-264), so PEC/port Plates do not need a
+      separate embed/fragment call before ``commit_geometry``.
+    """
+    _prepare_env()
+    import numpy as np
+    import emerge as em
+
+    started = time.monotonic()
+    sim = em.Simulation("fairbeam_emerge_design", loglevel="INFO", save_file=False, write_log=False)
+    sim.settings.mw_cap_sp_single = False
+    sim.settings.mw_cap_sp_col = False
+    sim.settings.mw_recip_sp = False
+
+    air = _box(em, case["air"]["lo"], case["air"]["hi"]).background()
+    for box in case["boxes"]:
+        _box(em, box["lo"], box["hi"]).set_material(
+            em.Material(box["eps_r"], box["mu_r"], box["tan_d"]))
+    sheets = [_plate(em, sheet["lo"], sheet["hi"], sheet["normal_axis"]) for sheet in case["sheets"]]
+    port = case["port"]
+    # Admit keeps one transverse axis at zero extent; that axis is the plate normal.
+    port_flat = [k for k in range(3) if port["hi"][k] == port["lo"][k]]
+    if len(port_flat) != 1:
+        raise ValueError("port plate must be flat on exactly one axis")
+    port_plate = _plate(em, port["lo"], port["hi"], port_flat[0])
+
+    sim.set_resolution(case["resolution"])
+    sim.mw.set_frequency(list(case["frequencies_hz"]))
+    sim.commit_geometry()  # fragments volumes and plates together; BCs after this
+
+    for face in ("left", "right", "front", "back", "bottom", "top"):
+        sim.mw.bc.AbsorbingBoundary(air.face(face), order=ABC_ORDER, abctype=ABC_TYPE)
+    for sheet in sheets:
+        sim.mw.bc.PEC(sheet)
+    axes = (em.XAX, em.YAX, em.ZAX)
+    direction = axes[port["direction_axis"]]
+    if port["sign"] < 0:
+        direction = -direction
+    sim.mw.bc.LumpedPort(port_plate, 1, width=port["width"], height=port["height"],
+                         direction=direction, Z0=port["z0"])
+
+    sim.generate_mesh()
+    mesh = {"nodes": int(sim.mesh.n_nodes), "tetrahedra": int(sim.mesh.n_tets)}
+    data = sim.mw.run_sweep(parallel=False, multi_processing=False)
+
+    grid = data.scalar.grid
+    frequencies = np.asarray(data.scalar.axis("freq"), dtype=float).reshape(-1)
+    s11 = np.asarray(grid.S(1, 1)).reshape(-1)
+    return build_design_raw(case, em.__version__, frequencies.tolist(), s11.tolist(), mesh,
+                            time.monotonic() - started)
+
+
+def solve(case):
+    """Dispatch to the fixture or design solver."""
+    if case.get("kind") == "design":
+        return solve_design(case)
+    return solve_fixture(case)
 
 
 def main(argv=None):
