@@ -267,7 +267,8 @@ version decision.
   too-large domain.
 - [x] `ast` isolation test: no `emerge`, `gmsh`, `emsutil` imports.
 - [x] Run `cd python && python -m unittest discover -s tests -p "test_emerge_*.py" -q` → pass.
-- [ ] Commit: `Admit planar two-port microstrip Designs for EMerge`
+- [x] Commit: `Admit planar two-port microstrip Designs for EMerge`
+  (`92a4788`; checkbox marked after that commit)
 
 **Done when:** admission tests pass without EMerge; Level B tests unchanged.
 
@@ -289,19 +290,20 @@ version decision.
 
 **Steps:**
 
-- [ ] Worker: `kind == "planar"` dispatch; build substrate `Box`, traces with the frozen trace
+- [x] Worker: `kind == "planar"` dispatch; build substrate `Box`, traces with the frozen trace
   model, `background()` air box, terminal `Plate`s; after `commit_geometry`: `PEC` on substrate
   bottom, ABC on sides/top only when `open`, PEC trace BCs (if sheets), two `LumpedPort`s
   (+z, `Z0`), `set_boundary_size` on traces; same single-process sweep and raw-S settings as
   `solve_design`. Extract all four `grid.S(i, j)`.
-- [ ] Adapter: `run_planar` with `run_design`'s discipline (fresh dir, manifest per status, worker
+- [x] Adapter: `run_planar` with `run_design`'s discipline (fresh dir, manifest per status, worker
   copy + SHA-256, isolated interpreter flags, thread env, frozen timeout, `worker.log` kept).
   `assess_planar` enforces every Shared facts check. CLI `planar` subcommand.
-- [ ] Tests (no EMerge): opt-in required, existing out dir refused, failure/timeout keep logs;
+- [x] Tests (no EMerge): opt-in required, existing out dir refused, failure/timeout keep logs;
   `assess_planar` rejects wrong frequencies, non-finite S, |S21| = 1.02, column power 1.03,
   |S21 − S12| = 0.05, wrong convention; Level A/B worker tests unchanged.
-- [ ] Run `-p "test_emerge_*.py"` → pass.
-- [ ] Commit: `Add the EMerge worker path for planar two-port Designs`
+- [x] Run `-p "test_emerge_*.py"` → pass.
+- [x] Commit: `Add the EMerge worker path for planar two-port Designs`
+  (`83502c3`; checkbox marked after that commit)
 
 ---
 

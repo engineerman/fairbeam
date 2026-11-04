@@ -1,10 +1,10 @@
-"""Opt-in external EMerge research adapter (WR-90 fixture and admitted Designs); stdlib only.
+"""Opt-in external EMerge research adapter (WR-90 fixture, Designs, planar two-port); stdlib only.
 
 This adapter never imports EMerge. It finds an external EMerge Python environment, writes
 ``case.json`` and starts ``fairbeam_emerge_worker.py`` in that environment as a separate process.
 Only the worker imports EMerge. Fixture raw S-parameters are checked against the analytic
-straight-waveguide reference; Design raw S11 is checked against the driven-result schema only
-(``results_exported``, never validated).
+straight-waveguide reference; Design and planar raw S-parameters are checked against their
+exported-result schemas only (``results_exported``, never validated).
 """
 import argparse
 import cmath
@@ -39,10 +39,16 @@ RESULT_SCHEMA = "fairbeam.emerge-fixture-result/1"
 MANIFEST_SCHEMA = "fairbeam-emerge-fixture-1"
 DESIGN_RESULT_SCHEMA = "fairbeam.emerge-driven-result/1"
 DESIGN_MANIFEST_SCHEMA = "fairbeam-emerge-design-1"
+PLANAR_RESULT_SCHEMA = "fairbeam.emerge-planar-result/1"
+PLANAR_MANIFEST_SCHEMA = "fairbeam-emerge-planar-1"
 S11_ABS_MAX = 1.01  # same bound as Elmer driven
+S_ABS_MAX = 1.01  # planar |S_ij| bound
+PLANAR_COLUMN_POWER_MAX = 1.02
+PLANAR_RECIPROCITY_MAX = 0.02
 WORKER = Path(__file__).resolve().with_name("fairbeam_emerge_worker.py")
 WORKER_TIMEOUT_S = 600
 DESIGN_WORKER_TIMEOUT_S = 1800  # Design sweep timeout (frozen Task 5; Level A waveguide stays 600 s)
+PLANAR_WORKER_TIMEOUT_S = 3600  # planar two-port timeout (frozen Task 1)
 LIMITATIONS = [
     "Fixed WR-90 straight air-filled waveguide fixture only; no user design is translated.",
     "Reference planes are the port faces; ideal PEC walls, lossless fill, single-mode band.",
@@ -308,6 +314,135 @@ def assess_design(raw, case):
             "limitations": limitations, "pec_approximations": pec}
 
 
+def planar_case_ok(case):
+    """Structural check of an admitted planar case; raises ``ValueError`` if unusable."""
+    if not isinstance(case, dict) or case.get("kind") != "planar":
+        raise ValueError("Planar case must have kind 'planar'")
+    if case.get("phasor_convention_out") != PHASOR:
+        raise ValueError("phasor_convention_out must be exp(+i omega t)")
+    if case.get("enclosure") not in ("shielded", "open"):
+        raise ValueError("enclosure must be shielded or open")
+    if not _number(case.get("resolution")) or not 0 < case["resolution"] <= 0.5:
+        raise ValueError("resolution must be a wavelength fraction in (0, 0.5]")
+    if not _number(case.get("metal_edge_m")) or case["metal_edge_m"] <= 0:
+        raise ValueError("metal_edge_m must be a positive finite number")
+    frequencies = case.get("frequencies_hz")
+    if (not isinstance(frequencies, list) or len(frequencies) < 3
+            or not all(map(_number, frequencies)) or any(f <= 0 for f in frequencies)):
+        raise ValueError("frequencies_hz must be at least three positive finite numbers")
+    if list(frequencies) != sorted(frequencies):
+        raise ValueError("frequencies_hz must be ascending")
+    substrate, traces, terminals, air = (case.get("substrate"), case.get("traces"),
+                                         case.get("terminals"), case.get("air"))
+    if not isinstance(substrate, dict) or not isinstance(air, dict):
+        raise ValueError("Planar case needs substrate and air objects")
+    if not isinstance(traces, list) or not traces:
+        raise ValueError("Planar case needs a non-empty traces list")
+    if not isinstance(terminals, list) or len(terminals) != 2:
+        raise ValueError("Planar case needs exactly two terminals")
+    numbers = []
+    for port in terminals:
+        if not isinstance(port, dict) or type(port.get("number")) is not int:
+            raise ValueError("Each terminal needs an integer number")
+        if not _number(port.get("z0")) or port["z0"] <= 0:
+            raise ValueError("terminal z0 must be a positive finite number")
+        for key in ("width", "height"):
+            if not _number(port.get(key)) or port[key] <= 0:
+                raise ValueError(f"terminal.{key} must be a positive finite number")
+        numbers.append(port["number"])
+    if sorted(numbers) != [1, 2]:
+        raise ValueError("terminals must be port numbers 1 and 2")
+    if not isinstance(case.get("limitations"), list) or not isinstance(case.get("pec_approximations"), list):
+        raise ValueError("limitations and pec_approximations must be lists")
+    return True
+
+
+def assess_planar(raw, case):
+    """Check planar raw 2×2 S against Shared facts; always ``results_exported`` if ok."""
+    planar_case_ok(case)
+    if not isinstance(raw, dict):
+        raise ValueError("Raw result must be an object")
+    expected = [float(f) for f in case["frequencies_hz"]]
+    frequencies = raw.get("frequency_hz")
+    if (not isinstance(frequencies, list) or not all(map(_number, frequencies))
+            or [float(f) for f in frequencies] != expected):
+        raise ValueError("Raw frequencies must equal the case frequency list")
+    native = raw.get("phasor_convention")
+    if native != PHASOR:
+        raise ValueError(f"phasor_convention must be {PHASOR}")
+    if "native_phasor_convention" in raw and raw["native_phasor_convention"] != PHASOR:
+        raise ValueError(f"native_phasor_convention must be {PHASOR}")
+    count = len(expected)
+    s_block = raw.get("s")
+    if not isinstance(s_block, dict):
+        raise ValueError("Raw s must be an object")
+    s = {}
+    for key in ("1,1", "2,1", "1,2", "2,2"):
+        entry = s_block.get(key)
+        if not isinstance(entry, dict):
+            raise ValueError(f"s[{key}] must be an object with re and im")
+        re_vals, im_vals = entry.get("re"), entry.get("im")
+        if (not isinstance(re_vals, list) or not isinstance(im_vals, list)
+                or len(re_vals) != count or len(im_vals) != count
+                or not all(map(_number, re_vals)) or not all(map(_number, im_vals))):
+            raise ValueError(f"s[{key}] must hold {count} finite re/im samples")
+        s[key] = [complex(float(r), float(i)) for r, i in zip(re_vals, im_vals)]
+    for key, series in s.items():
+        if any(abs(v) > S_ABS_MAX for v in series):
+            raise ValueError(f"|S{key}| exceeds {S_ABS_MAX}")
+    for i, (a_key, b_key) in enumerate((("1,1", "2,1"), ("1,2", "2,2")), start=1):
+        power = [abs(a) ** 2 + abs(b) ** 2 for a, b in zip(s[a_key], s[b_key])]
+        if any(p > PLANAR_COLUMN_POWER_MAX for p in power):
+            raise ValueError(f"column {i} power exceeds {PLANAR_COLUMN_POWER_MAX}")
+    recip = [abs(a - b) for a, b in zip(s["2,1"], s["1,2"])]
+    if any(d > PLANAR_RECIPROCITY_MAX for d in recip):
+        raise ValueError(f"|S21 − S12| exceeds {PLANAR_RECIPROCITY_MAX}")
+    z_ref = raw.get("z_ref")
+    if z_ref is None:
+        terminals = sorted(case["terminals"], key=lambda t: t["number"])
+        z_ref = [terminals[0]["z0"], terminals[1]["z0"]]
+    if (not isinstance(z_ref, list) or len(z_ref) != 2
+            or not all(_number(v) and v > 0 for v in z_ref)):
+        raise ValueError("z_ref must be two positive finite numbers")
+    enclosure = raw.get("enclosure", case["enclosure"])
+    if enclosure not in ("shielded", "open"):
+        raise ValueError("enclosure must be shielded or open")
+    context = {"z_ref": [float(z_ref[0]), float(z_ref[1])], "enclosure": enclosure}
+    if "emerge_version" in raw:
+        if not isinstance(raw["emerge_version"], str):
+            raise ValueError("emerge_version must be a string")
+        context["emerge_version"] = raw["emerge_version"]
+    if "elapsed_seconds" in raw:
+        if not _number(raw["elapsed_seconds"]) or raw["elapsed_seconds"] < 0:
+            raise ValueError("elapsed_seconds must be a finite non-negative number")
+        context["elapsed_seconds"] = float(raw["elapsed_seconds"])
+    if "mesh" in raw:
+        mesh = raw["mesh"]
+        if (not isinstance(mesh, dict) or not {"nodes", "tetrahedra"} <= set(mesh)
+                or any(isinstance(mesh[k], bool) or not isinstance(mesh[k], int) or mesh[k] < 0
+                       for k in ("nodes", "tetrahedra"))):
+            raise ValueError("mesh must hold non-negative integer nodes and tetrahedra")
+        context["mesh"] = {"nodes": mesh["nodes"], "tetrahedra": mesh["tetrahedra"]}
+    settings = {"resolution": case["resolution"], "frequencies_hz": expected,
+                "enclosure": case["enclosure"], "metal_edge_m": case["metal_edge_m"]}
+    if "resolution_name" in case:
+        settings["resolution_name"] = case["resolution_name"]
+    limitations = list(case["limitations"])
+    if isinstance(raw.get("limitations"), list):
+        limitations = list(raw["limitations"])
+    pec = list(case["pec_approximations"])
+    if isinstance(raw.get("pec_approximations"), list):
+        pec = list(raw["pec_approximations"])
+    return {"schema": PLANAR_RESULT_SCHEMA, "status": "results_exported",
+            "frequency_hz": expected,
+            "s": {key: {"re": [v.real for v in series], "im": [v.imag for v in series]}
+                  for key, series in s.items()},
+            "settings": settings, "phasor_convention": PHASOR,
+            "native_phasor_convention": native, **context,
+            "precision_converged": False, "gain_qualified": False,
+            "limitations": limitations, "pec_approximations": pec}
+
+
 def run_fixture(out, *, root=None, resolution="coarse", experimental=False):
     if not experimental:
         raise ValueError("Explicit --experimental opt-in is required")
@@ -449,6 +584,78 @@ def run_design(out, case, *, root=None, experimental=False):
         raise
 
 
+def run_planar(out, case, *, root=None, experimental=False):
+    """Run an admitted planar two-port case through the EMerge worker (opt-in; fresh ``out``)."""
+    if not experimental:
+        raise ValueError("Explicit --experimental opt-in is required")
+    planar_case_ok(case)
+    python, site = discover(root)
+    if not WORKER.is_file():
+        raise FileNotFoundError(f"EMerge worker script not found: {WORKER}")
+    directory = Path(out).expanduser().resolve()
+    directory.mkdir(parents=True, exist_ok=False)
+    manifest = {"schema": PLANAR_MANIFEST_SCHEMA, "backend": "emerge-experimental",
+                "physics": "planar_two_port", "kind": "planar",
+                "enclosure": case["enclosure"],
+                "resolution": case.get("resolution_name", case["resolution"]),
+                "resolution_value": case["resolution"], "threads": 1, "status": "inputs_generated",
+                "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "input_provenance": "admitted planar case from emerge_planar.admit",
+                "phasor_convention": PHASOR, "python": str(python), "python_sha256": digest(python),
+                "emerge_version": emerge_version(site), "generator_sha256": digest(__file__)}
+
+    def save():
+        (directory / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    (directory / "case.json").write_text(json.dumps(case, indent=2, allow_nan=False) + "\n",
+                                         encoding="utf-8")
+    shutil.copyfile(WORKER, directory / WORKER.name)
+    manifest["worker_sha256"] = digest(directory / WORKER.name)
+    manifest["case_sha256"] = digest(directory / "case.json")
+    save()
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
+    env.update(OMP_NUM_THREADS="1", MKL_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", NUMBA_NUM_THREADS="1",
+               MPLBACKEND="Agg", PYVISTA_OFF_SCREEN="true")
+    try:
+        manifest["status"] = "solver_started"
+        save()
+        start = time.monotonic()
+        try:
+            process = subprocess.run([str(python), "-I", "-X", "utf8", WORKER.name, "case.json"],
+                                     cwd=directory, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
+                                     timeout=PLANAR_WORKER_TIMEOUT_S,
+                                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+        except subprocess.TimeoutExpired as exc:
+            (directory / "worker.log").write_text(_text(exc.stdout), encoding="utf-8")
+            raise RuntimeError(f"worker exceeded {PLANAR_WORKER_TIMEOUT_S} second limit") from exc
+        (directory / "worker.log").write_text(_text(process.stdout), encoding="utf-8")
+        manifest["worker_seconds"] = time.monotonic() - start
+        manifest["worker_exit_code"] = process.returncode
+        if process.returncode:
+            raise RuntimeError(f"worker failed (exit {process.returncode}); inspect worker.log")
+        if not (directory / "raw.json").is_file():
+            raise RuntimeError("worker exited 0 but wrote no raw.json; inspect worker.log")
+        manifest["status"] = "solver_returned"
+        save()
+        raw = json.loads((directory / "raw.json").read_text(encoding="utf-8"))
+        result = assess_planar(raw, case)
+        result["raw_sha256"] = {"raw.json": digest(directory / "raw.json")}
+        (directory / "result.json").write_text(json.dumps(result, indent=2, allow_nan=False) + "\n",
+                                               encoding="utf-8")
+        manifest["status"] = result["status"]
+        save()
+        if result["status"] != "results_exported":
+            raise ValueError("Planar result was not exported; raw output retained")
+        return result
+    except BaseException as exc:
+        if manifest["status"] != "results_exported":
+            manifest["status"] = "interrupted" if isinstance(exc, KeyboardInterrupt) else "failed"
+        manifest["error"] = str(exc)
+        save()
+        raise
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", help="external EMerge environment folder or python executable "
@@ -463,6 +670,10 @@ def main(argv=None):
     design.add_argument("--experimental", action="store_true", help="explicitly opt into research execution")
     design.add_argument("--case", type=Path, required=True, help="admitted design case JSON")
     design.add_argument("--out", type=Path, required=True, help="fresh output directory")
+    planar = commands.add_parser("planar", help="run an admitted planar two-port case through EMerge")
+    planar.add_argument("--experimental", action="store_true", help="explicitly opt into research execution")
+    planar.add_argument("--case", type=Path, required=True, help="admitted planar case JSON")
+    planar.add_argument("--out", type=Path, required=True, help="fresh output directory")
     args = parser.parse_args(argv)
     try:
         if args.command == "capabilities":
@@ -470,9 +681,12 @@ def main(argv=None):
         elif args.command == "waveguide":
             result = run_fixture(args.out, root=args.root, resolution=args.resolution,
                                  experimental=args.experimental)
-        else:
+        elif args.command == "design":
             case = json.loads(Path(args.case).read_text(encoding="utf-8"))
             result = run_design(args.out, case, root=args.root, experimental=args.experimental)
+        else:
+            case = json.loads(Path(args.case).read_text(encoding="utf-8"))
+            result = run_planar(args.out, case, root=args.root, experimental=args.experimental)
     except (OSError, ValueError, RuntimeError) as exc:
         parser.exit(2, f"fairbeam-emerge: {exc}\n")
     print(json.dumps(result, indent=2))
