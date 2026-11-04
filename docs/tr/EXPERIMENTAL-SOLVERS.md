@@ -1,16 +1,26 @@
 # Deneysel çözücüler
 
-Varsayılan çözücü openEMS'tir. **Elmer FEM — Deneysel özmodlar** ve **Elmer FEM · Deneysel anten**, geometri ve sonuç desteği daha sınırlı, isteğe bağlı araştırma yollarıdır. Arka ucun kurulması veya bir çalıştırmanın tamamlanması, tasarımınızın sayısal doğruluğunu kanıtlamaz.
+Varsayılan çözücü openEMS'tir. **Elmer FEM — Deneysel özmodlar**, **Elmer FEM · Deneysel anten** ve sabit **EMerge** WR-90 dalga kılavuzu fikstürü, geometri ve sonuç desteği daha sınırlı, isteğe bağlı araştırma yollarıdır. Arka ucun kurulması veya bir çalıştırmanın tamamlanması, tasarımınızın sayısal doğruluğunu kanıtlamaz.
 
 ## Masaüstü uygulamasında kurulum
 
-**Simülasyon › Deneysel çözücüler** komutunu veya Simülasyon çalıştır penceresindeki **Elmer kurulumu ve geçmiş** bağlantısını açın. Elmer'i seçip çalıştırmayı göndermeden önce kullanılabilirliğini denetleyin.
+**Simülasyon › Deneysel çözücüler** komutunu veya Simülasyon çalıştır penceresindeki **Elmer kurulumu ve geçmiş** bağlantısını açın. Bir arka uç seçip çalıştırmayı göndermeden önce kullanılabilirliğini denetleyin.
 
 Windows'ta **Elmer'i kur**, siz istediğinizde Fairbeam'in sabitlediği taşınabilir paketi indirir. Paket doğrulanır ve openEMS çalışma ortamından ayrı olarak uygulamanın veri klasörüne kaydedilir. Sistem genelinde kurulmaz. Yönetilen kopyayı kullanmak için yolu boş bırakın. Girdiğiniz klasör, `FAIRBEAM_ELMER_ROOT` veya `PATH` üzerindeki Elmer önceliklidir.
 
 macOS ve Linux'ta Elmer'i kendiniz kurun. `bin/ElmerSolver` ve `bin/ElmerGrid` içeren kurulumu veya ikili dosya klasörünü seçin. Kullanılabilirlik denetimi yürütülebilir dosyaları bulur; fiziksel modelin veya tüm yerel bağımlılıkların yeterliliğini doğrulamaz. Hiçbir arka uç otomatik kurulmaz.
 
 Kurulu uygulama `No module named fairbeam_elmer` bildirirse Fairbeam'i güncelleyin veya onarın. Yalnızca Elmer ikili dosyalarını kurmak, Fairbeam'in Python bağdaştırıcısını sağlamaz. Kaynak üzerinde çalışan katkıcılar ayrı [araştırma kurulumu ve kanıtları](RESEARCH-SOLVERS.md) kullanmalıdır.
+
+## EMerge dalga kılavuzu fikstürü
+
+Yalnızca sabit WR-90 hava dolu dalga kılavuzu fikstürü için Simülasyon → Deneysel çözücüler içinde **EMerge** arka ucunu seçin. A düzeyi mevcut tasarımı çevirmez. `coarse` veya `fine` çözünürlüğü seçip gönderin; sonuçlar Araştırma panelinde analitik düz dalga kılavuzu referansına göre denetlenir.
+
+Windows'ta **EMerge'i kur**, PyPI'dan hash kilitli `emerge==2.8.9` ile sabitlenmiş bir Python 3.13 sanal ortamı oluşturur. Araştırma paneli, Kur düğmesinden önce EMerge'in GPL-2.0-or-later bildirimini ve Intel MKL'nin özel lisansını gösterir. 2026-11-04'te ölçülen yönetilen kurulum 1567317171 bayt (1494,7 MiB) ve 74,7 s sürdü; tekerlek indirme kümesi 461988175 bayt (yaklaşık 441 MiB) idi. Yönetilen kopyayı kullanmak için yolu boş bırakın. Girdiğiniz klasör veya `FAIRBEAM_EMERGE_PYTHON` önceliklidir. Sistem genelinde hiçbir şey kurulmaz ve EMerge Fairbeam kurucusuna gömülmez.
+
+macOS ve Linux'ta yönetilen kurucu yoktur. `emerge==2.8.9` içeren kendi Python 3.10–3.13 ortamınızı oluşturun, ardından yol alanına o ortamın klasörünü (veya Python yürütülebilir dosyasını) girin ya da `FAIRBEAM_EMERGE_PYTHON` ayarlayın.
+
+Fikstür tanımı, kabul ölçütleri ve kaydedilmiş yerel gözlemler için [EMerge deneyine](EMERGE-EXPERIMENT.md) bakın.
 
 ## Mevcut tasarımın özmodları
 

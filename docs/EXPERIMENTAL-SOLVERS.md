@@ -1,16 +1,26 @@
 # Experimental solvers
 
-openEMS is the default solver. **Elmer FEM — Experimental eigenmodes** and **Elmer FEM · Experimental antenna** are opt-in research paths with narrower geometry and result support. Installing a backend or completing a run does not establish numerical accuracy for your design.
+openEMS is the default solver. **Elmer FEM — Experimental eigenmodes**, **Elmer FEM · Experimental antenna**, and the fixed **EMerge** WR-90 waveguide fixture are opt-in research paths with narrower geometry and result support. Installing a backend or completing a run does not establish numerical accuracy for your design.
 
 ## Setup in the desktop app
 
-Open **Simulation › Experimental solvers**, or use **Elmer setup and history** in the Run dialog. Choose Elmer and check availability before submitting a run.
+Open **Simulation › Experimental solvers**, or use **Elmer setup and history** in the Run dialog. Choose a backend and check availability before submitting a run.
 
 On Windows, **Install Elmer** downloads the portable package pinned by Fairbeam after you request it. The package is checked and stored in the app's data folder, separately from the openEMS runtime. It is not a system-wide installation. Leave the path blank to use the managed copy. A folder you enter, `FAIRBEAM_ELMER_ROOT`, or Elmer on `PATH` takes precedence.
 
 On macOS and Linux, install Elmer yourself. Select an installation containing `bin/ElmerSolver` and `bin/ElmerGrid`, or its binary directory. Availability checks locate the executables; they do not qualify the physical model or every native dependency. No backend is installed automatically.
 
 If an installed app reports `No module named fairbeam_elmer`, update or repair Fairbeam itself. Installing Elmer binaries alone does not provide Fairbeam's Python adapter. Source contributors should use the separate [research setup and evidence](RESEARCH-SOLVERS.md).
+
+## EMerge waveguide fixture
+
+Choose the **EMerge** backend in Simulation → Experimental solvers for the fixed WR-90 air-filled waveguide fixture only. Level A does not translate the current Design. Select `coarse` or `fine` resolution and submit; results are checked against the analytic straight-waveguide reference in the Research panel.
+
+On Windows, **Install EMerge** creates a pinned Python 3.13 virtual environment with `emerge==2.8.9` from PyPI (hash-locked). The Research panel shows the EMerge GPL-2.0-or-later notice and the Intel MKL proprietary license before the Install button. A measured managed install on 2026-11-04 was 1567317171 bytes (1494.7 MiB) and took 74.7 s; the wheel download set was 461988175 bytes (about 441 MiB). Leave the path blank to use that managed copy. A folder you enter, or `FAIRBEAM_EMERGE_PYTHON`, takes precedence. Nothing is installed system-wide, and EMerge is not bundled in the Fairbeam installer.
+
+On macOS and Linux there is no managed installer. Create your own Python 3.10–3.13 environment with `emerge==2.8.9`, then enter that environment's folder (or its Python executable) in the path field, or set `FAIRBEAM_EMERGE_PYTHON`.
+
+See [the EMerge experiment](EMERGE-EXPERIMENT.md) for the fixture definition, acceptance criteria and recorded native observations.
 
 ## Eigenmodes of the current design
 

@@ -1,6 +1,6 @@
 # Experimental solvers in the app
 
-The regular **Run** dialog offers openEMS (the default), **Elmer FEM — Experimental eigenmodes**, and **Elmer FEM · Experimental antenna**. Elmer Design runs use the ordinary run server and serial queue, with their own settings and result history. The installed openEMS runtime, its run path, project format and antenna results are unchanged. The Simulation ribbon's **Experimental solvers** command also retains the fixed research fixtures and runtime setup. No additional solver is downloaded or installed automatically.
+The regular **Run** dialog offers openEMS (the default), **Elmer FEM — Experimental eigenmodes**, and **Elmer FEM · Experimental antenna**. Elmer Design runs use the ordinary run server and serial queue, with their own settings and result history. The installed openEMS runtime, its run path, project format and antenna results are unchanged. The Simulation ribbon's **Experimental solvers** command also retains the fixed research fixtures and runtime setup, including the opt-in **EMerge** WR-90 waveguide fixture. No additional solver is downloaded or installed automatically.
 
 This is an opt-in research integration, not a production Floquet port or general FEM antenna solver. Windows native execution has been exercised; macOS native execution and packaging still need qualification.
 
@@ -113,6 +113,16 @@ Minimal Windows smoke: an air-filled Design box from (0,0,0) to (100,50,200) mm,
 Select a native package containing `bin/ElmerSolver` and `bin/ElmerGrid` (or its binary directory). The reference experiment runs a fixed 0.10 × 0.05 × 0.20 m vacuum PEC cavity, at mesh targets 0.025 or 0.0125 m. This reference fixture does not translate the current Design; use the Run dialog workflow above for that. It reports eigenfrequencies, the TE101 exact-frequency error and complex field-shape correlation. It has no driven ports, antenna S parameters, radiation boundary or far-field output.
 
 See [the Elmer experiment](ELMER-EXPERIMENT.md) for the analytical definition, standalone command, native observations and distribution evidence. The standalone command remains independent of the app queue; do not run it concurrently with another solver. Third-party binaries are external and are not redistributed by this integration.
+
+## EMerge WR-90 waveguide fixture
+
+Select the **EMerge** backend in Simulation → Experimental solvers. This Level A path runs only the fixed WR-90 air-filled rectangular waveguide (a = 22.86 mm, b = 10.16 mm, L = 50.0 mm, PEC walls, vacuum fill, TE10 ports at both ends, frequencies 8–12 GHz). It does not translate the current Design. Supported resolutions are `coarse` (wavelength fraction 0.25) and `fine` (0.125). On Windows, **Install EMerge** builds the managed `emerge==2.8.9` environment into the app data folder after you accept the license notes; leave the path blank to use it. Otherwise enter a Python 3.10–3.13 environment that already has `emerge==2.8.9`, or set `FAIRBEAM_EMERGE_PYTHON`.
+
+Results report complex S11/S21 against the analytic `exp(−i β L)` reference under Fairbeam's `exp(+i omega t)` convention. A passed run is `results_validated`; `precision_converged` remains false. There is no antenna viewer bundle, driven-port Design path or far-field output.
+
+Native Windows managed EMerge 2.8.9 on 2026-11-04: coarse mesh 163 nodes / 397 tetrahedra, max |S11| = 0.005462, min |S21| = 0.999896, max phase error 0.789°, solver 160.945 s; fine mesh 667 / 2305, max |S11| = 0.000119, min |S21| = 0.999993, max phase error 0.037°, solver 9.223 s. Both were `results_validated`. The managed install folder measured 1567317171 bytes (1494.7 MiB).
+
+See [the EMerge experiment](EMERGE-EXPERIMENT.md) for the analytic definition, standalone `fairbeam-emerge` command, full per-frequency table, acceptance criteria and license notes. The standalone command remains independent of the app queue; do not run it concurrently with another solver. EMerge and its dependencies stay external optional installs and are not redistributed inside the Fairbeam installer.
 
 ## Reproducibility and recovery
 
