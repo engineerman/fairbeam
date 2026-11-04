@@ -24,9 +24,10 @@ A_M = 0.02286      # WR-90 broad wall (x)
 B_M = 0.01016      # WR-90 narrow wall (y)
 L_M = 0.05         # length (z); ports on the z = 0 and z = L faces
 FREQUENCIES_HZ = (8e9, 9e9, 10e9, 11e9, 12e9)
-# Mesh resolution values are placeholders until Task 4 reads EMerge's set_resolution docstring and
-# the Planner freezes them.
-RESOLUTIONS = {"coarse": None, "fine": None}
+# Mesh resolution is EMerge's wavelength fraction (``Simulation.set_resolution``: lower is finer; the
+# default is 0.33 and EMerge warns above 0.334). PROVISIONAL until the Planner freezes them after
+# Task 5; ``fine`` is exactly 2x finer than ``coarse``.
+RESOLUTIONS = {"coarse": 0.25, "fine": 0.125}
 SUPPORTED_EMERGE = ("2.8.9",)
 PHASOR = "exp(+i omega t)"
 NATIVE_PHASORS = ("exp(+i omega t)", "exp(-i omega t)")

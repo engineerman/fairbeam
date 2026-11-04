@@ -471,5 +471,129 @@ class Isolation(unittest.TestCase):
         subprocess.run([sys.executable, "-c", script], cwd=Path(__file__).resolve().parents[1], check=True)
 
 
+WORKER_PATH = Path(fem.__file__).with_name("fairbeam_emerge_worker.py")
+
+
+class WorkerIsolation(unittest.TestCase):
+    """The worker is the only file that may import EMerge, and only inside the EMerge environment."""
+
+    @staticmethod
+    def imports(tree):
+        found = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                found.extend((alias.name.split(".")[0], node) for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                assert node.level == 0, "relative imports would reach into fairbeam"
+                found.append(((node.module or "").split(".")[0], node))
+        return found
+
+    def test_worker_does_not_import_fairbeam(self):
+        tree = ast.parse(WORKER_PATH.read_text(encoding="utf-8"))
+        names = {name for name, _ in self.imports(tree)}
+        self.assertNotIn("fairbeam", names)
+        self.assertNotIn("fairbeam_emerge", names)
+        self.assertTrue(names <= set(sys.stdlib_module_names) | {"numpy", "emerge"}, names)
+
+    def test_emerge_and_numpy_are_imported_only_inside_functions(self):
+        tree = ast.parse(WORKER_PATH.read_text(encoding="utf-8"))
+        top_level = {name for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))
+                     for name, _ in self.imports(node)}
+        self.assertFalse(top_level & {"numpy", "emerge"}, top_level)
+
+    def test_importing_the_worker_loads_no_solver_modules(self):
+        script = ("import sys; import fairbeam_emerge_worker; "
+                  "assert not {'fairbeam','emerge','numpy','gmsh'} & set(sys.modules)")
+        subprocess.run([sys.executable, "-c", script], cwd=WORKER_PATH.parent, check=True)
+
+
+class WorkerContract(unittest.TestCase):
+    """Pure helpers of the worker; the EMerge API calls are exercised in Task 5."""
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("fairbeam_emerge_worker", WORKER_PATH)
+        cls.worker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.worker)
+
+    def case_path(self, directory, mutate=None):
+        case = fem.case("coarse")
+        if mutate:
+            mutate(case)
+        path = Path(directory) / "case.json"
+        path.write_text(json.dumps(case), encoding="utf-8")
+        return path
+
+    def test_worker_accepts_the_adapter_case(self):
+        with tempfile.TemporaryDirectory() as directory:
+            case = self.worker.load_case(self.case_path(directory))
+        self.assertEqual(case["frequency_hz"], list(fem.FREQUENCIES_HZ))
+        self.assertEqual(case["resolution"]["value"], fem.RESOLUTIONS["coarse"])
+
+    def test_both_frozen_resolutions_are_valid_and_fine_is_twice_as_fine(self):
+        self.assertAlmostEqual(fem.RESOLUTIONS["coarse"] / fem.RESOLUTIONS["fine"], 2.0)
+        for name in fem.RESOLUTIONS:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "case.json"
+                path.write_text(json.dumps(fem.case(name)), encoding="utf-8")
+                self.worker.load_case(path)
+
+    def test_worker_rejects_changed_cases(self):
+        changes = {
+            "schema": lambda c: c.update(schema="other"),
+            "fill": lambda c: c["geometry"]["fill"].update(eps_r=2.0),
+            "walls": lambda c: c["geometry"].update(walls="PMC"),
+            "unsorted frequencies": lambda c: c.update(frequency_hz=[9e9, 8e9]),
+            "non-finite frequency": lambda c: c.update(frequency_hz=[8e9, float("inf")]),
+            "one port": lambda c: c.update(ports=c["ports"][:1]),
+            "port mode": lambda c: c["ports"][0].update(mode="TE20"),
+            "port plane": lambda c: c["ports"][1].update(face_z_m=0.01),
+            "resolution too coarse": lambda c: c["resolution"].update(value=0.9),
+            "convention": lambda c: c.update(phasor_convention_out="exp(-i omega t)"),
+        }
+        for name, mutate in changes.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                with self.assertRaises(ValueError):
+                    self.worker.load_case(self.case_path(directory, mutate))
+
+    def test_match_frequencies_is_strict_and_returns_case_values(self):
+        expected = list(fem.FREQUENCIES_HZ)
+        nudged = [f * (1 + 1e-12) for f in expected]
+        self.assertEqual(self.worker.match_frequencies(expected, nudged), expected)
+        with self.assertRaises(ValueError):
+            self.worker.match_frequencies(expected, [f * (1 + 1e-6) for f in expected])
+        with self.assertRaises(ValueError):
+            self.worker.match_frequencies(expected, expected[:-1])
+        with self.assertRaises(ValueError):
+            self.worker.match_frequencies(expected, expected[:-1] + [float("nan")])
+
+    def synthetic(self):
+        s21 = [fem.analytic(f) for f in fem.FREQUENCIES_HZ]
+        return list(fem.FREQUENCIES_HZ), [0j] * 5, s21
+
+    def test_build_raw_round_trips_through_the_adapter_assessment(self):
+        frequencies, s11, s21 = self.synthetic()  # synthetic data, not a solver result
+        with tempfile.TemporaryDirectory() as directory:
+            case = self.worker.load_case(self.case_path(directory))
+        raw = self.worker.build_raw(case, "2.8.9", [f * (1 + 1e-12) for f in frequencies], s11, s21,
+                                    {"nodes": 10, "tetrahedra": 5}, 1.5)
+        json.dumps(raw, allow_nan=False)
+        self.assertEqual(raw["phasor_convention"], NATIVE_PLUS)
+        self.assertEqual(raw["frequency_hz"], list(fem.FREQUENCIES_HZ))
+        result = fem.assess(raw)
+        self.assertEqual(result["status"], "results_validated")
+        self.assertEqual(result["mesh"], {"nodes": 10, "tetrahedra": 5})
+
+    def test_build_raw_rejects_non_finite_and_short_series(self):
+        frequencies, s11, s21 = self.synthetic()
+        with tempfile.TemporaryDirectory() as directory:
+            case = self.worker.load_case(self.case_path(directory))
+        with self.assertRaises(ValueError):
+            self.worker.build_raw(case, "2.8.9", frequencies, s11, s21[:-1] + [complex("nan")], None, 1.0)
+        with self.assertRaises(ValueError):
+            self.worker.build_raw(case, "2.8.9", frequencies, s11[:-1], s21, None, 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()
