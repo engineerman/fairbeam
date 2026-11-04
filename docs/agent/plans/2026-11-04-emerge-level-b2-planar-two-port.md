@@ -363,7 +363,7 @@ version decision.
 - [x] Run `npm run typecheck`, `npm run check:i18n`, `npm run check:legal`,
   `npm run check:emerge-planar`, `npm run check:emerge-antenna`, `npm run check:research`.
 - [x] Commit: `Add the experimental EMerge planar two-port option to the Run dialog`
-  (`e136f39`; checkbox marked after that commit)
+  (`79ad5c0`; checkbox marked after that commit)
 
 ---
 
