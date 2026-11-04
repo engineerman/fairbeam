@@ -361,12 +361,14 @@ class RunFixture(unittest.TestCase):
         self.assertEqual(kwargs["timeout"], 600)
         self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
         env = kwargs["env"]
+        nthreads = str(fem.default_nthreads())
         for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMBA_NUM_THREADS"):
-            self.assertEqual(env[name], "1")
+            self.assertEqual(env[name], nthreads)
         self.assertEqual(env["MPLBACKEND"], "Agg")
         self.assertEqual(env["PYVISTA_OFF_SCREEN"], "true")
         self.assertNotIn("PYTHONPATH", env)
         self.assertNotIn("PYTHONHOME", env)
+        self.assertEqual(self.manifest()["threads"], int(nthreads))
 
     def test_launch_strips_inherited_python_variables(self):
         with patch.dict(os.environ, {"PYTHONPATH": "x", "PYTHONHOME": "y"}):

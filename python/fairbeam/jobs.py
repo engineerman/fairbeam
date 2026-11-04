@@ -902,7 +902,12 @@ class JobManager:
                 raise ValueError("source-bound research snapshot exceeds 1 MiB")
         model = admitted_source["model_id"] if admitted_source else design_model['id'] if design_backed else f"research:{spec['backend']}"
         label = {"elmer": "Elmer", "emerge": "EMerge"}.get(spec['backend'])
-        return self.submit(model=model, model_path="", threads=1,
+        threads = 1
+        if spec.get("backend") == "emerge":
+            nthreads = (spec.get("normalized") or {}).get("nthreads")
+            if type(nthreads) is int and nthreads >= 1:
+                threads = nthreads
+        return self.submit(model=model, model_path="", threads=threads,
                            kind="research", research_input=spec,
                            model_id=design_model.get("id"),
                            name=(f"{design_model.get('name') or design_model.get('id')} · {label}"

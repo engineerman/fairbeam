@@ -172,9 +172,11 @@ class RunDesign(unittest.TestCase):
                                    "fairbeam_emerge_worker.py", "case.json"])
         self.assertEqual(kwargs["timeout"], 1800)
         env = kwargs["env"]
+        nthreads = str(self.case.get("nthreads") or fem.default_nthreads())
         for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMBA_NUM_THREADS"):
-            self.assertEqual(env[name], "1")
+            self.assertEqual(env[name], nthreads)
         self.assertNotIn("PYTHONPATH", env)
+        self.assertEqual(self.manifest()["threads"], int(nthreads))
 
     def test_success_writes_exported_result(self):
         result, _ = self.run_with(side_effect=self.worker_writes(synthetic_raw(self.case)))

@@ -150,6 +150,10 @@ def prepare(body):
                 raise ValueError("EMerge Level A settings must be exactly {resolution}")
             fairbeam_emerge.validate_case(settings["resolution"])
             normalized = {"resolution": settings["resolution"]}
+        from . import resources
+        cpu = os.cpu_count() or 1
+        nthreads = resources.auto_threads(cpu, resources.physical_cores(cpu))
+        normalized = {**normalized, "nthreads": nthreads}
     else:
         if backend == "stock":
             from . import stock_cell as cell_backend

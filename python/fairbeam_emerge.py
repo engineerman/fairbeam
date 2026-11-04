@@ -130,17 +130,43 @@ def validate_case(resolution):
         raise ValueError("fixture resolutions not yet frozen")
 
 
-def case(resolution):
+def default_nthreads():
+    """Host thread budget when the caller does not pass one (mirrors ``resources.auto_threads``)."""
+    logical = max(1, int(os.cpu_count() or 1))
+    physical = logical  # adapter stays stdlib-only; research injects a better value via resources
+    if physical >= 4:
+        n = physical - 1
+    elif physical <= 2:
+        n = 1
+    else:
+        n = physical
+    return max(1, min(n, 4, logical))
+
+
+def with_nthreads(case, threads=None):
+    """Copy ``case`` and set a positive ``nthreads`` field (1..64)."""
+    if not isinstance(case, dict):
+        raise ValueError("case must be an object")
+    if threads is None:
+        threads = case.get("nthreads", default_nthreads())
+    if type(threads) is not int or threads < 1:
+        raise ValueError("nthreads must be a positive integer")
+    return {**case, "nthreads": min(threads, 64)}
+
+
+def case(resolution, *, threads=None):
     """The JSON document handed to the worker: the fixed fixture and nothing else."""
     validate_case(resolution)
-    return {"schema": "fairbeam-emerge-fixture-case/1", "physics": "wr90_waveguide_fixture",
-            "geometry": {"a_m": A_M, "b_m": B_M, "length_m": L_M, "walls": "PEC",
-                         "fill": {"eps_r": 1.0, "mu_r": 1.0}},
-            "frequency_hz": list(FREQUENCIES_HZ),
-            "ports": [{"name": "port1", "face_z_m": 0.0, "mode": "TE10"},
-                      {"name": "port2", "face_z_m": L_M, "mode": "TE10"}],
-            "resolution": {"name": resolution, "value": RESOLUTIONS[resolution]},
-            "phasor_convention_out": PHASOR}
+    return with_nthreads({
+        "schema": "fairbeam-emerge-fixture-case/1", "physics": "wr90_waveguide_fixture",
+        "geometry": {"a_m": A_M, "b_m": B_M, "length_m": L_M, "walls": "PEC",
+                     "fill": {"eps_r": 1.0, "mu_r": 1.0}},
+        "frequency_hz": list(FREQUENCIES_HZ),
+        "ports": [{"name": "port1", "face_z_m": 0.0, "mode": "TE10"},
+                  {"name": "port2", "face_z_m": L_M, "mode": "TE10"}],
+        "resolution": {"name": resolution, "value": RESOLUTIONS[resolution]},
+        "phasor_convention_out": PHASOR,
+    }, threads)
 
 
 def analytic(frequency_hz):
@@ -443,7 +469,16 @@ def assess_planar(raw, case):
             "limitations": limitations, "pec_approximations": pec}
 
 
-def run_fixture(out, *, root=None, resolution="coarse", experimental=False):
+def _worker_env(nthreads):
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
+    text = str(max(1, int(nthreads)))
+    env.update(OMP_NUM_THREADS=text, MKL_NUM_THREADS=text, OPENBLAS_NUM_THREADS=text,
+               NUMBA_NUM_THREADS=text, VECLIB_NUM_THREADS=text, NUMEXPR_NUM_THREADS=text,
+               MPLBACKEND="Agg", PYVISTA_OFF_SCREEN="true")
+    return env
+
+
+def run_fixture(out, *, root=None, resolution="coarse", experimental=False, threads=None):
     if not experimental:
         raise ValueError("Explicit --experimental opt-in is required")
     validate_case(resolution)
@@ -452,9 +487,11 @@ def run_fixture(out, *, root=None, resolution="coarse", experimental=False):
         raise FileNotFoundError(f"EMerge worker script not found: {WORKER}")
     directory = Path(out).expanduser().resolve()
     directory.mkdir(parents=True, exist_ok=False)
+    payload = case(resolution, threads=threads)
+    nthreads = payload["nthreads"]
     manifest = {"schema": MANIFEST_SCHEMA, "backend": "emerge-experimental",
                 "physics": "wr90_waveguide_fixture", "resolution": resolution,
-                "resolution_value": RESOLUTIONS[resolution], "threads": 1, "status": "inputs_generated",
+                "resolution_value": RESOLUTIONS[resolution], "threads": nthreads, "status": "inputs_generated",
                 "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "input_provenance": "fixed WR-90 fixture constants; analytic straight-guide reference",
                 "phasor_convention": PHASOR, "python": str(python), "python_sha256": digest(python),
@@ -463,15 +500,13 @@ def run_fixture(out, *, root=None, resolution="coarse", experimental=False):
     def save():
         (directory / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
-    (directory / "case.json").write_text(json.dumps(case(resolution), indent=2, allow_nan=False) + "\n",
+    (directory / "case.json").write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n",
                                          encoding="utf-8")
     shutil.copyfile(WORKER, directory / WORKER.name)
     manifest["worker_sha256"] = digest(directory / WORKER.name)
     manifest["case_sha256"] = digest(directory / "case.json")
     save()
-    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
-    env.update(OMP_NUM_THREADS="1", MKL_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", NUMBA_NUM_THREADS="1",
-               MPLBACKEND="Agg", PYVISTA_OFF_SCREEN="true")
+    env = _worker_env(nthreads)
     try:
         manifest["status"] = "solver_started"
         save()
@@ -513,20 +548,22 @@ def run_fixture(out, *, root=None, resolution="coarse", experimental=False):
         raise
 
 
-def run_design(out, case, *, root=None, experimental=False):
+def run_design(out, case, *, root=None, experimental=False, threads=None):
     """Run an admitted Design case through the EMerge worker (opt-in; fresh ``out`` directory)."""
     if not experimental:
         raise ValueError("Explicit --experimental opt-in is required")
-    design_case_ok(case)
+    payload = with_nthreads(case, threads)
+    design_case_ok(payload)
     python, site = discover(root)
     if not WORKER.is_file():
         raise FileNotFoundError(f"EMerge worker script not found: {WORKER}")
     directory = Path(out).expanduser().resolve()
     directory.mkdir(parents=True, exist_ok=False)
+    nthreads = payload["nthreads"]
     manifest = {"schema": DESIGN_MANIFEST_SCHEMA, "backend": "emerge-experimental",
                 "physics": "design_driven", "kind": "design",
-                "resolution": case.get("resolution_name", case["resolution"]),
-                "resolution_value": case["resolution"], "threads": 1, "status": "inputs_generated",
+                "resolution": payload.get("resolution_name", payload["resolution"]),
+                "resolution_value": payload["resolution"], "threads": nthreads, "status": "inputs_generated",
                 "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "input_provenance": "admitted Design case from emerge_design.admit",
                 "phasor_convention": PHASOR, "python": str(python), "python_sha256": digest(python),
@@ -535,15 +572,13 @@ def run_design(out, case, *, root=None, experimental=False):
     def save():
         (directory / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
-    (directory / "case.json").write_text(json.dumps(case, indent=2, allow_nan=False) + "\n",
+    (directory / "case.json").write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n",
                                          encoding="utf-8")
     shutil.copyfile(WORKER, directory / WORKER.name)
     manifest["worker_sha256"] = digest(directory / WORKER.name)
     manifest["case_sha256"] = digest(directory / "case.json")
     save()
-    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
-    env.update(OMP_NUM_THREADS="1", MKL_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", NUMBA_NUM_THREADS="1",
-               MPLBACKEND="Agg", PYVISTA_OFF_SCREEN="true")
+    env = _worker_env(nthreads)
     try:
         manifest["status"] = "solver_started"
         save()
@@ -584,21 +619,23 @@ def run_design(out, case, *, root=None, experimental=False):
         raise
 
 
-def run_planar(out, case, *, root=None, experimental=False):
+def run_planar(out, case, *, root=None, experimental=False, threads=None):
     """Run an admitted planar two-port case through the EMerge worker (opt-in; fresh ``out``)."""
     if not experimental:
         raise ValueError("Explicit --experimental opt-in is required")
-    planar_case_ok(case)
+    payload = with_nthreads(case, threads)
+    planar_case_ok(payload)
     python, site = discover(root)
     if not WORKER.is_file():
         raise FileNotFoundError(f"EMerge worker script not found: {WORKER}")
     directory = Path(out).expanduser().resolve()
     directory.mkdir(parents=True, exist_ok=False)
+    nthreads = payload["nthreads"]
     manifest = {"schema": PLANAR_MANIFEST_SCHEMA, "backend": "emerge-experimental",
                 "physics": "planar_two_port", "kind": "planar",
-                "enclosure": case["enclosure"],
-                "resolution": case.get("resolution_name", case["resolution"]),
-                "resolution_value": case["resolution"], "threads": 1, "status": "inputs_generated",
+                "enclosure": payload["enclosure"],
+                "resolution": payload.get("resolution_name", payload["resolution"]),
+                "resolution_value": payload["resolution"], "threads": nthreads, "status": "inputs_generated",
                 "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "input_provenance": "admitted planar case from emerge_planar.admit",
                 "phasor_convention": PHASOR, "python": str(python), "python_sha256": digest(python),
@@ -607,15 +644,13 @@ def run_planar(out, case, *, root=None, experimental=False):
     def save():
         (directory / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
-    (directory / "case.json").write_text(json.dumps(case, indent=2, allow_nan=False) + "\n",
+    (directory / "case.json").write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n",
                                          encoding="utf-8")
     shutil.copyfile(WORKER, directory / WORKER.name)
     manifest["worker_sha256"] = digest(directory / WORKER.name)
     manifest["case_sha256"] = digest(directory / "case.json")
     save()
-    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
-    env.update(OMP_NUM_THREADS="1", MKL_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", NUMBA_NUM_THREADS="1",
-               MPLBACKEND="Agg", PYVISTA_OFF_SCREEN="true")
+    env = _worker_env(nthreads)
     try:
         manifest["status"] = "solver_started"
         save()

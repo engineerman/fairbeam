@@ -4,9 +4,10 @@ Runs INSIDE the external EMerge environment (``fairbeam_emerge.py`` starts it as
 process with that environment's interpreter). This is the only Fairbeam file that imports EMerge;
 it imports nothing from ``fairbeam``. Usage: ``python fairbeam_emerge_worker.py case.json``.
 
-It builds exactly the case described by ``case.json``, solves it in this process (no worker
-threads or processes of EMerge's own), and writes ``raw.json`` next to the case. The adapter checks
-the raw S-parameters; nothing here adjusts a result.
+It builds exactly the case described by ``case.json``, solves it in this process, and writes
+``raw.json`` next to the case. Threading uses EMerge 3 ``run_sweep(nthreads=…)`` or
+``run_sweep_distributed`` (thread workers) from ``case["nthreads"]``. The adapter checks the raw
+S-parameters; nothing here adjusts a result.
 """
 import json
 import math
@@ -242,10 +243,11 @@ def build_raw(case, emerge_version, frequencies, s11, s21, mesh, elapsed_seconds
            "s21_re": [v.real for v in s21], "s21_im": [v.imag for v in s21],
            "phasor_convention": NATIVE_PHASOR,
            "elapsed_seconds": float(elapsed_seconds),
-           "solver_setup": {"resolution": case["resolution"], "parallel": False, "multi_processing": False,
+           "solver_setup": {"resolution": case["resolution"],
                             "port_mode_alignment": "E field along +y at both ports",
                             "sparam_cap_single": False, "sparam_cap_column": False,
-                            "sparam_enforce_reciprocity": False}}
+                            "sparam_enforce_reciprocity": False,
+                            **(case.get("_sweep_setup") or {"nthreads": _nthreads(case)})}}
     if mesh:
         raw["mesh"] = {"nodes": int(mesh["nodes"]), "tetrahedra": int(mesh["tetrahedra"])}
     return raw
@@ -264,10 +266,10 @@ def build_design_raw(case, emerge_version, frequencies, s11, mesh, elapsed_secon
            "elapsed_seconds": float(elapsed_seconds),
            "solver_setup": {"resolution": case["resolution"],
                             "resolution_name": case.get("resolution_name"),
-                            "parallel": False, "multi_processing": False,
                             "abc_order": ABC_ORDER, "abc_type": ABC_TYPE,
                             "sparam_cap_single": False, "sparam_cap_column": False,
-                            "sparam_enforce_reciprocity": False},
+                            "sparam_enforce_reciprocity": False,
+                            **(case.get("_sweep_setup") or {"nthreads": _nthreads(case)})},
            "limitations": list(case["limitations"]),
            "pec_approximations": list(case["pec_approximations"])}
     if mesh:
@@ -301,10 +303,10 @@ def build_planar_raw(case, emerge_version, frequencies, s_params, mesh, elapsed_
                             "resolution_name": case.get("resolution_name"),
                             "enclosure": case["enclosure"],
                             "metal_edge_m": case["metal_edge_m"],
-                            "parallel": False, "multi_processing": False,
                             "abc_order": ABC_ORDER, "abc_type": ABC_TYPE,
                             "sparam_cap_single": False, "sparam_cap_column": False,
-                            "sparam_enforce_reciprocity": False},
+                            "sparam_enforce_reciprocity": False,
+                            **(case.get("_sweep_setup") or {"nthreads": _nthreads(case)})},
            "limitations": list(case["limitations"]),
            "pec_approximations": list(case["pec_approximations"])}
     if mesh:
@@ -312,12 +314,38 @@ def build_planar_raw(case, emerge_version, frequencies, s_params, mesh, elapsed_
     return raw
 
 
-def _prepare_env():
-    for name in THREAD_VARIABLES:  # EMerge's import only uses setdefault (OMP 1, MKL 4, NUMBA 4); force 1
-        os.environ[name] = "1"
+def _nthreads(case):
+    """Solver thread budget from the case (default 1). Caps at 64."""
+    value = case.get("nthreads", 1)
+    if type(value) is not int or value < 1:
+        raise ValueError("nthreads must be a positive integer")
+    return min(value, 64)
+
+
+def _prepare_env(nthreads=1):
+    """Pin BLAS/OpenMP/Numba to the case budget (EMerge import only setdefaults otherwise)."""
+    text = str(max(1, int(nthreads)))
+    for name in THREAD_VARIABLES:
+        os.environ[name] = text
     os.environ.setdefault("MPLBACKEND", "Agg")
     os.environ.setdefault("PYVISTA_OFF_SCREEN", "true")
     os.environ["EMERGE_BASE_PATH"] = str(Path.cwd())  # keep any EMerge output inside the case folder
+
+
+def _run_frequency_sweep(sim, case):
+    """Run the MW frequency sweep with EMerge 3 threading / optional distributed workers."""
+    budget = _nthreads(case)
+    frequencies = case.get("frequencies_hz") or case.get("frequency_hz") or []
+    n_freq = len(frequencies)
+    if n_freq >= 2 and budget >= 2:
+        n_workers = min(n_freq, max(1, budget // 2), 8)
+        per = max(1, budget // n_workers)
+        data = sim.mw.run_sweep_distributed(n_workers=n_workers, nthreads=per, worker_type="thread")
+        setup = {"mode": "distributed", "n_workers": n_workers, "nthreads": per,
+                 "threads_budget": budget, "worker_type": "thread"}
+        return data, setup
+    data = sim.mw.run_sweep(nthreads=budget)
+    return data, {"mode": "sequential", "nthreads": budget, "threads_budget": budget}
 
 
 def _box(em, lo, hi):
@@ -337,7 +365,8 @@ def _plate(em, lo, hi, normal_axis):
 
 def solve_fixture(case):
     """Build and solve the WR-90 fixture with EMerge. Imports EMerge, so call only in that env."""
-    _prepare_env()
+    nthreads = _nthreads(case)
+    _prepare_env(nthreads)
     import numpy as np
     import emerge as em
 
@@ -368,7 +397,8 @@ def solve_fixture(case):
 
     sim.generate_mesh()
     mesh = {"nodes": int(sim.mesh.n_nodes), "tetrahedra": int(sim.mesh.n_tets)}
-    data = sim.mw.run_sweep(parallel=False, multi_processing=False)  # solved in this process
+    data, sweep = _run_frequency_sweep(sim, case)
+    case = {**case, "_sweep_setup": sweep}
 
     grid = data.scalar.grid
     frequencies = np.asarray(data.scalar.axis("freq"), dtype=float).reshape(-1)
@@ -394,7 +424,8 @@ def solve_design(case):
       registered GeoObject dimtags together (mesher.py:227-264), so PEC/port Plates do not need a
       separate embed/fragment call before ``commit_geometry``.
     """
-    _prepare_env()
+    nthreads = _nthreads(case)
+    _prepare_env(nthreads)
     import numpy as np
     import emerge as em
 
@@ -433,7 +464,8 @@ def solve_design(case):
 
     sim.generate_mesh()
     mesh = {"nodes": int(sim.mesh.n_nodes), "tetrahedra": int(sim.mesh.n_tets)}
-    data = sim.mw.run_sweep(parallel=False, multi_processing=False)
+    data, sweep = _run_frequency_sweep(sim, case)
+    case = {**case, "_sweep_setup": sweep}
 
     grid = data.scalar.grid
     frequencies = np.asarray(data.scalar.axis("freq"), dtype=float).reshape(-1)
@@ -450,7 +482,8 @@ def solve_planar(case):
     the four sides and top when ``enclosure == "open"``, two ``LumpedPort`` strip-to-ground
     terminals (+z), and ``mesher.set_boundary_size`` on each trace (``metal_edge_m``, growth 3).
     """
-    _prepare_env()
+    nthreads = _nthreads(case)
+    _prepare_env(nthreads)
     import numpy as np
     import emerge as em
 
@@ -497,7 +530,8 @@ def solve_planar(case):
 
     sim.generate_mesh()
     mesh = {"nodes": int(sim.mesh.n_nodes), "tetrahedra": int(sim.mesh.n_tets)}
-    data = sim.mw.run_sweep(parallel=False, multi_processing=False)
+    data, sweep = _run_frequency_sweep(sim, case)
+    case = {**case, "_sweep_setup": sweep}
 
     grid = data.scalar.grid
     frequencies = np.asarray(data.scalar.axis("freq"), dtype=float).reshape(-1)
