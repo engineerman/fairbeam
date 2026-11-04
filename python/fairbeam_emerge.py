@@ -243,8 +243,9 @@ def run_fixture(out, *, root=None, resolution="coarse", experimental=False):
         save()
         start = time.monotonic()
         try:
-            process = subprocess.run([str(python), "-I", WORKER.name, "case.json"], cwd=directory, env=env,
-                                     stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            # -X utf8: EMerge's numba first-compile banner prints U+26A0; -I ignores PYTHONUTF8.
+            process = subprocess.run([str(python), "-I", "-X", "utf8", WORKER.name, "case.json"],
+                                     cwd=directory, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
                                      timeout=WORKER_TIMEOUT_S,
                                      creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)

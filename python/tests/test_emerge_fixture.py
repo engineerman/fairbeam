@@ -355,7 +355,8 @@ class RunFixture(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.run_with(subprocess.CompletedProcess([], 1, ""))
         args, kwargs = self.launch.call_args
-        self.assertEqual(args[0], [str(self.exe.resolve()), "-I", "fairbeam_emerge_worker.py", "case.json"])
+        self.assertEqual(args[0], [str(self.exe.resolve()), "-I", "-X", "utf8",
+                                   "fairbeam_emerge_worker.py", "case.json"])
         self.assertEqual(Path(kwargs["cwd"]), (self.root / "run").resolve())
         self.assertEqual(kwargs["timeout"], 600)
         self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
