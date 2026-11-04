@@ -352,9 +352,20 @@ the Elmer components.
 
 **Model tier:** Planner.
 
-- [ ] Review against Global Constraints with `docs/agent/prompts/reviewer.md`; run the AGENTS.md
+- [x] Review against Global Constraints with `docs/agent/prompts/reviewer.md`; run the AGENTS.md
   pre-PR checks in a clean worktree (local untracked projects distort `check:designer`/`check:site`).
-- [ ] Mark Level B done; record open qualification gaps.
+- [x] Mark Level B done; record open qualification gaps.
+
+**Level B status:** done on `feat/emerge-experimental` through commit `0c0a149` (docs). Open
+qualification gaps (do not block Level B close):
+
+1. Patch EMerge S11 does not match Fairbeam openEMS (2.30 GHz / ≈−7 dB vs 2.454 GHz / −45.6 dB);
+   no padding-pair or denser frequency study yet.
+2. 11-point linspace may miss the true EMerge resonance; coarse→fine did not move the bin.
+3. Pre-PR: `check:designer` / `check:site` / `check:run-summary` fail when untracked local
+   `public/projects/hairpin-filter-*.json` are present — use a clean worktree before opening a PR.
+4. Deferred Task 1 minors (gap-crossing centre-only, parity gaps) remain non-blocking.
+5. `npm run check:scenarios -- --skip-run` not re-run in this Task 8 pass (optional before PR).
 
 ---
 
@@ -418,3 +429,18 @@ Fill only with commands run and outputs observed. Date every entry.
   `results.sparams.s["1,1"]` vs `results.frequency` (801 pts): S11 min at **2.453981250 GHz**,
   `|S11|=0.005264` (**−45.574 dB**); `max_|S11|=0.998555`. Band record:
   `s11_min_db=-45.574` @ `f_center=2453981250`. No leftover emerge/openEMS python processes after.
+- 2026-11-04 (Task 6, Composer): Froze resolutions 0.25 / 0.15, proxy 200000, Design timeout
+  1800 s; Patch qualification = experimental export only, no openEMS S11 agreement claim. Commit
+  `0d9efcd`.
+- 2026-11-04 (Task 7, Composer): Documented Design subset in `EMERGE-EXPERIMENT.md`,
+  `EXPERIMENTAL-SOLVERS.md`, `tr/EXPERIMENTAL-SOLVERS.md`, `RESEARCH-SOLVERS.md`.
+  `npm run check:legal` → ok; `check:links` → 5711 OK; `check:site` → passed after restoring
+  `public/projects/index.json` to HEAD (local hairpin entries had inflated the example count).
+  Commit `0c0a149`.
+- 2026-11-04 (Task 8, Composer): Global Constraints review APPROVE for Level B scope.
+  `-p test_emerge_*.py` → 113 OK; `test_elmer_*.py` → 33 OK; `test_research_*.py` → 27 OK
+  (one transient ConnectionAbortedError log from parallel serve, suite still OK).
+  `npm run typecheck` → OK; `check:legal` → ok; `check:emerge-antenna` → PASS; `check:research` →
+  PASS. `check:run-summary` / designer chain fails on untracked
+  `hairpin-filter-cgrassin-20261104-114535-32fd0c.json` (`suspicious` vs `converged`) — local dirt,
+  not EMerge. Level B marked done with open gaps listed under Task 8.
