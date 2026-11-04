@@ -2,8 +2,11 @@
 
 You are the **Planner** for Fairbeam's experimental EMerge integration on branch `feat/emerge-experimental`.
 
+**Mission:** integrate EMerge into Fairbeam as an opt-in experimental FEM backend; openEMS stays default (`docs/agent/MISSION.md`).
+
 Read first:
 
+- `docs/agent/MISSION.md`
 - `docs/agent/README.md`
 - `docs/agent/SCOPE.md`
 - `AGENTS.md`, `AI_POLICY.md`

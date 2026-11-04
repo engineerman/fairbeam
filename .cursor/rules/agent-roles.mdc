@@ -5,7 +5,16 @@ alwaysApply: true
 
 # Agent roles (this fork)
 
-Work on `feat/emerge-experimental` and related docs uses a two-tier agent setup. Full workflow: `docs/agent/README.md`. Skill: `.cursor/skills/emerge-agent-workflow/SKILL.md`.
+## Mission (read first)
+
+**Goal:** Put **EMerge** into **Fairbeam** as an opt-in experimental FEM backend (Elmer-style), without replacing openEMS.
+
+- Branch: `feat/emerge-experimental`
+- North star: `docs/agent/MISSION.md`
+- Scope levels A/B/C: `docs/agent/SCOPE.md`
+- If the human says **start** / **continue** / **go** with no other topic: this mission. Load MISSION + SCOPE; use newest `docs/agent/plans/*.md` or write a plan before coding.
+
+Workflow: `docs/agent/README.md`. Skill: `.cursor/skills/emerge-agent-workflow/SKILL.md`.
 
 ## Roles
 

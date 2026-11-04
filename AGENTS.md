@@ -4,7 +4,12 @@ This file is for any coding agent and for people new to the repository. The pull
 in [CONTRIBUTING.md](CONTRIBUTING.md); the rules for AI-assisted contributions are in
 [AI_POLICY.md](AI_POLICY.md).
 
-## Fork agent workflow (EMerge)
+## Fork mission and agent workflow (EMerge)
+
+**Fork goal:** integrate EMerge into Fairbeam as an opt-in experimental FEM
+backend (not a replacement for openEMS). North star:
+[docs/agent/MISSION.md](docs/agent/MISSION.md). Scope:
+[docs/agent/SCOPE.md](docs/agent/SCOPE.md).
 
 On `feat/emerge-experimental`, planning and implementation use a split agent setup:
 capable model for plans, cheaper models for task execution. Start at

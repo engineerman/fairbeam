@@ -1,6 +1,12 @@
 # Agent development setup (fork)
 
-This fork (`engineerman/fairbeam`, branch `feat/emerge-experimental`) uses a **split-brain** agent workflow:
+## Why this fork exists
+
+**Mission:** integrate **EMerge** into **Fairbeam** as an optional experimental solver (frequency-domain FEM), using the Elmer experimental pattern. openEMS stays default. Details: [MISSION.md](MISSION.md), [SCOPE.md](SCOPE.md).
+
+If you are told only **start** / **continue** / **go** on `feat/emerge-experimental`, that mission is the task.
+
+This fork (`engineerman/fairbeam`, branch `feat/emerge-experimental`) also uses a **split-brain** agent workflow:
 
 1. A **capable model** writes the plan and Global Constraints.
 2. **Cheaper models** implement one plan task at a time.
@@ -12,7 +18,7 @@ Upstream Fairbeam rules still apply: [AGENTS.md](../../AGENTS.md), [AI_POLICY.md
 
 1. Open this repo (`D:\W\P\fairbeam`) on branch `feat/emerge-experimental`.
 2. Start a chat with a **Planner-tier** model.
-3. Say: *Use the emerge-agent-workflow skill. Write or update the EMerge plan.*
+3. Say: *Start* — or: *Use the emerge-agent-workflow skill. Write or update the EMerge plan.* (same mission.)
 4. Approve the plan under `docs/agent/plans/`.
 5. Start a **new** chat (or subagent) on a **cheap** model: *Implement task N from `<plan-file>`. Use the emerge-agent-workflow skill.*
 6. After each task, run the plan's checks; then a short reviewer pass.

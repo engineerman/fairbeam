@@ -8,13 +8,19 @@ description: >-
 
 # EMerge agent workflow
 
+## Mission
+
+Integrate **EMerge** into **Fairbeam** as an opt-in experimental solver backend (Elmer pattern; openEMS stays default). Full text: `docs/agent/MISSION.md`. Scope levels: `docs/agent/SCOPE.md`.
+
+Bare prompts like **start** / **continue** / **go** on this branch mean: advance that mission.
+
 ## When to use
 
 Any non-trivial work on the EMerge experimental backend in this fork: fixture MVP, Design subset, Install EMerge, UI Run entries, tests, or agent plans.
 
 ## Procedure
 
-1. **Read** `docs/agent/README.md` and the latest plan in `docs/agent/plans/` (if any).
+1. **Read** `docs/agent/MISSION.md`, `docs/agent/SCOPE.md`, `docs/agent/README.md`, and the latest plan in `docs/agent/plans/` (if any).
 2. **If no plan or plan is stale:** switch to / stay on a **Planner**-tier model. Produce or update a plan using `docs/agent/prompts/planner.md` and the template in `docs/agent/plans/TEMPLATE.md`. Save as `docs/agent/plans/YYYY-MM-DD-emerge-<slug>.md`.
 3. **Execute tasks** with **Implementer**-tier models, one task at a time, using `docs/agent/prompts/implementer.md`. Prefer the Elmer file map in `references/elmer-touchpoints.md`.
 4. After each task: run the checks listed in that task; then a **Reviewer** pass with `docs/agent/prompts/reviewer.md`.
