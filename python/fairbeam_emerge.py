@@ -31,8 +31,9 @@ RESOLUTIONS = {"coarse": 0.25, "fine": 0.125}
 SUPPORTED_EMERGE = ("2.8.9",)
 PHASOR = "exp(+i omega t)"
 NATIVE_PHASORS = ("exp(+i omega t)", "exp(-i omega t)")
-# Provisional acceptance criteria owned by the Planner (docs/agent/plans/2026-11-04-emerge-level-a-fixture.md).
-CRITERIA = {"s11_max": 0.10, "s21_min": 0.95, "phase_error_deg_max": 5.0, "passivity_max": 1.02}
+# Acceptance criteria owned by the Planner (docs/agent/plans/2026-11-04-emerge-level-a-fixture.md),
+# frozen from the recorded EMerge 2.8.9 coarse/fine runs.
+CRITERIA = {"s11_max": 0.02, "s21_min": 0.995, "phase_error_deg_max": 2.0, "passivity_max": 1.005}
 RESULT_SCHEMA = "fairbeam.emerge-fixture-result/1"
 MANIFEST_SCHEMA = "fairbeam-emerge-fixture-1"
 WORKER = Path(__file__).resolve().with_name("fairbeam_emerge_worker.py")

@@ -91,20 +91,22 @@ Copy this block verbatim into implementer and reviewer prompts.
 | Fill | vacuum/air, eps_r = 1, mu_r = 1, lossless |
 | Frequencies | exactly 8.0, 9.0, 10.0, 11.0, 12.0 GHz |
 | Ports | `RectangularWaveguide` TE10, port 1 at z = 0, port 2 at z = L |
-| Resolutions | **provisional (Task 4):** `coarse` = 0.25, `fine` = 0.125, EMerge wavelength fractions at the top frequency (`Simulation.set_resolution`: lower is finer, default 0.33, warns above 0.334); the Planner freezes them after Task 5 |
+| Resolutions | **frozen after Task 5:** `coarse` = 0.25, `fine` = 0.125, EMerge wavelength fractions at the top frequency (`Simulation.set_resolution`: lower is finer, default 0.33, warns above 0.334) |
 
 Analytic reference (`exp(+i omega t)` convention, reference planes at the port faces):
 `k0 = 2 pi f / c0`, `beta = sqrt(k0^2 - (pi / a)^2)`, `S21 = S12 = exp(-i beta L)`,
 `S11 = S22 = 0`. TE10 cutoff `c0 / (2a)` = 6.557 GHz; next mode TE20 at 13.11 GHz, so the band is
 single-mode. `c0 = 299792458 m/s`.
 
-**Provisional acceptance criteria** (Planner-set; Task 5 records measured values; the human
-confirms or tightens them before Task 6; never loosened by an implementer):
+**Acceptance criteria** (frozen by the Planner after Task 5 from the recorded EMerge 2.8.9 runs;
+never loosened by an implementer). The coarse run is the worst case. Each threshold leaves at
+least 2.5× headroom over it, and is tight enough to catch a wrong port orientation, a phasor sign
+error or a broken mesh:
 
-- max over frequencies of `|S11|` ≤ 0.10
-- min over frequencies of `|S21|` ≥ 0.95
-- max over frequencies of wrapped `|arg(S21) − (−beta L)|` ≤ 5 degrees
-- passivity: `|S11|^2 + |S21|^2` ≤ 1.02 at every frequency
+- max over frequencies of `|S11|` ≤ 0.02 (coarse measured 0.0055)
+- min over frequencies of `|S21|` ≥ 0.995 (coarse measured 0.99990)
+- max over frequencies of wrapped `|arg(S21) − (−beta L)|` ≤ 2 degrees (coarse measured 0.79)
+- passivity: `|S11|^2 + |S21|^2` ≤ 1.005 at every frequency (coarse measured 0.99992)
 - all values finite; frequencies exactly the fixture list in order
 
 Pass → `status: "results_validated"`; fail → `"validation_failed"` (raw output kept). Same status
@@ -394,3 +396,4 @@ Fill only with commands run and outputs observed. Date every entry.
 - 2026-11-04 (Task 5): confirmed `python -I` ignores `PYTHONUTF8`/`PYTHONIOENCODING` (utf8_mode 0, cp1252); `python -I -X utf8` sets utf8_mode 1. Second coarse attempt with those env vars set in the parent still failed the same way (out `…-123800`, wall 2.2 s) because `run_fixture` launches `[python, "-I", worker, …]` without `-X utf8`. **BLOCKED** (cleared below): native solve never started. Fix applied: `run_fixture` now launches `[python, "-I", "-X", "utf8", worker, …]`. Criteria unchanged. `-p "test_emerge_*.py"` → `Ran 66 tests ... OK`.
 - 2026-11-04 (Task 5, after `-X utf8`): coarse `--out C:\Users\ee\AppData\Local\Temp\fairbeam-emerge-coarse-20261104-125136` → exit 0, wall **164.8 s**, `manifest.status` / `result.status` = `results_validated`, EMerge **2.8.9**, native convention `exp(+i omega t)`, mesh **163 nodes / 397 tets**, `result.elapsed_seconds` **160.945**, `manifest.worker_seconds` **164.738**. Metrics from `result.json`: GHz `[8,9,10,11,12]`; `|S11|` `[0.000151, 0.000533, 0.000629, 0.001578, 0.005462]`; `|S21|` `[0.999961, 0.999956, 0.999947, 0.999932, 0.999896]`; phase_error_deg `[0.120, 0.188, 0.308, 0.499, 0.789]`; aggregates `s11_max=0.005462`, `s21_min=0.999896`, `phase_error_deg_max=0.789`, `passivity_max=0.999922`. After run: no leftover emerge-venv `python` processes.
 - 2026-11-04 (Task 5): fine `--out C:\Users\ee\AppData\Local\Temp\fairbeam-emerge-fine-20261104-125430` → exit 0, wall **11.2 s**, `results_validated`, EMerge **2.8.9**, native `exp(+i omega t)`, mesh **667 nodes / 2305 tets**, `result.elapsed_seconds` **9.223**, `manifest.worker_seconds` **11.122**. Metrics: `|S11|` `[2.74e-5, 4.11e-5, 5.02e-5, 9.06e-6, 1.19e-4]`; `|S21|` `[0.999996, 0.999996, 0.999995, 0.999994, 0.999993]`; phase_error_deg `[0.008, 0.011, 0.017, 0.025, 0.037]`; aggregates `s11_max=0.000119`, `s21_min=0.999993`, `phase_error_deg_max=0.037`, `passivity_max=0.999992`. First-run (coarse, cold numba) ~161 s solve vs second-run (fine, warm cache) ~9 s solve — JIT cache dominates. After fine: no leftover emerge-venv `python` processes. Human/Planner still needs to confirm or tighten provisional criteria before Task 6.
+- 2026-11-04 (Planner review of Tasks 4–5): Recomputed `|S11|`, `|S21|` and phase error independently from both `raw.json` files against `exp(-i beta L)`; the values match the entries above. `arg(S21)` follows the dispersive reference across the band, from 84.8° at 8 GHz to 116.6° at 12 GHz after wrapping. Phase error falls from 0.789° to 0.037° at 12 GHz between coarse and fine. The worker reads S from `data.scalar.grid.S(i, j)`, with EMerge's capping, column normalization and reciprocity post-processing off. Accepted `f407f03` (`-X utf8`). Froze resolutions 0.25 / 0.125 and tightened the criteria to 0.02 / 0.995 / 2° / 1.005 in `fairbeam_emerge.CRITERIA` and Shared facts. `assess()` on both recorded `raw.json` files with the new criteria → `results_validated` for both. `-p "test_emerge_*.py"` → `Ran 66 tests ... OK`. Timeout note: the cold-numba coarse run took 161 s of the 600 s worker limit.

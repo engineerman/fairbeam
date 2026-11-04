@@ -150,8 +150,8 @@ class Fixture(unittest.TestCase):
         self.assertEqual(fem.FREQUENCIES_HZ, (8e9, 9e9, 10e9, 11e9, 12e9))
         self.assertEqual(fem.SUPPORTED_EMERGE, ("2.8.9",))
         self.assertEqual(set(fem.RESOLUTIONS), {"coarse", "fine"})
-        self.assertEqual(fem.CRITERIA, {"s11_max": 0.10, "s21_min": 0.95,
-                                        "phase_error_deg_max": 5.0, "passivity_max": 1.02})
+        self.assertEqual(fem.CRITERIA, {"s11_max": 0.02, "s21_min": 0.995,
+                                        "phase_error_deg_max": 2.0, "passivity_max": 1.005})
 
     def test_validate_case_accepts_only_known_resolutions(self):
         with patch.dict(fem.RESOLUTIONS, FROZEN):
@@ -223,7 +223,7 @@ class Assess(unittest.TestCase):
         self.assertEqual(fem.assess(raw)["status"], "validation_failed")
 
     def test_fails_on_passivity(self):
-        raw = synthetic_raw(s11=0.1)  # |S11|^2 + |S21|^2 = 1.01 -> still passive
+        raw = synthetic_raw(s11=0.015)  # |S11|^2 + |S21|^2 = 1.000225 -> still passive
         self.assertEqual(fem.assess(raw)["status"], "results_validated")
         raw["s21_re"] = [v * 1.1 for v in raw["s21_re"]]
         raw["s21_im"] = [v * 1.1 for v in raw["s21_im"]]
@@ -232,7 +232,7 @@ class Assess(unittest.TestCase):
     def test_phase_sign_flip_fails_under_declared_convention(self):
         result = fem.assess(synthetic_raw(flip=True))
         self.assertEqual(result["status"], "validation_failed")
-        self.assertGreater(result["metrics"]["phase_error_deg_max"], 5.0)
+        self.assertGreater(result["metrics"]["phase_error_deg_max"], fem.CRITERIA["phase_error_deg_max"])
 
     def test_native_minus_convention_is_conjugated_once(self):
         result = fem.assess(synthetic_raw(convention=NATIVE_MINUS))
