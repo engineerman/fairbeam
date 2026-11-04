@@ -1,0 +1,15 @@
+{
+    "cmake.sourceDirectory": "D:/W/P/fairbeam/scripts/experimental-periodic/native-bloch",
+    "statusbar_command.commands": [
+        {
+            "text": "$(debug-restart) Serve",
+            "tooltip": "Restart fairbeam serve (5320)",
+            "id": "fairbeam-restart-serve",
+            "name": "Restart fairbeam serve",
+            "alignment": "right",
+            "priority": 100,
+            "command": "workbench.action.tasks.runTask",
+            "arguments": ["Fairbeam: Restart serve"]
+        }
+    ]
+}

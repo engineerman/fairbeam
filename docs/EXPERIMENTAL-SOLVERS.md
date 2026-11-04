@@ -1,16 +1,69 @@
 # Experimental solvers
 
-openEMS is the default solver. **Elmer FEM — Experimental eigenmodes** and **Elmer FEM · Experimental antenna** are opt-in research paths with narrower geometry and result support. Installing a backend or completing a run does not establish numerical accuracy for your design.
+openEMS is the default solver. **Elmer FEM — Experimental eigenmodes**, **Elmer FEM · Experimental antenna**, the fixed **EMerge** WR-90 waveguide fixture, **EMerge · Experimental antenna** (bounded Design subset), and **EMerge FEM · Experimental planar two-port** (hairpin-class microstrip) are opt-in research paths with narrower geometry and result support. Installing a backend or completing a run does not establish numerical accuracy for your design.
 
 ## Setup in the desktop app
 
-Open **Simulation › Experimental solvers**, or use **Elmer setup and history** in the Run dialog. Choose Elmer and check availability before submitting a run.
+Open **Simulation › Experimental solvers**, or use **Elmer setup and history** in the Run dialog. Choose a backend and check availability before submitting a run.
 
 On Windows, **Install Elmer** downloads the portable package pinned by Fairbeam after you request it. The package is checked and stored in the app's data folder, separately from the openEMS runtime. It is not a system-wide installation. Leave the path blank to use the managed copy. A folder you enter, `FAIRBEAM_ELMER_ROOT`, or Elmer on `PATH` takes precedence.
 
 On macOS and Linux, install Elmer yourself. Select an installation containing `bin/ElmerSolver` and `bin/ElmerGrid`, or its binary directory. Availability checks locate the executables; they do not qualify the physical model or every native dependency. No backend is installed automatically.
 
 If an installed app reports `No module named fairbeam_elmer`, update or repair Fairbeam itself. Installing Elmer binaries alone does not provide Fairbeam's Python adapter. Source contributors should use the separate [research setup and evidence](RESEARCH-SOLVERS.md).
+
+## EMerge waveguide fixture
+
+Choose the **EMerge** backend in Simulation → Experimental solvers for the fixed WR-90 air-filled waveguide fixture only. Level A does not translate the current Design. Select `coarse` or `fine` resolution and submit; results are checked against the analytic straight-waveguide reference in the Research panel.
+
+On Windows, **Install EMerge** creates a pinned Python 3.13 virtual environment with `emerge==3.0.0b12` from PyPI (hash-locked). The Research panel shows the EMerge GPL-2.0-or-later notice and the Intel MKL proprietary license before the Install button. The locked download set is about 399 MiB (418619020 bytes, PyPI wheel sizes 2026-11-04). A measured managed install of `3.0.0b12` on 2026-11-04 was 1421133962 bytes (1355.3 MiB) after 80.9 s. Leave the path blank to use that managed copy. A folder you enter, or `FAIRBEAM_EMERGE_PYTHON`, takes precedence. Nothing is installed system-wide, and EMerge is not bundled in the Fairbeam installer.
+
+On macOS and Linux there is no managed installer. Create your own Python 3.10–3.13 environment with `emerge==3.0.0b12`, then enter that environment's folder (or its Python executable) in the path field, or set `FAIRBEAM_EMERGE_PYTHON`.
+
+See [the EMerge experiment](EMERGE-EXPERIMENT.md) for the fixture definition, acceptance criteria and recorded native observations.
+
+## EMerge · Experimental antenna
+
+When the run server reports health `emerge` ≥ 2, **Run** offers **EMerge · Experimental antenna**
+after the Elmer options. It admits the same bounded class as Elmer's driven antenna path:
+axis-aligned dielectric boxes, PEC sheets, one Discrete port, explicit finite feed width, optional
+`approximate_metals`, and constant `tan_d` when loss is present. Rejects extra ports, resistors,
+lumped elements, transforms, cuts, voids, overlaps and non-box primitives. Outer boundary: absorbing
+faces on a padded air box (not PML). No far field and no gain certificate; status is
+`results_exported`.
+
+Resolutions are wavelength fractions at `f_max`: `coarse` = 0.25, `fine` = 0.15. Worker timeout is
+1800 s; a cheap volume proxy refuses oversized domains before launch. S11 and Zin appear in the
+shared Results view next to (never instead of) openEMS.
+
+For the built-in Patch template, recorded 2026-11-04 native runs placed the EMerge S11 minimum at
+2.30 GHz (−7.427 dB coarse, −6.349 dB fine on an 11-point 2–3 GHz sweep). Fairbeam's own openEMS run
+of the same template had its S11 minimum at 2.453981250 GHz (−45.574 dB). EMerge Design does not
+claim agreement with that openEMS result. Details: [EMerge experiment](EMERGE-EXPERIMENT.md).
+
+## EMerge FEM · Experimental planar two-port
+
+When the run server reports health `emerge` ≥ 3, **Run** offers **EMerge FEM · Experimental planar
+two-port** after **EMerge · Experimental antenna**. It admits a single-layer microstrip two-port
+class: one substrate box, ground at the bottom, z-normal copper polygons (or z-flat boxes) on the
+substrate top, exactly two microstrip ports at board edges. Rejects multilayer, vias, CPW, other
+port types or counts, resistors, transforms, cuts, voids and metal at other elevations. Each
+microstrip port becomes a lumped strip-to-ground terminal at the board edge for that run only
+(`accept_lumped_terminals`); feed and measurement shifts are unused. Finite copper needs
+`approximate_metals` (PEC sheets). Enclosure is `shielded` (closed PEC box) or `open` (absorbing
+sides and top with `padding_mm`). No far field and no gain certificate; status is
+`results_exported`. Shared Results show the complete 2 × 2 S matrix next to (never instead of)
+openEMS.
+
+Resolutions are wavelength fractions at `f_max`: `coarse` = 0.25, `fine` = 0.15. Worker timeout is
+3600 s; a tetrahedra proxy refuses domains above 400000 before launch. Points 3–41.
+
+For the hairpin test fixture, recorded 2026-11-04 native EMerge 2.8.9 runs (15 points,
+0.75–1.25 GHz, sheet copper) placed best |S21| at **1.071429 GHz** (−0.63 dB shielded coarse and
+fine; −0.51 dB open coarse). Coarse→fine peak shift was 0 on that grid. Fairbeam's own openEMS GPU
+run of the same fixture (default one-port excitation) reported a non-physical |S21| > 1, so Level
+B2 does not claim S-parameter agreement with that openEMS path. Details:
+[EMerge experiment](EMERGE-EXPERIMENT.md).
 
 ## Eigenmodes of the current design
 

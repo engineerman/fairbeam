@@ -28,14 +28,19 @@ class EntryPoints(unittest.TestCase):
         table = scripts()
         self.assertEqual(table, {"fairbeam": "fairbeam.cli:main",
                                  "fairbeam-elmer": "fairbeam_elmer:main",
+                                 "fairbeam-emerge": "fairbeam_emerge:main",
                                  "fairbeam-research-plan": "fairbeam.research_plan:main"})
         module, _, attr = table["fairbeam"].partition(":")
         self.assertIs(getattr(importlib.import_module(module), attr), cli.main)
         experiment = importlib.import_module("fairbeam_elmer")
         self.assertIsNot(experiment.main, cli.main)
+        emerge = importlib.import_module("fairbeam_emerge")
+        self.assertIsNot(emerge.main, cli.main)
+        self.assertIsNot(emerge.main, experiment.main)
         preparation = importlib.import_module("fairbeam.research_plan")
         self.assertIsNot(preparation.main, cli.main)
         self.assertIsNot(preparation.main, experiment.main)
+        self.assertIsNot(preparation.main, emerge.main)
 
     def test_the_package_name_is_fairbeam(self):
         text = PYPROJECT.read_text(encoding="utf-8")

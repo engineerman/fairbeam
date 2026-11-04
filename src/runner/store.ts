@@ -1,4 +1,4 @@
-import { openResearch } from "./researchState";
+import { isDesignBoundResearch, openResearch } from "./researchState";
 // State and actions of the in-app Run workflow: server detection, model/parameter form, live
 // geometry preview, job submission, the live event stream of one job, and run history.
 import { batch, createEffect, createMemo, createRoot, createSignal, on } from "solid-js";
@@ -719,7 +719,7 @@ export function detach() {
 }
 
 export function attach(job: Job) {
-  if (job.kind === "research" && job.research?.settings.analysis !== "driven") { openResearch(job.id); return; }
+  if (job.kind === "research" && !isDesignBoundResearch(job)) { openResearch(job.id); return; }
   detach();
   lastSeq = 0;
   attachedFinished = isTerminal(job.status);

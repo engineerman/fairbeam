@@ -22,6 +22,12 @@ try {
     await page.setViewport({ width: 1440, height: 1000 });
     await page.evaluateOnNewDocument(language => localStorage.setItem("fairbeam.generalSettings", JSON.stringify({ language })), language);
     let available = false, unavailable = false, detailConflict = false, ordinaryUnavailable = false, jobs = [], submitted;
+    let healthEmerge = false;
+    let emergeRuntime = {
+      supported: true, installed: false, path: "synthetic-emerge", version: "3.0.0b12",
+      license: "GPL-2.0-or-later (synthetic)", source: "https://example.invalid/emerge-synthetic",
+      estimated_bytes: 418619020, state: "idle", error: "",
+    };
     const requests = [];
     const historyQueries = [], ordinaryQueries = [];
     const summaryRows = () => jobs.map(({ result, ...metadata }) => metadata);
@@ -33,6 +39,12 @@ try {
       if (pathname.startsWith("/api/research/")) {
         requests.push(pathname);
         if (unavailable) return void respond({ error: "Synthetic server unavailable" }, 503);
+        if (pathname === "/api/research/emerge/runtime") return void respond(emergeRuntime);
+        if (pathname === "/api/research/emerge/install" && request.method() === "POST") {
+          emergeRuntime = { ...emergeRuntime, state: "installing", installed: false };
+          setTimeout(() => { emergeRuntime = { ...emergeRuntime, state: "done", installed: true }; }, 50);
+          return void respond(emergeRuntime, 202);
+        }
         if (pathname.endsWith("/probe")) return void respond({ backend: JSON.parse(request.postData()).backend, available, reason: available ? undefined : "Synthetic capability unavailable" });
         if (request.method() === "POST" && pathname.endsWith("/cancel")) { jobs[0].status = "cancelled"; return void respond(jobs[0]); }
         if (request.method() === "POST") {
@@ -48,7 +60,7 @@ try {
         const found = jobs.find(job => job.id === decodeURIComponent(pathname.split("/").at(-1)));
         return void respond(found ?? { error: "Synthetic run no longer exists" }, found ? 200 : 404);
       }
-      if (pathname === "/api/health") return void respond({ ok: true, api: 1, engines: ["cpu"], queue: { running: null, queued: 0 }, cpu_count: 4, research: true });
+      if (pathname === "/api/health") return void respond({ ok: true, api: 1, engines: ["cpu"], queue: { running: null, queued: 0 }, cpu_count: 4, research: true, ...(healthEmerge ? { emerge: 1 } : {}) });
       if (pathname === "/api/runs") {
         ordinaryQueries.push(requestUrl.search);
         if (ordinaryUnavailable) return void respond({ error: "Synthetic polling failure" }, 503);
@@ -218,13 +230,56 @@ try {
     jobs[0] = { ...jobs[0], status: "done", result: { status: "results_validated", frequency_hz: [2.4e9, 3e9], mode1: { family: "TE101", analytic_frequency_hz: 2.39e9, relative_frequency_error: 0.004, complex_field_shape_correlation: 0.999 }, precision_converged: false } };
     await page.click(".research-results > .cluster button");
     await page.waitForFunction(() => document.querySelector(".research-results")?.textContent.includes("TE101"));
+    // EMerge option stays hidden until health reports the experimental flag.
+    assert.equal(await page.$$eval('.research-options select option[value="emerge"]', rows => rows.length), 0, "EMerge option hidden without health.emerge");
+    healthEmerge = true;
+    await page.evaluate(async () => { await (await import("/src/runner/store.ts")).recheckServer(); });
+    await page.waitForFunction(() => document.querySelector('.research-options select option[value="emerge"]'));
+    await page.select(".research-options select", "emerge");
+    assert.match(await page.$eval('.research-options', e => e.textContent), /WR-90|waveguide|dalga kılavuzu/);
+    await page.waitForSelector("[data-emerge-runtime]");
+    const licenseBeforeInstall = await page.$eval("[data-emerge-runtime]", e => {
+      const license = [...e.querySelectorAll(".note")].find(n => /GPL-2\.0-or-later|MKL/.test(n.textContent));
+      const button = e.querySelector("button");
+      if (!license || !button) return null;
+      return !!(license.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+    assert.equal(licenseBeforeInstall, true, "EMerge license note appears before Install");
+    await page.click("[data-emerge-runtime] button");
+    await page.waitForFunction(() => /is installed|kurulu/.test(document.querySelector("[data-emerge-runtime]")?.textContent ?? ""));
+    // Managed install completion clears the path and re-probes (same as Elmer).
+    await page.waitForSelector(".research-options .status-good");
+    await page.select("[data-emerge-resolution]", "fine");
+    await page.click(start);
+    await page.waitForFunction(() => document.querySelector(".research-results .cluster[aria-live] button"));
+    assert.equal(submitted.backend, "emerge");
+    assert.deepEqual(submitted.settings, { resolution: "fine" });
+    assert.equal(submitted.design, undefined);
+    // Synthetic fixture result (labelled synthetic); values are placeholders, not a solver run.
+    jobs[0] = { ...jobs[0], status: "done", result: {
+      backend: "emerge", schema: "fairbeam.emerge-fixture-result/1", status: "results_validated",
+      frequency_hz: [8e9, 9e9, 10e9, 11e9, 12e9],
+      s11_re: [0, 0, 0, 0, 0], s11_im: [0, 0, 0, 0, 0],
+      s21_re: [0.5, 0.4, 0.3, 0.2, 0.1], s21_im: [0, 0, 0, 0, 0],
+      analytic_s21_re: [0.5, 0.4, 0.3, 0.2, 0.1], analytic_s21_im: [0, 0, 0, 0, 0],
+      metrics: { s11_max: 0, s21_min: 0.1, phase_error_deg_max: 0.1, passivity_max: 1,
+        s11_abs: [0, 0, 0, 0, 0], s21_abs: [0.5, 0.4, 0.3, 0.2, 0.1],
+        phase_error_deg: [0.1, 0.1, 0.1, 0.1, 0.1], passivity: [1, 1, 1, 1, 1] },
+      criteria: { s11_max: 0.02, s21_min: 0.995, phase_error_deg_max: 2, passivity_max: 1.005 },
+      precision_converged: false, provenance: { synthetic: true },
+    } };
+    await page.click(".research-results > .cluster button");
+    await page.waitForSelector("[data-emerge-results]");
+    assert.equal(await page.$$eval("[data-emerge-results] tbody tr", rows => rows.length), 5);
+    assert.match(await page.$eval("[data-emerge-results]", e => e.textContent), /validated|doğrulandı/);
+    assert.equal(await page.evaluate(async () => JSON.stringify((await import("/src/designer/store.ts")).draft)), before, "EMerge research does not replace Design data");
     await page.setViewport({ width: 390, height: 844 });
     assert.equal(await page.$eval(".research-dialog", e => e.scrollWidth <= e.clientWidth), true, "mobile dialog has no horizontal overflow");
     if (screenshots) await page.screenshot({ path: join(evidence, `research-${language}-mobile.png`) });
     jobs = [{ ...jobs[0], id: `replacement-${language}` }];
     await page.click(".research-results > .cluster button");
     await page.waitForFunction(id => document.querySelector(".research-results select")?.value === id, {}, jobs[0].id);
-    await page.waitForFunction(() => document.querySelector(".research-results")?.textContent.includes("TE101"));
+    await page.waitForSelector("[data-emerge-results]");
     assert.equal(await page.$(".research-results [role=alert]"), null, "removed selection falls back to an existing run");
     jobs = [];
     await page.click(".research-results > .cluster button");
@@ -238,5 +293,5 @@ try {
     assert.ok(historyQueries.length > 0 && historyQueries.every(query => query === "?summary=1"), "research history polls opt into summaries while detail stays full");
     await context.close();
   }
-  console.log("check-research-ui: EN/TR capability gates, queue/cancel, summary polling/AbortSignal/error retention, selected full results, reopening, isolation, result warnings, tables, mobile layout and unavailable server passed (synthetic API)");
+  console.log("check-research-ui: EN/TR capability gates, queue/cancel, summary polling/AbortSignal/error retention, selected full results, reopening, isolation, result warnings, tables, EMerge health gate/install/results, mobile layout and unavailable server passed (synthetic API)");
 } finally { await browser?.close(); await server.close(); }

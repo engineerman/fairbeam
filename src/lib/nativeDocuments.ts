@@ -49,7 +49,10 @@ export function documentJobMatches(file: DesignFile, job: ResultJob): boolean {
   if (job.model !== file.id) return false;
   if (job.kind !== "research") return true;
   const research = job.research, source = research?.source;
-  return research?.backend === "elmer" && research.settings.analysis === "driven" && !!source &&
+  const analysis = research?.settings.analysis;
+  const designBound = (research?.backend === "elmer" && analysis === "driven")
+    || (research?.backend === "emerge" && (analysis === "driven" || analysis === "planar_two_port"));
+  return !!designBound && !!source &&
     source.model_id === file.id && source.backup_scope === file.backup_scope &&
     /^[0-9a-f]{64}$/.test(source.workspace_hash) && /^[0-9a-f]{64}$/.test(source.design_sha256);
 }

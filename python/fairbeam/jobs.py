@@ -873,10 +873,18 @@ class JobManager:
         from .research import prepare
         spec = prepare(body)
         design_model = (spec.get("design") or {}).get("model", {})
-        driven = spec['backend'] == 'elmer' and spec.get('settings', {}).get('analysis') == 'driven'
+        analysis = (spec.get("settings") or {}).get("analysis")
+        # Workspace-bound Design runs: driven Elmer/EMerge antenna, EMerge planar two-port.
+        design_backed = (
+            spec.get("design") is not None
+            and (
+                (spec["backend"] == "elmer" and analysis == "driven")
+                or (spec["backend"] == "emerge" and analysis in ("driven", "planar_two_port"))
+            )
+        )
         if admitted_source is not None:
             from . import documents, modelfiles
-            if (not driven or not isinstance(admitted_source, dict)
+            if (not design_backed or not isinstance(admitted_source, dict)
                     or set(admitted_source) != {"model_id", "workspace_hash", "backup_scope", "design_sha256"}
                     or not isinstance(admitted_source.get("backup_scope"), str)
                     or not admitted_source["backup_scope"]
@@ -886,18 +894,24 @@ class JobManager:
             modelfiles.check_id(admitted_source["model_id"])
             if documents.design_digest(spec.get("design")) != admitted_source["design_sha256"]:
                 raise ValueError("research admission changed the original source design")
-            # spec.design remains the original source; worker-only Elmer approximations are
+            # spec.design remains the original source; worker-only FEM approximations are
             # made on a copy. This separate identity fails closed if that ever changes.
             spec["source"] = dict(admitted_source)
             from .research import encode, MAX_SNAPSHOT_BYTES
             if len(encode(spec)) > MAX_SNAPSHOT_BYTES:
                 raise ValueError("source-bound research snapshot exceeds 1 MiB")
-        model = admitted_source["model_id"] if admitted_source else design_model['id'] if driven else f"research:{spec['backend']}"
-        return self.submit(model=model, model_path="", threads=1,
+        model = admitted_source["model_id"] if admitted_source else design_model['id'] if design_backed else f"research:{spec['backend']}"
+        label = {"elmer": "Elmer", "emerge": "EMerge"}.get(spec['backend'])
+        threads = 1
+        if spec.get("backend") == "emerge":
+            nthreads = (spec.get("normalized") or {}).get("nthreads")
+            if type(nthreads) is int and nthreads >= 1:
+                threads = nthreads
+        return self.submit(model=model, model_path="", threads=threads,
                            kind="research", research_input=spec,
                            model_id=design_model.get("id"),
-                           name=(f"{design_model.get('name') or design_model.get('id')} · Elmer"
-                                 if spec['backend'] == 'elmer' and spec.get('design') is not None else ""))
+                           name=(f"{design_model.get('name') or design_model.get('id')} · {label}"
+                                 if label and spec.get('design') is not None else ""))
 
     def cancel(self, job_id: str) -> Job | None:
         job = self.jobs.get(job_id)
@@ -1133,7 +1147,12 @@ class JobManager:
                 if job.result.get("input_sha256") != job.research["snapshot_sha256"]:
                     raise ValueError("research result does not match admitted input")
                 job.research["result_sha256"] = checksum
-                if code == 0 and job.result.get('schema') == 'fairbeam.elmer-driven-result/1':
+                schema = job.result.get('schema')
+                if code == 0 and schema in (
+                    'fairbeam.elmer-driven-result/1',
+                    'fairbeam.emerge-driven-result/1',
+                    'fairbeam.emerge-planar-result/1',
+                ):
                     import hashlib
                     source = job.dir / 'research/bundle.json'
                     if source.is_symlink() or source.stat().st_size > 32 * 1024 * 1024:
@@ -1145,7 +1164,8 @@ class JobManager:
                     if exported.get('model', {}).get('id') != job.model_id or exported.get('experimental', {}).get('input_sha256') != job.research['snapshot_sha256']:
                         raise ValueError('FEM result bundle input identity mismatch')
                     self.projects_dir.mkdir(parents=True, exist_ok=True)
-                    filename = f'elmer-{job.id}.json'
+                    prefix = 'elmer' if schema == 'fairbeam.elmer-driven-result/1' else 'emerge'
+                    filename = f'{prefix}-{job.id}.json'
                     with (self.projects_dir / filename).open('xb') as output:
                         output.write(raw)
                     job.bundle = filename

@@ -1,0 +1,37 @@
+---
+description: Planner vs implementer model roles for cost-aware Fairbeam agent work
+alwaysApply: true
+---
+
+# Agent roles (this fork)
+
+## Mission (read first)
+
+**Goal:** Put **EMerge** into **Fairbeam** as an opt-in experimental FEM backend (Elmer-style), without replacing openEMS.
+
+- Branch: `feat/emerge-experimental`
+- North star: `docs/agent/MISSION.md`
+- Scope levels A/B/C: `docs/agent/SCOPE.md`
+- If the human says **start** / **continue** / **go** with no other topic: this mission. Load MISSION + SCOPE; use newest `docs/agent/plans/*.md` or write a plan before coding.
+
+Workflow: `docs/agent/README.md`. Skill: `.cursor/skills/emerge-agent-workflow/SKILL.md`.
+
+## Roles
+
+| Role | When | Model tier (Cursor) |
+| --- | --- | --- |
+| **Planner** | Spec, architecture, task breakdown, Global Constraints | Most capable available (e.g. Claude Opus / GPT high / equivalent) |
+| **Implementer** | One plan task: code, tests, narrow docs | Cheap/fast (e.g. Composer / Flash / Sonnet-class) |
+| **Integrator** | Multi-file wiring, Elmer-pattern matching, stuck debugging | Mid-tier, not cheapest |
+| **Reviewer** | Spec compliance + quality gate after a task | Mid-tier; whole-branch review → most capable |
+
+Always name the model in the chat or subagent dispatch. Omitting the model inherits the expensive session default.
+
+## Hard rules
+
+1. **Plan before bulk code.** No multi-file EMerge work without a plan under `docs/agent/plans/`.
+2. **One task per implementer.** Fresh context; do not dump the whole branch history into a cheap model.
+3. **Elmer is the template**, not a second production solver. Mirror `python/fairbeam/elmer_*.py` and experimental UI patterns; do not invent a parallel framework.
+4. Follow root `AGENTS.md` and `AI_POLICY.md` (checks, i18n, legal, Co-Authored-By).
+5. EMerge stays **opt-in experimental**; never replace openEMS as default.
+6. Numbers in docs come from runs, not from models.
