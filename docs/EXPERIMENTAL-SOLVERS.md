@@ -1,6 +1,6 @@
 # Experimental solvers
 
-openEMS is the default solver. **Elmer FEM — Experimental eigenmodes**, **Elmer FEM · Experimental antenna**, the fixed **EMerge** WR-90 waveguide fixture, and **EMerge · Experimental antenna** (bounded Design subset) are opt-in research paths with narrower geometry and result support. Installing a backend or completing a run does not establish numerical accuracy for your design.
+openEMS is the default solver. **Elmer FEM — Experimental eigenmodes**, **Elmer FEM · Experimental antenna**, the fixed **EMerge** WR-90 waveguide fixture, **EMerge · Experimental antenna** (bounded Design subset), and **EMerge FEM · Experimental planar two-port** (hairpin-class microstrip) are opt-in research paths with narrower geometry and result support. Installing a backend or completing a run does not establish numerical accuracy for your design.
 
 ## Setup in the desktop app
 
@@ -40,6 +40,30 @@ For the built-in Patch template, recorded 2026-11-04 native runs placed the EMer
 2.30 GHz (−7.427 dB coarse, −6.349 dB fine on an 11-point 2–3 GHz sweep). Fairbeam's own openEMS run
 of the same template had its S11 minimum at 2.453981250 GHz (−45.574 dB). EMerge Design does not
 claim agreement with that openEMS result. Details: [EMerge experiment](EMERGE-EXPERIMENT.md).
+
+## EMerge FEM · Experimental planar two-port
+
+When the run server reports health `emerge` ≥ 3, **Run** offers **EMerge FEM · Experimental planar
+two-port** after **EMerge · Experimental antenna**. It admits a single-layer microstrip two-port
+class: one substrate box, ground at the bottom, z-normal copper polygons (or z-flat boxes) on the
+substrate top, exactly two microstrip ports at board edges. Rejects multilayer, vias, CPW, other
+port types or counts, resistors, transforms, cuts, voids and metal at other elevations. Each
+microstrip port becomes a lumped strip-to-ground terminal at the board edge for that run only
+(`accept_lumped_terminals`); feed and measurement shifts are unused. Finite copper needs
+`approximate_metals` (PEC sheets). Enclosure is `shielded` (closed PEC box) or `open` (absorbing
+sides and top with `padding_mm`). No far field and no gain certificate; status is
+`results_exported`. Shared Results show the complete 2 × 2 S matrix next to (never instead of)
+openEMS.
+
+Resolutions are wavelength fractions at `f_max`: `coarse` = 0.25, `fine` = 0.15. Worker timeout is
+3600 s; a tetrahedra proxy refuses domains above 400000 before launch. Points 3–41.
+
+For the hairpin test fixture, recorded 2026-11-04 native EMerge 2.8.9 runs (15 points,
+0.75–1.25 GHz, sheet copper) placed best |S21| at **1.071429 GHz** (−0.63 dB shielded coarse and
+fine; −0.51 dB open coarse). Coarse→fine peak shift was 0 on that grid. Fairbeam's own openEMS GPU
+run of the same fixture (default one-port excitation) reported a non-physical |S21| > 1, so Level
+B2 does not claim S-parameter agreement with that openEMS path. Details:
+[EMerge experiment](EMERGE-EXPERIMENT.md).
 
 ## Eigenmodes of the current design
 

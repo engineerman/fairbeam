@@ -394,7 +394,8 @@ extruded conclusions change, update Shared facts and code from those Evidence-lo
   (Runs 1–6 logged)
 - [x] Any check failure or timeout → `BLOCKED` with logs. Do not change limits.
   (none; Run 6 exported clean)
-- [ ] Commit: `Record native EMerge planar two-port runs`
+- [x] Commit: `Record native EMerge planar two-port runs`
+  (`04f3113`; checkbox marked after that commit)
 
 ---
 
@@ -404,9 +405,11 @@ extruded conclusions change, update Shared facts and code from those Evidence-lo
 
 **Steps:**
 
-- [ ] Write the qualification statement for the hairpin class (e.g. passband-centre offset vs
+- [x] Write the qualification statement for the hairpin class (e.g. passband-centre offset vs
   Fairbeam openEMS and coarse→fine shift, as measured). No `results_validated`.
-- [ ] Docs: admitted subset, rejects, settings, enclosure meaning, limitations, the recorded result
+  (EMerge planar peak 1.071429 GHz; coarse→fine shift 0; openEMS default path non-physical
+  |S21|>1 — no S-parameter agreement claim. Written into `docs/EMERGE-EXPERIMENT.md`.)
+- [x] Docs: admitted subset, rejects, settings, enclosure meaning, limitations, the recorded result
   and the Fairbeam openEMS comparison. Run `npm run check:legal`, `npm run check:links`,
   `npm run check:site`.
 - [ ] Commit: `Document the experimental EMerge planar two-port subset`

@@ -1,6 +1,6 @@
 # Deneysel çözücüler
 
-Varsayılan çözücü openEMS'tir. **Elmer FEM — Deneysel özmodlar**, **Elmer FEM · Deneysel anten**, sabit **EMerge** WR-90 dalga kılavuzu fikstürü ve **EMerge · Deneysel anten** (sınırlı Tasarım alt kümesi), geometri ve sonuç desteği daha sınırlı, isteğe bağlı araştırma yollarıdır. Arka ucun kurulması veya bir çalıştırmanın tamamlanması, tasarımınızın sayısal doğruluğunu kanıtlamaz.
+Varsayılan çözücü openEMS'tir. **Elmer FEM — Deneysel özmodlar**, **Elmer FEM · Deneysel anten**, sabit **EMerge** WR-90 dalga kılavuzu fikstürü, **EMerge · Deneysel anten** (sınırlı Tasarım alt kümesi) ve **EMerge FEM · Deneysel düzlemsel iki port** (hairpin sınıfı mikroşerit), geometri ve sonuç desteği daha sınırlı, isteğe bağlı araştırma yollarıdır. Arka ucun kurulması veya bir çalıştırmanın tamamlanması, tasarımınızın sayısal doğruluğunu kanıtlamaz.
 
 ## Masaüstü uygulamasında kurulum
 
@@ -16,9 +16,9 @@ Kurulu uygulama `No module named fairbeam_elmer` bildirirse Fairbeam'i güncelle
 
 Yalnızca sabit WR-90 hava dolu dalga kılavuzu fikstürü için Simülasyon → Deneysel çözücüler içinde **EMerge** arka ucunu seçin. A düzeyi mevcut tasarımı çevirmez. `coarse` veya `fine` çözünürlüğü seçip gönderin; sonuçlar Araştırma panelinde analitik düz dalga kılavuzu referansına göre denetlenir.
 
-Windows'ta **EMerge'i kur**, PyPI'dan hash kilitli `emerge==2.8.9` ile sabitlenmiş bir Python 3.13 sanal ortamı oluşturur. Araştırma paneli, Kur düğmesinden önce EMerge'in GPL-2.0-or-later bildirimini ve Intel MKL'nin özel lisansını gösterir. 2026-11-04'te ölçülen yönetilen kurulum 1567317171 bayt (1494,7 MiB) ve 74,7 s sürdü; tekerlek indirme kümesi 461988175 bayt (yaklaşık 441 MiB) idi. Yönetilen kopyayı kullanmak için yolu boş bırakın. Girdiğiniz klasör veya `FAIRBEAM_EMERGE_PYTHON` önceliklidir. Sistem genelinde hiçbir şey kurulmaz ve EMerge Fairbeam kurucusuna gömülmez.
+Windows'ta **EMerge'i kur**, PyPI'dan hash kilitli `emerge==3.0.0b12` ile sabitlenmiş bir Python 3.13 sanal ortamı oluşturur. Araştırma paneli, Kur düğmesinden önce EMerge'in GPL-2.0-or-later bildirimini ve Intel MKL'nin özel lisansını gösterir. Kilitli indirme kümesi yaklaşık 399 MiB'tır (418619020 bayt, PyPI tekerlek boyutları 2026-11-04). `3.0.0b12` için 2026-11-04'te ölçülen yönetilen kurulum 1421133962 bayt (1355,3 MiB) ve 80,9 s sürdü. Yönetilen kopyayı kullanmak için yolu boş bırakın. Girdiğiniz klasör veya `FAIRBEAM_EMERGE_PYTHON` önceliklidir. Sistem genelinde hiçbir şey kurulmaz ve EMerge Fairbeam kurucusuna gömülmez.
 
-macOS ve Linux'ta yönetilen kurucu yoktur. `emerge==2.8.9` içeren kendi Python 3.10–3.13 ortamınızı oluşturun, ardından yol alanına o ortamın klasörünü (veya Python yürütülebilir dosyasını) girin ya da `FAIRBEAM_EMERGE_PYTHON` ayarlayın.
+macOS ve Linux'ta yönetilen kurucu yoktur. `emerge==3.0.0b12` içeren kendi Python 3.10–3.13 ortamınızı oluşturun, ardından yol alanına o ortamın klasörünü (veya Python yürütülebilir dosyasını) girin ya da `FAIRBEAM_EMERGE_PYTHON` ayarlayın.
 
 Fikstür tanımı, kabul ölçütleri ve kaydedilmiş yerel gözlemler için [EMerge deneyine](EMERGE-EXPERIMENT.md) bakın.
 
@@ -29,6 +29,14 @@ Fikstür tanımı, kabul ölçütleri ve kaydedilmiş yerel gözlemler için [EM
 Çözünürlükler `f_max`teki dalga boyu kesirleridir: `coarse` = 0,25, `fine` = 0,15. İşçi zaman aşımı 1800 saniyedir; ucuz bir hacim vekili aşırı büyük alanları başlatmadan reddeder. S11 ve Zin, openEMS'in yerine geçmeden paylaşılan Sonuçlar görünümünde yer alır.
 
 Yerleşik Patch şablonu için 2026-11-04 yerel çalıştırmalarında EMerge S11 minimumu 2,30 GHz'te kaydedildi (2–3 GHz, 11 nokta; coarse −7,427 dB, fine −6,349 dB). Aynı şablonun Fairbeam openEMS çalıştırmasında S11 minimumu 2,453981250 GHz (−45,574 dB) idi. EMerge Tasarım yolu bu openEMS sonucuyla uyum iddia etmez. Ayrıntılar: [EMerge deneyi](EMERGE-EXPERIMENT.md).
+
+## EMerge FEM · Deneysel düzlemsel iki port
+
+Çalıştırma sunucusu `emerge` ≥ 3 bildiriyorsa **Simülasyon çalıştır** penceresinde **EMerge · Deneysel anten** seçeneğinden sonra **EMerge FEM · Deneysel düzlemsel iki port** görünür. Tek katmanlı mikroşerit iki port sınıfını kabul eder: bir alttaş kutusu, altta toprak, alttaş üstünde z-normal bakır çokgenler (veya z-düz kutular), tahta kenarında tam iki mikroşerit port. Çok katman, via, CPW, diğer port türleri veya sayıları, dirençler, dönüşümler, kesiler, boşluklar ve başka yüksekliklerde metal reddedilir. Her mikroşerit port, yalnızca bu çalıştırma için tahta kenarında şeritten toprağa toplu terminale dönüşür (`accept_lumped_terminals`); besleme ve ölçüm kaymaları kullanılmaz. Sonlu bakır için `approximate_metals` (PEC levhalar) gerekir. Muhafaza `shielded` (kapalı PEC kutu) veya `open` (`padding_mm` ile soğurucu yanlar ve üst) olur. Uzak alan ve kazanç belgesi yoktur; durum `results_exported`'tur. Paylaşılan Sonuçlar, openEMS'in yerine geçmeden eksiksiz 2 × 2 S matrisini gösterir.
+
+Çözünürlükler `f_max`teki dalga boyu kesirleridir: `coarse` = 0,25, `fine` = 0,15. İşçi zaman aşımı 3600 saniyedir; tetrahedra vekili 400000 üzerini başlatmadan reddeder. Nokta sayısı 3–41.
+
+Hairpin test fikstürü için 2026-11-04 yerel EMerge 2.8.9 çalıştırmalarında (15 nokta, 0,75–1,25 GHz, levha bakır) en iyi |S21| **1,071429 GHz**'te kaydedildi (shielded coarse ve fine −0,63 dB; open coarse −0,51 dB). Bu ızgarada coarse→fine tepe kayması 0 idi. Aynı fikstürün Fairbeam openEMS GPU çalıştırması (varsayılan tek port uyarımı) fiziksel olmayan |S21| > 1 bildirdi; bu yüzden B2 düzeyi o openEMS yoluyla S parametresi uyumu iddia etmez. Ayrıntılar: [EMerge deneyi](EMERGE-EXPERIMENT.md).
 
 ## Mevcut tasarımın özmodları
 

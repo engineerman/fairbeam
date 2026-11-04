@@ -9,8 +9,11 @@ in the Fairbeam installer or installed without an explicit user action.
 **Level A** runs one fixed, lossless, air-filled WR-90 rectangular waveguide with two waveguide
 ports (no user Design). **Level B** admits a bounded Design subset (axis-aligned dielectric boxes,
 PEC sheets, one discrete port) through the Run dialog option **EMerge · Experimental antenna** and
-the `design` CLI subcommand. Both paths are opt-in experimental; Design results are exported as
-`results_exported`, never `results_validated`.
+the `design` CLI subcommand. **Level B2** admits a planar two-port microstrip class (hairpin-style:
+one substrate, ground at the bottom, z-normal copper polygons, two microstrip ports) through
+**EMerge FEM · Experimental planar two-port** and the `planar` CLI subcommand. All paths are
+opt-in experimental; Design and planar results are exported as `results_exported`, never
+`results_validated`.
 
 ## Run
 
@@ -136,6 +139,77 @@ EMerge linspace minimum sat at 2.30 GHz on both meshes (about 6.3% below the ope
 frequency); match depth was far shallower. Coarse→fine kept the same frequency bin while `|S11|`
 there rose from 0.425 to 0.481. Port model and absorbing-boundary differences are expected; results
 stay experimental exports.
+
+## Level B2: planar two-port microstrip (hairpin class)
+
+Admission (`emerge_planar.admit`) accepts exactly two `microstrip` ports (propagation in `x`/`y`,
+excitation `z`, real positive `reference_ohm`), one dielectric substrate box, ground as a metal
+z-flat box at the substrate bottom or domain-floor PEC, and metal traces that are z-normal
+`polygon`s (or z-flat boxes) on the substrate top. It rejects other port types or counts,
+resistors, lumped elements, transforms, cuts, voids, multilayer/via/CPW geometry, metal at other
+elevations, and unknown settings. Finite-conductivity copper requires explicit
+`approximate_metals` (PEC sheets). Each microstrip port becomes a lumped strip-to-ground terminal
+at the board-edge face only when the user sets `accept_lumped_terminals: true`; `feed_shift`,
+`measurement_shift` and `termination` are unused for that run. The saved Design and openEMS
+settings stay unchanged.
+
+Frozen settings: `analysis: "planar_two_port"`, `enclosure: "shielded" | "open"`, `air_height_mm`
+(> 0 above the substrate top), `padding_mm` (> 0, only with `open`), resolutions `coarse` = 0.25
+and `fine` = 0.15, band 1 MHz–100 GHz with 3–41 linspace points, optional `approximate_metals`.
+Trace model: zero-thickness PEC `XYPolygon` sheets; metal-edge mesh size 0.4 mm; `PORT_PAD_MM` =
+1.0 beyond each terminal face. Worker timeout 3600 s; refuse when the resource proxy exceeds
+400000 tetrahedra. Schema `fairbeam.emerge-planar-result/1`, status `results_exported`,
+`precision_converged: false`, `gain_qualified: false`, empty far field. Shared Results get a
+complete 2 × 2 `sparams` matrix.
+
+`shielded` leaves exterior faces to EMerge's default PEC box (closed cavity above the board).
+`open` places second-order absorbing boundaries on the four sides and the top, with `padding_mm`
+on those faces. The substrate bottom is always PEC.
+
+```powershell
+# after emerge_planar.admit → case.json
+python python/fairbeam_emerge.py --root $env:LOCALAPPDATA\org.fairbeam.desktop\emerge\3.0.0b12 planar --experimental --case case.json --out E:/research/hairpin-coarse
+```
+
+In the app, open **Run**, choose **EMerge FEM · Experimental planar two-port** (shown when health
+`emerge` ≥ 3), accept the lumped terminals, pick enclosure and band, and submit. openEMS remains
+available in the same dialog; `emerge-planar` sits after `emerge-driven`.
+
+### Hairpin class — recorded native observations (2026-11-04)
+
+Test fixture `python/tests/fixtures/emerge_hairpin.design.json` (50.828 × 58 mm FR4-like
+substrate 1.6 mm, εr 4.34, tanδ 0.0026 at 0.95 GHz, five copper polygons, two microstrip ports).
+Managed EMerge **2.8.9** on Windows (recorded 2026-11-04, before the 3.0.0b12 pin), sheet copper,
+`approximate_metals`, `air_height_mm=6.4`, band 0.75–1.25 GHz × 15 points unless noted:
+
+| Run | Enclosure / resolution | Nodes / tets | Solver elapsed | Best \|S21\| | S21 / S11 there |
+|---|---|---|---|---|---|
+| CLI planar | shielded coarse | 19147 / 109584 | 971.7 s | 1.071429 GHz | −0.63 dB / −30.45 dB |
+| CLI planar | shielded fine | 19164 / 109714 | 1054 s | 1.071429 GHz | −0.63 dB / −31.27 dB |
+| CLI planar | open coarse (`padding_mm=10`) | 19441 / 111586 | 1055 s | 1.071429 GHz | −0.51 dB / −34.20 dB |
+| CLI / Run dialog | shielded coarse, short 5 pts 0.95–1.15 GHz | 19194 / 109920 | 320–338 s | 1.050 GHz | −0.82 dB / −19.55 dB |
+
+All four EMerge runs reported `results_exported`. Full-band coarse→fine kept the same best-|S21|
+frequency bin (1.071429 GHz) and the same −0.63 dB peak; mesh size was dominated by the metal-edge
+setting (~110k tets). Open enclosure kept that peak frequency and lowered insertion loss slightly
+(−0.51 dB). Reciprocity max |S21 − S12| stayed ≤ 4.2e−5; column power stayed ≤ 0.999.
+
+Same fixture through Fairbeam's normal openEMS Run path (`fairbeam run --engine gpu --threads
+auto`, design default mesh/band): `sparams.complete=false` (excited port 1 only; Design port 2 has
+`excite: false`), best |S21| **1.025625 GHz** at **+5.07 dB** (non-physical; reported column power
+max 3.40), S11 there **−7.27 dB**; Fairbeam band note min S11 **−13.4 dB** at **1.024 GHz**;
+`mesh.total_cells=145152`, solver 107.4 s, converged.
+
+### Hairpin qualification statement
+
+Level B2 does **not** claim S-parameter agreement between EMerge planar and Fairbeam openEMS for
+this fixture. The openEMS default path above is not a qualified two-port control (|S21| > 1,
+incomplete matrix). Among EMerge planar runs alone: passband centre on the 15-point shielded
+linspace is **1.071429 GHz**; coarse→fine peak shift is **0** on that grid; open vs shielded
+peak-frequency shift is also **0**, with open ~0.12 dB lower insertion loss at the peak. Results
+stay experimental exports (`results_exported` only). Port model (lumped strip-to-ground at the
+board edge) and enclosure choice are expected to move magnitudes relative to a microstrip modal
+port with feed/measurement planes.
 
 ## License and distribution
 
