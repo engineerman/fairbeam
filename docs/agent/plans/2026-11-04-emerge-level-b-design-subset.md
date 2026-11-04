@@ -98,10 +98,10 @@ Copy this block verbatim into implementer and reviewer prompts.
   recorded), or isotropic dielectric with `eps_r`, `mu_r`, `tan_d`, `tan_d_freq` (same allowed key
   set as Elmer). At least one dielectric box and one PEC sheet. Overlapping dielectric boxes are
   rejected.
-- **Planner decision (human to confirm):** a nonzero `tan_d` is admitted as EMerge's constant loss
-  tangent and recorded as a limitation ("constant loss tangent; Elmer maps tan_d to a conductivity
-  at tan_d_freq"). `tan_d_freq` stays required when `tan_d > 0`, as in Elmer. Rejecting loss would
-  reject the built-in Patch reference design.
+- A nonzero `tan_d` is admitted as EMerge's constant loss tangent and recorded as a limitation
+  ("constant loss tangent; Elmer maps tan_d to a conductivity at tan_d_freq"). `tan_d_freq` stays
+  required when `tan_d > 0`, as in Elmer. Rejecting loss would reject the built-in Patch reference
+  design. Frozen with Task 6.
 - Outer boundary: air box = bounding box of all parts and the feed, plus `padding_mm` on every side,
   with `AbsorbingBoundary` on all six faces. No PML.
 
@@ -110,17 +110,28 @@ Copy this block verbatim into implementer and reviewer prompts.
 `resolution: "coarse" | "fine"`, `f_min_hz`, `f_max_hz` (1 MHz–100 GHz, `f_min < f_max`),
 `points` (int 3–21, linspace, exact values passed with `set_frequency(list)`),
 `approximate_metals` (bool, default false). Resolutions are wavelength fractions at `f_max`,
-**provisional** `coarse` = 0.25, `fine` = 0.15 (fine is limited by mesh size; Task 5 may tighten,
-the Planner freezes).
+**frozen** `coarse` = 0.25, `fine` = 0.15 (Task 5 Patch meshes 1975 / 5245 tets; not tightened).
 
-**Resource limits (provisional, frozen after Task 5):** worker timeout 1800 s for the whole sweep;
-reject before launch if `(air-box volume) / (lambda_min * resolution)^3 > 200000` (a cheap
-tetrahedron-count proxy, not a mesh measurement). The worker records the real node and tetrahedron
-counts.
+**Resource limits (frozen Task 5):** worker timeout 1800 s for the whole sweep; reject before
+launch if `(air-box volume) / (lambda_min * resolution)^3 > 200000` (a cheap tetrahedron-count
+proxy, not a mesh measurement). The worker records the real node and tetrahedron counts. Task 5
+Design walls were ~18–19 s with a warm Numba cache; 1800 s keeps headroom for cold JIT.
 
 **Reference design class:** the built-in `Patch` template, `blank_design("p", "Patch")` (2.45 GHz
 patch on `eps_r` 3.38, `tan_d` 0.0027, the same design `test_elmer_driven.py` uses). Level B claims
 one documented design class only: this template and small edits of its dimensions.
+
+**Loss (frozen):** nonzero `tan_d` is admitted as EMerge's constant loss tangent and recorded as a
+limitation. `tan_d_freq` stays required when `tan_d > 0`.
+
+**Patch class qualification (Task 5 evidence only; no `results_validated` for Design):** Design
+runs stay `results_exported`. They do **not** claim S11 agreement with Fairbeam's openEMS run of
+the same template. Recorded under `feed_width_mm=1`, `padding_mm=40`, 2.0–3.0 GHz × 11 points:
+openEMS S11 minimum **2.453981250 GHz** at **−45.574 dB**; EMerge coarse and fine both place their
+linspace S11 minimum at **2.30 GHz** (**−7.427 dB** coarse, **−6.349 dB** fine). Coarse→fine kept
+the same frequency bin; `|S11|` at that bin rose from 0.425 to 0.481. Relative frequency offset of
+the EMerge bin vs openEMS minimum is about **−6.3%**. Open gaps: no padding pair; 11-point sweep
+may miss a finer resonance; port/ABC model mismatch expected (see Risks).
 
 **Result schema** `fairbeam.emerge-driven-result/1`:
 `{schema, status: "results_exported", frequency_hz, s11_re, s11_im, z_ref, settings, mesh: {nodes,
@@ -313,11 +324,11 @@ the Elmer components.
 
 **Steps:**
 
-- [ ] Freeze resolutions, the resource proxy and the timeout from Task 5.
-- [ ] Decide the documented qualification statement for the Patch class (for example: EMerge fine
+- [x] Freeze resolutions, the resource proxy and the timeout from Task 5.
+- [x] Decide the documented qualification statement for the Patch class (for example: EMerge fine
   S11 minimum within a stated percentage of the openEMS minimum, and coarse→fine shift). Numbers
   from Task 5 only. Record it in Shared facts. No automatic `results_validated` is added.
-- [ ] Commit: `Freeze EMerge Design limits from recorded runs`
+- [x] Commit: `Freeze EMerge Design limits from recorded runs`
 
 ---
 
@@ -359,7 +370,8 @@ the Elmer components.
   limit exists to refuse before a long run. Cold numba JIT added about 150 s in Level A.
 - **Shared viewer and empty far field:** if the Results view requires a pattern, Task 3 is
   `BLOCKED` and the Planner decides (far field moves into scope, or a results-only view).
-- **Loss decision:** admitting constant `tan_d` is a Planner decision pending human confirmation.
+- **Loss decision:** constant `tan_d` admitted and frozen after Task 5 (required for the Patch
+  template).
 - **Admission drift from Elmer:** rules are re-implemented, not shared, to keep Elmer files
   untouched; the parity test is the guard. Extracting a shared admission module is a later,
   separate refactor with its own review.

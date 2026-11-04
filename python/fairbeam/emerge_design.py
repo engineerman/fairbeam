@@ -14,8 +14,8 @@ from .model import resolve_params
 
 C0 = 299792458.0
 PHASOR_CONVENTION = "exp(+i omega t)"
-RESOLUTIONS = {"coarse": 0.25, "fine": 0.15}  # wavelength fractions at f_max (provisional)
-MAX_RESOURCE_CELLS = 200000  # provisional proxy limit
+RESOLUTIONS = {"coarse": 0.25, "fine": 0.15}  # wavelength fractions at f_max (frozen Task 5)
+MAX_RESOURCE_CELLS = 200000  # tetrahedron-count proxy (frozen Task 5)
 _REQUIRED = ("analysis", "accept_finite_feed", "feed_width_mm", "padding_mm", "resolution",
              "f_min_hz", "f_max_hz", "points")
 _ALLOWED = frozenset(_REQUIRED) | {"approximate_metals"}

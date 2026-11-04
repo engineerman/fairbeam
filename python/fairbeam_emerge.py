@@ -42,7 +42,7 @@ DESIGN_MANIFEST_SCHEMA = "fairbeam-emerge-design-1"
 S11_ABS_MAX = 1.01  # same bound as Elmer driven
 WORKER = Path(__file__).resolve().with_name("fairbeam_emerge_worker.py")
 WORKER_TIMEOUT_S = 600
-DESIGN_WORKER_TIMEOUT_S = 1800  # Shared facts; provisional until Task 5 freezes
+DESIGN_WORKER_TIMEOUT_S = 1800  # Design sweep timeout (frozen Task 5; Level A waveguide stays 600 s)
 LIMITATIONS = [
     "Fixed WR-90 straight air-filled waveguide fixture only; no user design is translated.",
     "Reference planes are the port faces; ideal PEC walls, lossless fill, single-mode band.",
