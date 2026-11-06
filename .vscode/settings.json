@@ -3,9 +3,9 @@
     "statusbar_command.commands": [
         {
             "text": "$(debug-restart) Serve",
-            "tooltip": "Restart fairbeam serve (5320)",
+            "tooltip": "Restart Vite (5310) + fairbeam serve (5320) and open the app",
             "id": "fairbeam-restart-serve",
-            "name": "Restart fairbeam serve",
+            "name": "Restart Fairbeam app (Vite + API)",
             "alignment": "right",
             "priority": 100,
             "command": "workbench.action.tasks.runTask",

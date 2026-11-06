@@ -8,7 +8,7 @@
   --al-chart-line-weight: 2;
   color-scheme: light;
 
-  /* ---------- Copper (the only accent) ---------- */
+  /* ---------- Copper (the brand accent) ---------- */
   --al-copper-50:  #fbf4ee;
   --al-copper-100: #f5e3d2;
   --al-copper-200: #eac4a3;
@@ -19,6 +19,12 @@
   --al-copper-700: #7e431f;   /* accent text on light: 7.6:1 */
   --al-copper-800: #62351b;
   --al-copper-900: #4a2915;
+
+  /* ---------- EMerge experimental Run accent (not brand; chrome cue only) ---------- */
+  --al-emerge-400: #e07aab;
+  --al-emerge-500: #d44a8a;
+  --al-emerge-600: #b83270;   /* EMerge Run on light: white text */
+  --al-emerge-700: #96285c;
 
   /* ---------- Neutrals (warm paper / graphite) ---------- */
   --al-paper-0:   #ffffff;
@@ -57,6 +63,9 @@
   --al-action:        var(--al-copper-600);
   --al-action-hover:  var(--al-copper-700);
   --al-action-text:   #ffffff;
+  --al-action-emerge:       var(--al-emerge-600);
+  --al-action-emerge-hover: var(--al-emerge-700);
+  --al-action-emerge-text:  #ffffff;
   --al-accent-text:   var(--al-copper-700);
   --al-accent-soft:   var(--al-copper-50);
   --al-accent-line:   var(--al-copper-400);
@@ -200,6 +209,9 @@
     --al-action:        var(--al-copper-400);
     --al-action-hover:  var(--al-copper-300);
     --al-action-text:   #1a1917;
+    --al-action-emerge:       var(--al-emerge-400);
+    --al-action-emerge-hover: var(--al-emerge-500);
+    --al-action-emerge-text:  #1a1917;
     --al-accent-text:   var(--al-copper-300);
     --al-accent-soft:   #2c2119;
     --al-accent-line:   var(--al-copper-500);
@@ -265,6 +277,9 @@
   --al-action:        var(--al-copper-400);
   --al-action-hover:  var(--al-copper-300);
   --al-action-text:   #1a1917;
+  --al-action-emerge:       var(--al-emerge-400);
+  --al-action-emerge-hover: var(--al-emerge-500);
+  --al-action-emerge-text:  #1a1917;
   --al-accent-text:   var(--al-copper-300);
   --al-accent-soft:   #2c2119;
   --al-accent-line:   var(--al-copper-500);

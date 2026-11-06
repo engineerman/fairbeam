@@ -417,6 +417,23 @@ export interface Bundle {
   half_space: { axis: "z"; side: "min"; position: number; kind: string } | null;
   mesh: {
     x: number[]; y: number[]; z: number[]; cells: Vec3; total_cells: number; min_cell: number; max_cell: number;
+    /** EMerge FEM counts (experimental); FDTD line stats still use x/y/z stubs for domain size. */
+    nodes?: number;
+    tetrahedra?: number;
+    /** Exterior surface wireframe for Mesh view under EMerge — never drawn as FDTD planes. */
+    fem?: {
+      nodes: number;
+      tetrahedra: number;
+      surface: {
+        schema?: string;
+        units: "mm";
+        nodes_mm: number[][];
+        edges: number[][];
+        thinned?: boolean;
+        edge_stride?: number;
+        edge_count?: number;
+      };
+    };
     /** automatic mesh settings and report (Simulation.auto_mesh; docs/MESHING.md) */
     auto?: {
       settings: Record<string, number | string | boolean | null>;

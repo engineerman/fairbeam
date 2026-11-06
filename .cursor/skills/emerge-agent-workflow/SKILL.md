@@ -24,6 +24,8 @@ Any non-trivial work on the EMerge experimental backend in this fork: fixture MV
 2. **If no plan or plan is stale:** switch to / stay on a **Planner**-tier model. Produce or update a plan using `docs/agent/prompts/planner.md` and the template in `docs/agent/plans/TEMPLATE.md`. Save as `docs/agent/plans/YYYY-MM-DD-emerge-<slug>.md`.
 3. **Execute tasks** with **Implementer**-tier models, one task at a time, using `docs/agent/prompts/implementer.md`. Prefer the Elmer file map in `references/elmer-touchpoints.md`.
 4. After each task: run the checks listed in that task; then a **Reviewer** pass with `docs/agent/prompts/reviewer.md`.
+   On this Windows machine, use `.cursor/rules/windows-local-python.mdc` (repo `.venv` +
+   `OPENEMS_INSTALL_PATH`); do not search for openEMS/EMerge installs.
 5. Mark checkboxes in the plan file. Commit on the topic branch with `Co-Authored-By:` naming the model (`AI_POLICY.md`).
 6. Stop and escalate to the human (or Planner) on BLOCKED, license doubt, or physics/validation ambiguity.
 

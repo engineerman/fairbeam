@@ -2,6 +2,10 @@
 // (fairbeam-releases/latest.json, signed with the fairbeam updater key) whether a newer app exists.
 // If so, offer it in a native dialog; on yes, stop the server, install, restart.
 // Every check leaves one line in shell.log (skipped, up to date, offered and the answer, failed).
+//
+// Temporary (engineerman fork): do not check or install from ismailakdag/fairbeam-releases.
+// An upstream update would replace this tree's opt-in EMerge path. Re-enable when this fork has its
+// own feed and signing key (set FORK_UPDATER_DISABLED to false and restore endpoints).
 
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,6 +17,10 @@ use tauri_plugin_updater::UpdaterExt;
 
 use crate::shelllog;
 use crate::update_progress::{self as progress, Phase};
+
+/// When true, startup and Help › Check for updates never hit the upstream release feed
+/// (engineerman fork until a fork-owned updater endpoint exists).
+const FORK_UPDATER_DISABLED: bool = true;
 
 static CHECKING: AtomicBool = AtomicBool::new(false);
 
@@ -36,6 +44,13 @@ impl Drop for CheckGuard {
 }
 
 pub fn check_later(app: AppHandle) {
+    if FORK_UPDATER_DISABLED {
+        shelllog::write(
+            &app,
+            "update check: skipped (FORK_UPDATER_DISABLED; engineerman fork must not use upstream feed)",
+        );
+        return;
+    }
     if INSTALL_FAILED.load(Ordering::Acquire) {
         shelllog::write(&app, "update check: skipped (an install failed in this session)");
         return;
@@ -71,6 +86,17 @@ pub async fn check_now(app: AppHandle, show_result: bool) -> CheckResult {
     }
     if cfg!(debug_assertions) {
         let result = CheckResult::PreviewBlocked;
+        if show_result {
+            show_result_dialog(&app, &result);
+        }
+        return result;
+    }
+    if FORK_UPDATER_DISABLED {
+        shelllog::write(
+            &app,
+            "update check: skipped (FORK_UPDATER_DISABLED; engineerman fork must not use upstream feed)",
+        );
+        let result = CheckResult::Disabled;
         if show_result {
             show_result_dialog(&app, &result);
         }

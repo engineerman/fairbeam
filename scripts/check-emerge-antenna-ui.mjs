@@ -1,4 +1,4 @@
-// Synthetic UI contract for the experimental EMerge Design Run option. No solver run.
+// Synthetic UI contract for the unified EMerge FEM · Experimental Run option (driven-like). No solver run.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import puppeteer from "puppeteer-core";
@@ -59,38 +59,41 @@ try {
     await s.fill(await s.field(await s.T("home.newProject.name")), `EMerge UI ${lang}`, { blur: false });
     await s.click("home.newProject.create"); await s.wait(".rb");
     await s.click("ribbon.tab.sim", { sel: ".rb-tab" });
-    await s.click("ribbon.sim.run", { sel: ".rb-btn" });
+    // Run chrome shows the active engine name (default openEMS), not ribbon.sim.run.
+    await s.click("ribbon.sim.runEngine", { sel: ".rb-btn", params: { engine: "openEMS" } });
     await s.wait(".rd-dialog");
-    // emerge: 1 must hide the Design option (fixture-only health).
+    // Unified gate is health.emerge >= 3 (legacy dual options removed).
+    assert.equal(await page.$$eval('.rd-solver select option[value="emerge"]', rows => rows.length), 0,
+      "emerge hidden when health.emerge < 3");
     assert.equal(await page.$$eval('.rd-solver select option[value="emerge-driven"]', rows => rows.length), 0,
-      "emerge-driven hidden when health.emerge < 2");
+      "legacy emerge-driven removed");
 
-    healthEmerge = 2;
+    healthEmerge = 3;
     await page.evaluate(async () => {
       const { probeServer } = await import("/src/runner/store.ts");
       await probeServer();
     });
-    await page.waitForFunction(() => document.querySelector('.rd-solver select option[value="emerge-driven"]'));
-    await page.select(".rd-solver select", "emerge-driven");
-    await s.wait('[data-testid="emerge-antenna-form"]');
+    await page.waitForFunction(() => document.querySelector('.rd-solver select option[value="emerge"]'));
+    await page.select(".rd-solver select", "emerge");
+    await s.wait('[data-testid="emerge-run-form"]');
     assert.equal(await page.$("#rd-form"), null, "FDTD controls unmounted for EMerge");
-    assert.ok(await page.$eval('[data-testid="emerge-antenna-form"] button[type=submit]', e => e.disabled),
+    assert.ok(await page.$eval('[data-testid="emerge-run-form"] button[type=submit]', e => e.disabled),
       "acceptance required before submit");
 
-    for (const [key, val] of Object.entries({ f_min_hz: "2.0", f_max_hz: "3.0", points: "5", padding_mm: "40", feed_width_mm: "1" })) {
-      await s.fill(await s.field(await s.T(`emergeAntenna.${key}`)), val);
+    for (const [key, val] of Object.entries({ f_min_hz: "2.0", f_max_hz: "3.0", points: "5", padding_mm: "40", feed_width_mm: "1", air_height_mm: "6.4" })) {
+      await s.fill(await s.field(await s.T(`emergeExp.${key}`)), val);
     }
-    await page.select('[data-testid="emerge-antenna-resolution"]', "fine");
-    assert.ok(await page.$eval('[data-testid="emerge-antenna-form"] button[type=submit]', e => e.disabled),
+    await page.select('[data-testid="emerge-run-resolution"]', "fine");
+    assert.ok(await page.$eval('[data-testid="emerge-run-form"] button[type=submit]', e => e.disabled),
       "still disabled without finite-feed acceptance");
-    await page.click('[data-testid="emerge-antenna-accept"]');
-    assert.equal(await page.$eval('[data-testid="emerge-antenna-form"] button[type=submit]', e => e.disabled), false);
+    await page.click('[data-testid="emerge-run-accept-finite"]');
+    assert.equal(await page.$eval('[data-testid="emerge-run-form"] button[type=submit]', e => e.disabled), false);
     await page.screenshot({ path: `.impeccable/review/emerge-antenna-${lang}.png` });
 
-    await page.click('[data-testid="emerge-antenna-form"] button[type=submit]');
-    await page.waitForFunction(() => document.querySelector('[data-testid="emerge-antenna-form"] [role=alert]')?.textContent.includes("Synthetic unsupported Design"));
+    await page.click('[data-testid="emerge-run-form"] button[type=submit]');
+    await page.waitForFunction(() => document.querySelector('[data-testid="emerge-run-form"] [role=alert]')?.textContent.includes("Synthetic unsupported Design"));
     assert.equal(submitted.backend, "emerge");
-    assert.equal(submitted.settings.analysis, "driven");
+    assert.equal(submitted.settings.analysis, "emerge_nport");
     assert.equal(submitted.settings.accept_finite_feed, true);
     assert.equal(submitted.settings.resolution, "fine");
     assert.equal(submitted.settings.approximate_metals, false);
@@ -137,7 +140,7 @@ try {
     assert.ok(await page.$(".research-results .status-warn"), "uncertified result warning");
     await context.close();
   }
-  console.log("PASS: EN/TR EMerge Design option health gate, acceptance, submit body, synthetic result label.");
+  console.log("PASS: EN/TR unified EMerge option health gate, acceptance, submit body, synthetic result label.");
 } finally {
   await browser?.close();
   await stack.stop();

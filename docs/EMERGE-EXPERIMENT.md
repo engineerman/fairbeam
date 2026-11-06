@@ -4,16 +4,40 @@ Fairbeam includes a separate, opt-in `fairbeam-emerge` research command. It disc
 EMerge Python environment. Only a worker process started inside that environment imports EMerge;
 the Fairbeam process does not import `emerge`, `gmsh` or `emsutil`. Normal Fairbeam projects,
 runtime setup and the default openEMS simulation path are unchanged. No EMerge wheels are bundled
-in the Fairbeam installer or installed without an explicit user action.
+in the Fairbeam installer or installed without an explicit user action. The desktop bundle still
+ships Fairbeam's standalone adapters `fairbeam_emerge.py` and `fairbeam_emerge_worker.py` and
+copies them into the managed Python app directory on runtime install/update (same pattern as
+`fairbeam_elmer.py`). If an installed app reports `No module named fairbeam_emerge`, update or
+repair Fairbeam; reinstalling the EMerge environment alone does not repair the missing adapter.
 
 **Level A** runs one fixed, lossless, air-filled WR-90 rectangular waveguide with two waveguide
-ports (no user Design). **Level B** admits a bounded Design subset (axis-aligned dielectric boxes,
-PEC sheets, one discrete port) through the Run dialog option **EMerge · Experimental antenna** and
-the `design` CLI subcommand. **Level B2** admits a planar two-port microstrip class (hairpin-style:
-one substrate, ground at the bottom, z-normal copper polygons, two microstrip ports) through
-**EMerge FEM · Experimental planar two-port** and the `planar` CLI subcommand. All paths are
-opt-in experimental; Design and planar results are exported as `results_exported`, never
+ports (no user Design). **Level B3** is the Design Run path: one option
+**EMerge FEM · Experimental** (`analysis: "emerge_nport"`, health `emerge` ≥ 3) admits **1…8**
+ports of one type under today’s bounded geometry recipes — driven/lumped (Level B class) or
+planar microstrip/Discrete (Level B2 class) — and exports a full experimental N×N S-matrix
+(`fairbeam.emerge-result/2`). Geometry remains bounded (no multilayer, vias, curves, or silent
+coercion). The `design` and `planar` CLI subcommands still target those recipes. Historical
+Level B / B2 sections below keep the earlier one-port / two-port measurements and qualification
+notes. All Design paths are opt-in experimental; results are `results_exported`, never
 `results_validated`.
+
+## Port mapping (Stage A)
+
+Experimental openEMS-shaped Design ports are mapped to EMerge boundary conditions in
+`fairbeam.emerge_port_map` (`resolve`). Policy source:
+[docs/agent/specs/2026-11-05-emerge-openems-port-mapping-design.md](agent/specs/2026-11-05-emerge-openems-port-mapping-design.md).
+Stage A consolidates Level B lumped → `LumpedPort`, Level B2 microstrip → lumped
+strip-to-ground `LumpedPort`, and Level A fixture `RectangularWaveguide` maps into that matrix
+without Design waveguide admit, coax, or modal planar ports. Admission still rejects unsupported
+types; approximate maps keep the existing `accept_*` gates. Provenance
+(`design_port_type`, `mapped_bc`, `approximations`, `accept_used`) is recorded on the case and on
+experimental results / bundles. On the planar path, homogeneous Discrete/`lumped` ports also map to
+`LumpedPort` behind `accept_finite_feed` (same board-edge plate geometry as microstrip terminals;
+all ports must share one type—mixed Discrete and microstrip is rejected). The unified Run dialog
+preview and accept checkboxes follow the classified path and draft port types. Deferred follow-ons
+(Stage B coax, Design waveguide, Stage C modal):
+[docs/agent/BACKLOG-emerge-port-map.md](agent/BACKLOG-emerge-port-map.md). Level B3 superseded the
+backlog item that auto-suggested antenna vs planar Run options.
 
 ## Run
 
@@ -94,30 +118,45 @@ Raw worker inputs (`case.json`), `raw.json`, `result.json`, `manifest.json` and 
 in each run directory. Manifests record the worker and Python SHA-256 hashes. Fixture results are
 separate research files; Design runs also write a shared Results bundle (S11 / Zin, empty far field).
 
+## Level B3: unified N-port Run (Design path)
+
+In the app, open **Run**, choose **EMerge FEM · Experimental** (shown when health `emerge` ≥ 3),
+set the band and resolution, accept the approximates required by the draft ports, and submit.
+`backend` is `"emerge"` and `analysis` is `"emerge_nport"`. The server classifies the Design into
+`geometry_kind` `driven_lumped` or `planar_microstrip` (or rejects with the failed class checks).
+Port count may be **1…8** (`N_MAX`); ports must be contiguous `1…N` and all the same allowed type
+for that class. Shared Results get a complete N×N experimental `sparams` matrix
+(`fairbeam.emerge-result/2`). openEMS remains available in the same dialog. The historical Level B
+and B2 subsections below document the geometry recipes and recorded native numbers; they are not
+separate Run brands anymore.
+
 ## Level B: bounded Design subset (driven discrete port)
 
 Admission mirrors Elmer's driven rules for the same geometry class: axis-aligned dielectric boxes
-and PEC sheets, exactly one lumped (Discrete) port, no resistors / lumped elements / transforms /
-cuts / voids, no overlapping dielectrics. An ideal line feed is widened only with explicit
-`accept_finite_feed` and `feed_width_mm`. Finite-conductivity metals require explicit
-`approximate_metals`. Nonzero `tan_d` is admitted as EMerge's constant loss tangent (recorded as a
-limitation). The air box is the parts+feed bounding box plus `padding_mm` on every side, with
+and metal sheets, **1…8** lumped (Discrete) ports numbered contiguously `1…N`, no resistors /
+lumped elements / transforms / cuts / voids, no overlapping dielectrics. An ideal line feed is
+widened only with explicit `accept_finite_feed` and `feed_width_mm`. Metal sheets with positive
+`conductivity` use EMerge `ThinConductor` (σ and sheet `thickness`, default 0.035 mm); empty
+conductivity stays PEC. Optional `approximate_metals` forces PEC for that run only. Nonzero
+`tan_d` is admitted as EMerge's constant loss tangent (recorded as a limitation). Surface roughness
+is not modelled. The air box is the parts+feed bounding box plus `padding_mm` on every side, with
 second-order absorbing boundaries on all six faces (not PML). Unsupported geometry raises
 `ValueError`; nothing is dropped silently.
 
-Frozen settings (Task 5 / Task 6): resolutions `coarse` = 0.25 and `fine` = 0.15 (wavelength
-fraction at `f_max`); worker timeout 1800 s; refuse before launch when the air-box volume proxy
-exceeds 200000. Sweep: `f_min_hz`…`f_max_hz`, 3–21 linspace points. Schema
-`fairbeam.emerge-driven-result/1`, status `results_exported`, `precision_converged: false`,
-`gain_qualified: false`, no far field.
+Frozen settings (Task 5 / Task 6; B3 still uses them for the driven class): resolutions
+`coarse` = 0.25 and `fine` = 0.15 (wavelength fraction at `f_max`); worker timeout 1800 s; refuse
+before launch when the air-box volume proxy exceeds 200000. Sweep: `f_min_hz`…`f_max_hz`, 3–41
+linspace points on the unified form (driven class historically used 3–21). Schema is
+`fairbeam.emerge-result/2` with `geometry_kind: "driven_lumped"` only. Status
+`results_exported`, `precision_converged: false`, `gain_qualified: false`, no far field.
 
 ```powershell
 # after emerge_design.admit → case.json
 python python/fairbeam_emerge.py --root $env:LOCALAPPDATA\org.fairbeam.desktop\emerge\3.0.0b12 design --experimental --case case.json --out E:/research/patch-coarse
 ```
 
-In the app, open **Run**, choose **EMerge · Experimental antenna** (shown when health `emerge` ≥ 2),
-accept the finite feed, and submit. openEMS remains available in the same dialog.
+Use **EMerge FEM · Experimental** (Level B3/B4). CLI `design` still accepts a driven-class
+case.json.
 
 ### Patch class — recorded native observations (2026-11-04)
 
@@ -140,27 +179,31 @@ frequency); match depth was far shallower. Coarse→fine kept the same frequency
 there rose from 0.425 to 0.481. Port model and absorbing-boundary differences are expected; results
 stay experimental exports.
 
-## Level B2: planar two-port microstrip (hairpin class)
+## Level B2: planar microstrip (hairpin class)
 
-Admission (`emerge_planar.admit`) accepts exactly two `microstrip` ports (propagation in `x`/`y`,
-excitation `z`, real positive `reference_ohm`), one dielectric substrate box, ground as a metal
-z-flat box at the substrate bottom or domain-floor PEC, and metal traces that are z-normal
-`polygon`s (or z-flat boxes) on the substrate top. It rejects other port types or counts,
-resistors, lumped elements, transforms, cuts, voids, multilayer/via/CPW geometry, metal at other
-elevations, and unknown settings. Finite-conductivity copper requires explicit
-`approximate_metals` (PEC sheets). Each microstrip port becomes a lumped strip-to-ground terminal
-at the board-edge face only when the user sets `accept_lumped_terminals: true`; `feed_shift`,
-`measurement_shift` and `termination` are unused for that run. The saved Design and openEMS
-settings stay unchanged.
+Admission (`emerge_planar.admit`) accepts **1…8** ports numbered contiguously `1…N`, either all
+`microstrip` (propagation in `x`/`y`, excitation `z`, real positive `reference_ohm`) or all
+Discrete/`lumped`, one dielectric substrate box, ground as a metal z-flat box at the substrate
+bottom or domain-floor PEC, and metal traces that are z-normal `polygon`s (or z-flat boxes) on the
+substrate top. It rejects mixed port types, other port types, `N > 8`, resistors, lumped elements,
+transforms, cuts, voids, multilayer/via/CPW geometry, metal at other elevations, and unknown
+settings. Trace metals with positive `conductivity` use EMerge `ThinConductor` (σ and sheet
+thickness); empty conductivity stays PEC. Optional `approximate_metals` forces PEC traces for that
+run. The substrate-bottom ground remains PEC. Each microstrip port becomes a lumped
+strip-to-ground terminal at the board-edge face only when the user sets
+`accept_lumped_terminals: true`; each Discrete port uses the same board-edge plate under
+`accept_finite_feed: true`. `feed_shift`, `measurement_shift` and `termination` are unused for that
+run. The saved Design and openEMS materials stay unchanged.
 
-Frozen settings: `analysis: "planar_two_port"`, `enclosure: "shielded" | "open"`, `air_height_mm`
-(> 0 above the substrate top), `padding_mm` (> 0, only with `open`), resolutions `coarse` = 0.25
-and `fine` = 0.15, band 1 MHz–100 GHz with 3–41 linspace points, optional `approximate_metals`.
-Trace model: zero-thickness PEC `XYPolygon` sheets; metal-edge mesh size 0.4 mm; `PORT_PAD_MM` =
-1.0 beyond each terminal face. Worker timeout 3600 s; refuse when the resource proxy exceeds
-400000 tetrahedra. Schema `fairbeam.emerge-planar-result/1`, status `results_exported`,
-`precision_converged: false`, `gain_qualified: false`, empty far field. Shared Results get a
-complete 2 × 2 `sparams` matrix.
+Frozen settings on the unified path: `analysis: "emerge_nport"` with
+`geometry_kind: "planar_microstrip"`,
+`enclosure: "shielded" | "open"`, `air_height_mm` (> 0 above the substrate top), `padding_mm`
+(> 0, only with `open`), resolutions `coarse` = 0.25 and `fine` = 0.15, band 1 MHz–100 GHz with
+3–41 linspace points, optional `approximate_metals`. Trace model: zero-thickness `XYPolygon`
+sheets (`ThinConductor` or PEC); metal-edge mesh size 0.4 mm; `PORT_PAD_MM` = 1.0 beyond each
+terminal face. Worker timeout 3600 s; refuse when the resource proxy exceeds 400000 tetrahedra.
+Schema is `fairbeam.emerge-result/2` only. Status `results_exported`, `precision_converged: false`,
+`gain_qualified: false`, empty far field. Shared Results get a complete N×N `sparams` matrix.
 
 `shielded` leaves exterior faces to EMerge's default PEC box (closed cavity above the board).
 `open` places second-order absorbing boundaries on the four sides and the top, with `padding_mm`
@@ -171,16 +214,18 @@ on those faces. The substrate bottom is always PEC.
 python python/fairbeam_emerge.py --root $env:LOCALAPPDATA\org.fairbeam.desktop\emerge\3.0.0b12 planar --experimental --case case.json --out E:/research/hairpin-coarse
 ```
 
-In the app, open **Run**, choose **EMerge FEM · Experimental planar two-port** (shown when health
-`emerge` ≥ 3), accept the lumped terminals, pick enclosure and band, and submit. openEMS remains
-available in the same dialog; `emerge-planar` sits after `emerge-driven`.
+Prefer the unified **EMerge FEM · Experimental** Run entry (Level B3); enclosure, air height and
+padding appear when the Design classifies as planar. The older **EMerge FEM · Experimental planar
+two-port** label is retired from the selector; CLI `planar` still accepts a planar case.json.
+Recorded hairpin numbers below remain from the historical two-port runs.
 
 ### Hairpin class — recorded native observations (2026-11-04)
 
 Test fixture `python/tests/fixtures/emerge_hairpin.design.json` (50.828 × 58 mm FR4-like
 substrate 1.6 mm, εr 4.34, tanδ 0.0026 at 0.95 GHz, five copper polygons, two microstrip ports).
-Managed EMerge **2.8.9** on Windows (recorded 2026-11-04, before the 3.0.0b12 pin), sheet copper,
-`approximate_metals`, `air_height_mm=6.4`, band 0.75–1.25 GHz × 15 points unless noted:
+Managed EMerge **2.8.9** on Windows (recorded 2026-11-04, before the 3.0.0b12 pin), sheet copper
+forced to PEC via `approximate_metals` (pre–ThinConductor path), `air_height_mm=6.4`, band
+0.75–1.25 GHz × 15 points unless noted:
 
 | Run | Enclosure / resolution | Nodes / tets | Solver elapsed | Best \|S21\| | S21 / S11 there |
 |---|---|---|---|---|---|

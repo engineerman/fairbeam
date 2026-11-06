@@ -1,0 +1,34 @@
+---
+description: Fixed local Windows paths for Fairbeam Python tests (openEMS DLL + venv)
+alwaysApply: true
+---
+
+# Windows local Python / openEMS (this machine)
+
+When running `unittest`, `fairbeam` imports, or any check that loads `CSXCAD` / `openEMS`:
+
+## Use these paths — do not rediscover
+
+| What | Path |
+| --- | --- |
+| Repo venv Python | `d:\W\P\fairbeam\.venv\Scripts\python.exe` (from repo root: `.venv\Scripts\python.exe`) |
+| `OPENEMS_INSTALL_PATH` | `C:\Users\ee\AppData\Local\org.fairbeam.desktop\gpu-runtime\openEMS` |
+| Managed EMerge (Install EMerge) | `C:\Users\ee\AppData\Local\org.fairbeam.desktop\emerge\3.0.0b12\` (marker `fairbeam-emerge.json`) |
+
+## How to run Python tests
+
+```powershell
+$env:OPENEMS_INSTALL_PATH = "C:\Users\ee\AppData\Local\org.fairbeam.desktop\gpu-runtime\openEMS"
+cd d:\W\P\fairbeam\python
+d:\W\P\fairbeam\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_emerge_*.py" -v
+```
+
+## Do not
+
+- Search the disk / Everything / Prefetch for `openEMS.exe`, `CSXCAD.dll`, or random venvs.
+- Use WindowsApps `python.exe` / `py -3` / Python 3.14 for Fairbeam tests (wrong or crashy NumPy/CSXCAD).
+- Assume `C:\opt\openEMS` exists on this machine (docs example only; local install is the gpu-runtime folder above).
+
+## If a path is missing
+
+Stop and ask the human. Do not invent alternate roots or re-scan the filesystem.

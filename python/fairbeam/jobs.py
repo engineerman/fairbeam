@@ -874,12 +874,13 @@ class JobManager:
         spec = prepare(body)
         design_model = (spec.get("design") or {}).get("model", {})
         analysis = (spec.get("settings") or {}).get("analysis")
-        # Workspace-bound Design runs: driven Elmer/EMerge antenna, EMerge planar two-port.
+        from .emerge_solver import EMERGE_DESIGN_ANALYSES
+        # Workspace-bound Design runs: driven Elmer; EMerge driven / planar / unified N-port.
         design_backed = (
             spec.get("design") is not None
             and (
                 (spec["backend"] == "elmer" and analysis == "driven")
-                or (spec["backend"] == "emerge" and analysis in ("driven", "planar_two_port"))
+                or (spec["backend"] == "emerge" and analysis in EMERGE_DESIGN_ANALYSES)
             )
         )
         if admitted_source is not None:
@@ -1150,8 +1151,7 @@ class JobManager:
                 schema = job.result.get('schema')
                 if code == 0 and schema in (
                     'fairbeam.elmer-driven-result/1',
-                    'fairbeam.emerge-driven-result/1',
-                    'fairbeam.emerge-planar-result/1',
+                    'fairbeam.emerge-result/2',
                 ):
                     import hashlib
                     source = job.dir / 'research/bundle.json'

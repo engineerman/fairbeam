@@ -1,4 +1,4 @@
-// Synthetic UI contract for the experimental EMerge planar two-port Run option. No solver run.
+// Synthetic UI contract for the unified EMerge FEM · Experimental Run option. No solver run.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import puppeteer from "puppeteer-core";
@@ -59,43 +59,51 @@ try {
     await s.fill(await s.field(await s.T("home.newProject.name")), `EMerge planar UI ${lang}`, { blur: false });
     await s.click("home.newProject.create"); await s.wait(".rb");
     await s.click("ribbon.tab.sim", { sel: ".rb-tab" });
-    await s.click("ribbon.sim.run", { sel: ".rb-btn" });
+    // Run chrome shows the active engine name (default openEMS), not ribbon.sim.run.
+    await s.click("ribbon.sim.runEngine", { sel: ".rb-btn", params: { engine: "openEMS" } });
     await s.wait(".rd-dialog");
-    // emerge: 2 shows antenna but must hide planar (needs health.emerge >= 3).
-    assert.ok(await page.$('.rd-solver select option[value="emerge-driven"]'),
-      "emerge-driven still shown when health.emerge = 2");
+    // Unified option needs health.emerge >= 3; dual emerge-driven / emerge-planar are gone.
+    assert.equal(await page.$$eval('.rd-solver select option[value="emerge"]', rows => rows.length), 0,
+      "emerge hidden when health.emerge < 3");
+    assert.equal(await page.$$eval('.rd-solver select option[value="emerge-driven"]', rows => rows.length), 0,
+      "legacy emerge-driven removed");
     assert.equal(await page.$$eval('.rd-solver select option[value="emerge-planar"]', rows => rows.length), 0,
-      "emerge-planar hidden when health.emerge < 3");
+      "legacy emerge-planar removed");
 
     healthEmerge = 3;
     await page.evaluate(async () => {
       const { probeServer } = await import("/src/runner/store.ts");
       await probeServer();
     });
-    await page.waitForFunction(() => document.querySelector('.rd-solver select option[value="emerge-planar"]'));
-    await page.select(".rd-solver select", "emerge-planar");
-    await s.wait('[data-testid="emerge-planar-form"]');
-    assert.equal(await page.$("#rd-form"), null, "FDTD controls unmounted for EMerge planar");
-    assert.ok(await page.$eval('[data-testid="emerge-planar-form"] button[type=submit]', e => e.disabled),
-      "acceptance required before submit");
-    assert.equal(await page.$('[data-testid="emerge-planar-padding"]'), null,
-      "padding hidden for default shielded enclosure");
+    await page.waitForFunction(() => document.querySelector('.rd-solver select option[value="emerge"]'));
+    await page.select(".rd-solver select", "emerge");
+    await s.wait('[data-testid="emerge-run-form"]');
+    assert.equal(await page.$("#rd-form"), null, "FDTD controls unmounted for EMerge");
+    // Patch template uses Discrete/lumped → finite-feed accept + driven feed fields.
+    assert.ok(await page.$('[data-testid="emerge-run-port-note"]'),
+      "finite-feed note shown as status-warn");
+    assert.ok(await page.$('[data-testid="emerge-run-accept-finite"]'),
+      "finite-feed acceptance required");
+    assert.ok(await page.$('[data-testid="emerge-run-padding"]'),
+      "padding shown for driven fallback on lumped ports");
+    assert.ok(await page.$('[data-testid="emerge-run-enclosure"]'),
+      "planar enclosure shown when unsure (lumped)");
 
     for (const [key, val] of Object.entries({ f_min_hz: "0.75", f_max_hz: "1.25", points: "5", air_height_mm: "8" })) {
-      await s.fill(await s.field(await s.T(`emergePlanar.${key}`)), val);
+      await s.fill(await s.field(await s.T(`emergeExp.${key}`)), val);
     }
-    await page.select('[data-testid="emerge-planar-resolution"]', "fine");
-    assert.ok(await page.$eval('[data-testid="emerge-planar-form"] button[type=submit]', e => e.disabled),
-      "still disabled without lumped-terminal acceptance");
-    await page.click('[data-testid="emerge-planar-accept"]');
-    assert.equal(await page.$eval('[data-testid="emerge-planar-form"] button[type=submit]', e => e.disabled), false);
+    await page.select('[data-testid="emerge-run-resolution"]', "fine");
+    assert.ok(await page.$eval('[data-testid="emerge-run-form"] button[type=submit]', e => e.disabled),
+      "still disabled without finite-feed acceptance");
+    await page.click('[data-testid="emerge-run-accept-finite"]');
+    assert.equal(await page.$eval('[data-testid="emerge-run-form"] button[type=submit]', e => e.disabled), false);
 
-    // Shielded submit: padding must not be sent.
-    await page.click('[data-testid="emerge-planar-form"] button[type=submit]');
-    await page.waitForFunction(() => document.querySelector('[data-testid="emerge-planar-form"] [role=alert]')?.textContent.includes("Synthetic unsupported Design"));
+    // Shielded submit: padding still sent for driven fallback; analysis is emerge_nport.
+    await page.click('[data-testid="emerge-run-form"] button[type=submit]');
+    await page.waitForFunction(() => document.querySelector('[data-testid="emerge-run-form"] [role=alert]')?.textContent.includes("Synthetic unsupported Design"));
     assert.equal(submitted.backend, "emerge");
-    assert.equal(submitted.settings.analysis, "planar_two_port");
-    assert.equal(submitted.settings.accept_lumped_terminals, true);
+    assert.equal(submitted.settings.analysis, "emerge_nport");
+    assert.equal(submitted.settings.accept_finite_feed, true);
     assert.equal(submitted.settings.enclosure, "shielded");
     assert.equal(submitted.settings.resolution, "fine");
     assert.equal(submitted.settings.approximate_metals, false);
@@ -103,26 +111,26 @@ try {
     assert.equal(submitted.settings.f_max_hz, 1.25e9);
     assert.equal(submitted.settings.points, 5);
     assert.equal(submitted.settings.air_height_mm, 8);
-    assert.equal("padding_mm" in submitted.settings, false, "padding_mm omitted for shielded");
+    assert.equal(submitted.settings.padding_mm, 10, "padding kept for driven fallback");
     assert.ok(submitted.design?.model?.id);
 
-    // Open enclosure: padding visible and sent.
+    // Open enclosure: padding still visible and sent.
     submitted = undefined;
-    await page.select('[data-testid="emerge-planar-enclosure"]', "open");
-    await page.waitForSelector('[data-testid="emerge-planar-padding"]');
-    await s.fill(await s.field(await s.T("emergePlanar.padding_mm")), "10");
-    await page.click('[data-testid="emerge-planar-form"] button[type=submit]');
+    await page.select('[data-testid="emerge-run-enclosure"]', "open");
+    await page.waitForSelector('[data-testid="emerge-run-padding"]');
+    await s.fill(await s.field(await s.T("emergeExp.padding_mm")), "12");
+    await page.click('[data-testid="emerge-run-form"] button[type=submit]');
     await page.waitForFunction(() => {
-      const alert = document.querySelector('[data-testid="emerge-planar-form"] [role=alert]');
+      const alert = document.querySelector('[data-testid="emerge-run-form"] [role=alert]');
       return alert?.textContent.includes("Synthetic unsupported Design");
     });
     assert.equal(submitted.settings.enclosure, "open");
-    assert.equal(submitted.settings.padding_mm, 10);
+    assert.equal(submitted.settings.padding_mm, 12);
 
     await page.screenshot({ path: `.impeccable/review/emerge-planar-${lang}.png` });
     await context.close();
   }
-  console.log("PASS: EN/TR EMerge planar option health gate, acceptance, shielded/open padding, submit body.");
+  console.log("PASS: EN/TR unified EMerge option health gate, acceptance, shielded/open padding, submit body.");
 } finally {
   await browser?.close();
   await stack.stop();

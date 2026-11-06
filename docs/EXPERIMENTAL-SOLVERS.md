@@ -1,6 +1,14 @@
 # Experimental solvers
 
-openEMS is the default solver. **Elmer FEM — Experimental eigenmodes**, **Elmer FEM · Experimental antenna**, the fixed **EMerge** WR-90 waveguide fixture, **EMerge · Experimental antenna** (bounded Design subset), and **EMerge FEM · Experimental planar two-port** (hairpin-class microstrip) are opt-in research paths with narrower geometry and result support. Installing a backend or completing a run does not establish numerical accuracy for your design.
+openEMS is the default solver. **Elmer FEM — Experimental eigenmodes**, **Elmer FEM · Experimental antenna**, the fixed **EMerge** WR-90 waveguide fixture, and **EMerge FEM · Experimental** (unified N-port Design path: driven/lumped or planar microstrip recipes, up to 8 ports) are opt-in research paths with narrower geometry and result support. Installing a backend or completing a run does not establish numerical accuracy for your design.
+
+## Active engine (Simulation ribbon)
+
+In the desktop designer, **Simulation › Solver** lets you pick **openEMS** or **EMerge (experimental)** as the session’s active engine. openEMS is the default on a new session. Choosing EMerge retargets Run chrome (label and accent), Frequency / Boundaries / Mesh settings, and which Simulation / Post / Optimize actions stay enabled. It does not replace openEMS as the product default, and it does not make EMerge a validated production solver.
+
+Elmer and the fixed EMerge waveguide fixture stay under **Experimental solvers** / the Run dialog’s longer option list — they are not a third chrome accent in this picker. **Optimize** (Sweep / Optimizer) stays disabled while EMerge is active; that path is deferred. Mesh view under EMerge draws the experimental FEM **exterior surface** wireframe after Generate mesh (or an EMerge result that exported surface edges). It never shows the openEMS FDTD grid as if it were the tetrahedral mesh.
+
+See the agent plan [`docs/agent/plans/2026-11-04-emerge-solver-scoped-ui.md`](agent/plans/2026-11-04-emerge-solver-scoped-ui.md) for the capability matrix and remaining follow-ups.
 
 ## Setup in the desktop app
 
@@ -10,7 +18,7 @@ On Windows, **Install Elmer** downloads the portable package pinned by Fairbeam 
 
 On macOS and Linux, install Elmer yourself. Select an installation containing `bin/ElmerSolver` and `bin/ElmerGrid`, or its binary directory. Availability checks locate the executables; they do not qualify the physical model or every native dependency. No backend is installed automatically.
 
-If an installed app reports `No module named fairbeam_elmer`, update or repair Fairbeam itself. Installing Elmer binaries alone does not provide Fairbeam's Python adapter. Source contributors should use the separate [research setup and evidence](RESEARCH-SOLVERS.md).
+If an installed app reports `No module named fairbeam_elmer` or `No module named fairbeam_emerge`, update or repair Fairbeam itself. Installing Elmer or EMerge alone does not provide Fairbeam's Python adapters. Source contributors should use the separate [research setup and evidence](RESEARCH-SOLVERS.md).
 
 ## EMerge waveguide fixture
 
@@ -22,48 +30,23 @@ On macOS and Linux there is no managed installer. Create your own Python 3.10–
 
 See [the EMerge experiment](EMERGE-EXPERIMENT.md) for the fixture definition, acceptance criteria and recorded native observations.
 
-## EMerge · Experimental antenna
+## EMerge FEM · Experimental (unified N-port)
 
-When the run server reports health `emerge` ≥ 2, **Run** offers **EMerge · Experimental antenna**
-after the Elmer options. It admits the same bounded class as Elmer's driven antenna path:
-axis-aligned dielectric boxes, PEC sheets, one Discrete port, explicit finite feed width, optional
-`approximate_metals`, and constant `tan_d` when loss is present. Rejects extra ports, resistors,
-lumped elements, transforms, cuts, voids, overlaps and non-box primitives. Outer boundary: absorbing
-faces on a padded air box (not PML). No far field and no gain certificate; status is
-`results_exported`.
+When the run server reports health `emerge` ≥ 3, **Run** offers **EMerge FEM · Experimental** after
+the Elmer options. One entry covers both Design recipes: driven/lumped (axis-aligned dielectric
+boxes and metal sheets) and planar microstrip/Discrete (single-layer board with bottom ground and
+z-normal copper on the top). Port count may be **1…8** of one homogeneous type; mixed types,
+multilayer, vias, CPW, curves and unsupported geometry are rejected. Approximate maps keep the
+existing `accept_*` gates. Enclosure / air / padding appear when the Design classifies as planar.
+No far field and no gain certificate; status is `results_exported`. Shared Results show the
+complete N×N experimental S matrix next to (never instead of) openEMS.
 
-Resolutions are wavelength fractions at `f_max`: `coarse` = 0.25, `fine` = 0.15. Worker timeout is
-1800 s; a cheap volume proxy refuses oversized domains before launch. S11 and Zin appear in the
-shared Results view next to (never instead of) openEMS.
+Resolutions are wavelength fractions at `f_max`: `coarse` = 0.25, `fine` = 0.15. Points 3–41.
+Driven-class worker timeout is 1800 s with a volume proxy; planar-class timeout is 3600 s with a
+tetrahedra proxy (400000). Schema `fairbeam.emerge-result/2`.
 
-For the built-in Patch template, recorded 2026-11-04 native runs placed the EMerge S11 minimum at
-2.30 GHz (−7.427 dB coarse, −6.349 dB fine on an 11-point 2–3 GHz sweep). Fairbeam's own openEMS run
-of the same template had its S11 minimum at 2.453981250 GHz (−45.574 dB). EMerge Design does not
-claim agreement with that openEMS result. Details: [EMerge experiment](EMERGE-EXPERIMENT.md).
-
-## EMerge FEM · Experimental planar two-port
-
-When the run server reports health `emerge` ≥ 3, **Run** offers **EMerge FEM · Experimental planar
-two-port** after **EMerge · Experimental antenna**. It admits a single-layer microstrip two-port
-class: one substrate box, ground at the bottom, z-normal copper polygons (or z-flat boxes) on the
-substrate top, exactly two microstrip ports at board edges. Rejects multilayer, vias, CPW, other
-port types or counts, resistors, transforms, cuts, voids and metal at other elevations. Each
-microstrip port becomes a lumped strip-to-ground terminal at the board edge for that run only
-(`accept_lumped_terminals`); feed and measurement shifts are unused. Finite copper needs
-`approximate_metals` (PEC sheets). Enclosure is `shielded` (closed PEC box) or `open` (absorbing
-sides and top with `padding_mm`). No far field and no gain certificate; status is
-`results_exported`. Shared Results show the complete 2 × 2 S matrix next to (never instead of)
-openEMS.
-
-Resolutions are wavelength fractions at `f_max`: `coarse` = 0.25, `fine` = 0.15. Worker timeout is
-3600 s; a tetrahedra proxy refuses domains above 400000 before launch. Points 3–41.
-
-For the hairpin test fixture, recorded 2026-11-04 native EMerge 2.8.9 runs (15 points,
-0.75–1.25 GHz, sheet copper) placed best |S21| at **1.071429 GHz** (−0.63 dB shielded coarse and
-fine; −0.51 dB open coarse). Coarse→fine peak shift was 0 on that grid. Fairbeam's own openEMS GPU
-run of the same fixture (default one-port excitation) reported a non-physical |S21| > 1, so Level
-B2 does not claim S-parameter agreement with that openEMS path. Details:
-[EMerge experiment](EMERGE-EXPERIMENT.md).
+Recorded Patch and hairpin native numbers (and the honesty statements that EMerge does not claim
+openEMS S-parameter agreement) stay in [EMerge experiment](EMERGE-EXPERIMENT.md).
 
 ## Eigenmodes of the current design
 

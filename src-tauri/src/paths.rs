@@ -72,7 +72,7 @@ impl Default for Settings {
             gpu_runtime_enabled: false,
             prefer_gpu: true,
             workspace: None,
-            check_updates_on_start: true,
+            check_updates_on_start: false,
             recent_designs: Vec::new(),
             recent_design_titles: BTreeMap::new(),
             language: None,
@@ -89,7 +89,8 @@ fn default_prefer_gpu() -> bool {
 }
 
 fn default_check_updates_on_start() -> bool {
-    true
+    // engineerman fork: keep the preference off by default; updater.rs also hard-disables the feed.
+    false
 }
 
 impl Settings {
@@ -422,12 +423,12 @@ mod settings_tests {
     }
 
     #[test]
-    fn old_settings_keep_update_checks_enabled() {
+    fn missing_update_preference_defaults_off_on_engineerman_fork() {
         let settings: Settings =
             serde_json::from_str(r#"{"runtime":"managed","workspace":"/tmp/work"}"#).unwrap();
-        assert!(settings.check_updates_on_start);
+        assert!(!settings.check_updates_on_start);
         assert_eq!(settings.workspace.as_deref(), Some("/tmp/work"));
-        assert!(Settings::default().check_updates_on_start);
+        assert!(!Settings::default().check_updates_on_start);
     }
 
     #[test]

@@ -31,7 +31,7 @@ the separately opted-in Elmer integration.
 | [Example designs](../examples/designs/README.md) | Five 867 MHz antennas as designer files (wideband, meander and sleeve dipoles, collinear, Yagi), with parameters, results and how to scale them |
 | [CLI reference](CLI.md) | Every `fairbeam` command and the options of `run` |
 | [External Elmer experiment](ELMER-EXPERIMENT.md) | Opt-in native PEC cavity research benchmark |
-| [External EMerge experiment](EMERGE-EXPERIMENT.md) | Opt-in WR-90 fixture, Design antenna subset, and planar two-port |
+| [External EMerge experiment](EMERGE-EXPERIMENT.md) | Opt-in WR-90 fixture and unified N-port Design FEM (driven or planar, up to 8 ports) |
 | [Dielectric cavity qualification](FEM-QUALIFICATION.md) | Opt-in native Elmer material-mapping, eigenfrequency scaling and refinement controls |
 | [Experimental solvers](EXPERIMENTAL-SOLVERS.md) | Installed-app Elmer and EMerge setup, supported geometry and numerical limitations |
 | [Experimental coaxial TEM ports](COAXIAL-PORTS.md) | CPU port contract and retained qualification limits |

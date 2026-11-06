@@ -230,27 +230,22 @@ class ResearchDocumentTests(unittest.TestCase):
         self.assertNotIn("backup_scope", records[0])
         self.assertEqual(warnings, [])
 
-    def test_emerge_driven_source_binding_is_admitted(self):
-        job = self.submit(self.body(backend="emerge"))
+    def test_emerge_nport_source_binding_is_admitted(self):
+        body = self.body(backend="emerge")
+        body["settings"]["analysis"] = "emerge_nport"
+        job = self.submit(body)
         self.assertEqual(job.research["source"]["model_id"], self.file["id"])
         self.assertEqual(job.research["backend"], "emerge")
+        self.assertEqual(job.research["settings"]["analysis"], "emerge_nport")
         refused = self.body(backend="emerge")
         refused["settings"]["analysis"] = "modes"
         with mock.patch("fairbeam.research.prepare") as prepare, self.assertRaisesRegex(ApiError, "driven Elmer or EMerge"):
             self.app.research_submit(refused)
         prepare.assert_not_called()
-
-    def test_emerge_planar_source_binding_is_admitted(self):
-        body = self.body(backend="emerge")
-        body["settings"]["analysis"] = "planar_two_port"
-        job = self.submit(body)
-        self.assertEqual(job.research["source"]["model_id"], self.file["id"])
-        self.assertEqual(job.research["backend"], "emerge")
-        self.assertEqual(job.research["settings"]["analysis"], "planar_two_port")
-        refused = self.body(backend="elmer")
-        refused["settings"]["analysis"] = "planar_two_port"
+        legacy = self.body(backend="emerge")
+        legacy["settings"]["analysis"] = "planar_two_port"
         with mock.patch("fairbeam.research.prepare") as prepare, self.assertRaisesRegex(ApiError, "driven Elmer or EMerge"):
-            self.app.research_submit(refused)
+            self.app.research_submit(legacy)
         prepare.assert_not_called()
 
 

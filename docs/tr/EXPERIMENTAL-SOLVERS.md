@@ -10,7 +10,7 @@ Windows'ta **Elmer'i kur**, siz istediğinizde Fairbeam'in sabitlediği taşına
 
 macOS ve Linux'ta Elmer'i kendiniz kurun. `bin/ElmerSolver` ve `bin/ElmerGrid` içeren kurulumu veya ikili dosya klasörünü seçin. Kullanılabilirlik denetimi yürütülebilir dosyaları bulur; fiziksel modelin veya tüm yerel bağımlılıkların yeterliliğini doğrulamaz. Hiçbir arka uç otomatik kurulmaz.
 
-Kurulu uygulama `No module named fairbeam_elmer` bildirirse Fairbeam'i güncelleyin veya onarın. Yalnızca Elmer ikili dosyalarını kurmak, Fairbeam'in Python bağdaştırıcısını sağlamaz. Kaynak üzerinde çalışan katkıcılar ayrı [araştırma kurulumu ve kanıtları](RESEARCH-SOLVERS.md) kullanmalıdır.
+Kurulu uygulama `No module named fairbeam_elmer` veya `No module named fairbeam_emerge` bildirirse Fairbeam'i güncelleyin veya onarın. Yalnızca Elmer veya EMerge kurmak, Fairbeam'in Python bağdaştırıcılarını sağlamaz. Kaynak üzerinde çalışan katkıcılar ayrı [araştırma kurulumu ve kanıtları](RESEARCH-SOLVERS.md) kullanmalıdır.
 
 ## EMerge dalga kılavuzu fikstürü
 

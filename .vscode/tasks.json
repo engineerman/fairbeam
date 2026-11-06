@@ -4,21 +4,21 @@
     {
       "label": "Fairbeam: Restart serve",
       "type": "shell",
-      "command": "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { $_.CommandLine -match 'fairbeam serve|fairbeam\\.preview worker' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Seconds 1; $env:OPENEMS_INSTALL_PATH = \"$env:LOCALAPPDATA\\org.fairbeam.desktop\\runtime\\openEMS\"; $env:PYTHONPATH = \"${workspaceFolder}\\python\"; Set-Location \"${workspaceFolder}\\python\"; & \"${workspaceFolder}\\.venv\\Scripts\\python.exe\" -m fairbeam serve",
+      "command": "${workspaceFolder}\\scripts\\restart-fairbeam-serve.ps1",
       "options": {
         "cwd": "${workspaceFolder}",
         "shell": {
           "executable": "powershell.exe",
-          "args": ["-NoProfile", "-Command"]
+          "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]
         }
       },
-      "isBackground": true,
-      "problemMatcher": [],
       "presentation": {
         "reveal": "always",
         "panel": "dedicated",
-        "clear": true
-      }
+        "clear": true,
+        "showReuseMessage": false
+      },
+      "problemMatcher": []
     }
   ]
 }

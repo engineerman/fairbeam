@@ -149,11 +149,12 @@ class SharedResearchQueue(ResearchFixtures, unittest.TestCase):
             else:self.assertTrue((manager.projects_dir/job.bundle).is_file())
             manager.shutdown(timeout=5)
 
-    def test_emerge_planar_bundle_is_published(self):
+    def test_emerge_nport_bundle_is_published(self):
         manager=self.manager(autostart=False)
         def command(job):
-            value=dict(schema='fairbeam.emerge-planar-result/1', backend='emerge',
+            value=dict(schema='fairbeam.emerge-result/2', backend='emerge',
                 research_schema='fairbeam-research-result-1',status='results_exported',
+                geometry_kind='planar_microstrip',
                 precision_converged=False, gain_qualified=False,
                 frequency_hz=[1e9], s={'1,1':{'re':[0],'im':[0]},'2,1':{'re':[0],'im':[0]},
                                        '1,2':{'re':[0],'im':[0]},'2,2':{'re':[0],'im':[0]}},
@@ -169,7 +170,7 @@ class SharedResearchQueue(ResearchFixtures, unittest.TestCase):
             return [sys.executable,'-c',script,str(job.dir/'research'),json.dumps(value),bundle.hex()]
         manager.command_factory=command
         spec=self.spec(backend='emerge')
-        spec['settings']={'analysis':'planar_two_port'}
+        spec['settings']={'analysis':'emerge_nport'}
         spec['design']={'model':{'id':'emerge-hairpin','name':'hairpin'}}
         job=manager.submit(model='emerge_hairpin',model_id='emerge-hairpin',model_path='',
                            kind='research',research_input=spec)

@@ -376,6 +376,25 @@ export function meshPlaneLines(b: Bundle, axis: 0 | 1 | 2, position: number, col
   return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false }));
 }
 
+/** EMerge FEM exterior edges as line segments (coordinates already in mm). Never use for FDTD planes. */
+export function femSurfaceLines(
+  nodesMm: number[][],
+  edges: number[][],
+  color: string,
+  opacity: number,
+): THREE.LineSegments {
+  const pts: number[] = [];
+  for (const edge of edges) {
+    const a = nodesMm[edge[0]];
+    const b = nodesMm[edge[1]];
+    if (!a || !b || a.length < 3 || b.length < 3) continue;
+    pts.push(a[0], a[1], a[2], b[0], b[1], b[2]);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+  return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false }));
+}
+
 export function sceneRadius(b: Bundle): { center: THREE.Vector3; radius: number; box: THREE.Box3 } {
   const box = new THREE.Box3();
   const src = b.focus ?? (b.parts.length ? { min: b.parts[0].bbox[0], max: b.parts[0].bbox[1] } : b.domain);

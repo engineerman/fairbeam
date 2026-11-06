@@ -12,7 +12,7 @@ export function openResearch(id?: string, backend: ResearchBackend = "periodic",
   setResearchOpen(true);
 }
 
-/** Driven Elmer/EMerge antenna and EMerge planar two-port: follow in the designer dock.
+/** Driven Elmer/EMerge antenna, EMerge planar, and unified N-port: follow in the designer dock.
  * Level A fixtures (WR-90, PEC cavity, …) stay in the Experimental solvers panel. */
 export function isDesignBoundResearch(job: {
   kind?: string;
@@ -20,7 +20,7 @@ export function isDesignBoundResearch(job: {
 }): boolean {
   if (job.kind !== "research") return false;
   const analysis = job.research?.settings?.analysis;
-  return analysis === "driven" || analysis === "planar_two_port";
+  return analysis === "driven" || analysis === "planar_two_port" || analysis === "emerge_nport";
 }
 
 const PATH_KEY = "fairbeam.research.paths";

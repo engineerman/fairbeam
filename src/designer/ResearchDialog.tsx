@@ -26,8 +26,8 @@ const fixtureBackend = (backend: Backend) => backend === "elmer" || backend === 
 const name = (backend: Backend) => t(`research.backend.${backend}`);
 const jobName = (job: Job) => {
   const analysis = job.research?.settings.analysis;
-  if (analysis === "driven") return job.name || (job.research?.backend === "emerge" ? t("emergeAntenna.option") : t("elmerAntenna.option"));
-  if (analysis === "planar_two_port") return job.name || t("emergePlanar.option");
+  if (analysis === "emerge_nport") return job.name || t("emergeExp.option");
+  if (analysis === "driven") return job.name || t("elmerAntenna.option");
   if (job.research?.settings.closed_pec) return job.name || t("elmerDesign.option");
   return name(job.research?.backend ?? "periodic");
 };
@@ -90,10 +90,11 @@ function StockResults(props: { result: ResearchResult }) {
 
 function ResearchResults(props: { job: Job }) {
   return <Show when={props.job.result}>{r => <div class="stack-lg">
-    <Show when={r().status !== "results_validated" && r().schema !== "fairbeam.emerge-fixture-result/1"}><p class="status-block status-warn"><CircleAlert size={14} />{t(r().schema === "fairbeam.elmer-driven-result/1" ? "elmerAntenna.qa" : r().schema === "fairbeam.emerge-driven-result/1" ? "emergeAntenna.qa" : r().backend === "stock" && r().status === "results_exported" ? "research.stock.qa" : "research.qaUnvalidated")}</p></Show>
+    <Show when={r().status !== "results_validated" && r().schema !== "fairbeam.emerge-fixture-result/1" && r().schema !== "fairbeam.emerge-mesh-result/1"}><p class="status-block status-warn"><CircleAlert size={14} />{t(r().schema === "fairbeam.elmer-driven-result/1" ? "elmerAntenna.qa" : r().schema === "fairbeam.emerge-result/2" ? "emergeExp.qa" : r().backend === "stock" && r().status === "results_exported" ? "research.stock.qa" : "research.qaUnvalidated")}</p></Show>
+    <Show when={r().schema !== "fairbeam.emerge-mesh-result/1"} fallback={<div class="stack" data-emerge-mesh-results><p class="note">{t("emergeSim.meshCounts", { nodes: fmt.int(r().nodes ?? NaN), tets: fmt.int(r().tetrahedra ?? NaN), seconds: fmt.fixed(r().duration_s ?? NaN, 2) })}</p><p class="note">{t("emergeSim.meshCountsHint")}</p></div>}>
     <Show when={r().schema !== "fairbeam.emerge-fixture-result/1"} fallback={<EmergeFixtureResults result={r()} />}>
     <Show when={r().schema !== "fairbeam.elmer-driven-result/1"} fallback={<ElmerAntennaResults result={r()} />}>
-    <Show when={r().schema !== "fairbeam.emerge-driven-result/1"} fallback={<div class="stack"><p class="note">{t("emergeAntenna.resultHint")}</p><p class="note">{t("emergeAntenna.resultsNote")}</p></div>}>
+    <Show when={r().schema !== "fairbeam.emerge-result/2"} fallback={<div class="stack"><p class="note">{t("emergeExp.resultHint")}</p><p class="note">{t("emergeExp.resultsNote")}</p></div>}>
     <Show when={props.job.research?.backend === "periodic" || props.job.research?.backend === "stock"} fallback={<>
       <p class="note">{t(r().schema === "fairbeam.elmer-design-result/1" ? "elmerDesign.resultHint" : "research.elmer.resultNote")}</p>
       <Show when={r().schema !== "fairbeam.elmer-design-result/1"}>
@@ -108,6 +109,7 @@ function ResearchResults(props: { job: Job }) {
         <For each={r().frequency_hz}>{(f, i) => <tr><td>{fmt.int(i() + 1)}</td><td class="num">{fmt.fixed(f / 1e9, 6)}</td></tr>}</For>
       </tbody></table>
     </>}><PeriodicResults result={r()} /><Show when={props.job.research?.backend === "stock"}><StockResults result={r()} /></Show></Show>
+    </Show>
     </Show>
     </Show>
     </Show>
@@ -300,7 +302,7 @@ export default function ResearchDialog() {
               <li>{t("research.step3")}</li>
             </ol><a href={`https://fairbeam.org/docs/${locale() === "tr" ? "tr/" : ""}experimental-solvers.html`} target="_blank" rel="noopener noreferrer" onClick={openGuide}>{t("research.guide")}</a></details>
           </div>
-          <label class="dz-field"><span class="dz-label">{t(fixtureBackend(backend()) ? "research.path.install" : "research.path.executable")}</span><input class="rp-input dz-input mono" autocomplete="off" spellcheck={false} value={path()} disabled={!!operation()} onInput={e => { probeVersion++; setPath(e.currentTarget.value); setCapability(null); }} /><span class="note">{t(`research.${backend()}.pathHint`)}</span></label>
+          <label class="dz-field"><span class="dz-label">{t(fixtureBackend(backend()) ? `research.${backend()}.pathLabel` : "research.path.executable")}</span><input class="rp-input dz-input mono" autocomplete="off" spellcheck={false} value={path()} disabled={!!operation()} onInput={e => { probeVersion++; setPath(e.currentTarget.value); setCapability(null); }} /><span class="note">{t(`research.${backend()}.pathHint`)}</span></label>
           <Show when={backend() === "elmer" && runtime()?.supported && runtime()}>{rt => <div class="status-block research-runtime" role="status">
             <Show when={rt().installed} fallback={<Show when={rt().state === "downloading" || rt().state === "unpacking"} fallback={<>
               <span>{t("research.elmer.runtime.missing", { version: rt().version, size: fmt.fixed(rt().size / 1048576, 0) })}<Show when={rt().state === "failed" && rt().error}><br />{rt().error}</Show></span>

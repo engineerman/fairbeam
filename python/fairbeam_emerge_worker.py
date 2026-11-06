@@ -1,4 +1,4 @@
-"""EMerge worker for the WR-90 fixture, admitted Designs, and planar two-port cases.
+"""EMerge worker for the WR-90 fixture, admitted Designs, and planar N-port cases.
 
 Runs INSIDE the external EMerge environment (``fairbeam_emerge.py`` starts it as a separate
 process with that environment's interpreter). This is the only Fairbeam file that imports EMerge;
@@ -21,6 +21,8 @@ import time
 CASE_SCHEMA = "fairbeam-emerge-fixture-case/1"
 NATIVE_PHASOR = "exp(+i omega t)"
 FREQUENCY_RTOL = 1e-9
+# Matches fairbeam.emerge_limits.N_MAX (worker must not import fairbeam).
+N_MAX = 8
 THREAD_VARIABLES = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMBA_NUM_THREADS",
                     "VECLIB_NUM_THREADS", "NUMEXPR_NUM_THREADS")
 # AbsorbingBoundary: constructor default is order=2 / abctype="B"
@@ -29,6 +31,33 @@ THREAD_VARIABLES = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"
 # when bc.order == 2. Level B therefore runs the default second-order ABC.
 ABC_ORDER = 2
 ABC_TYPE = "B"
+# Stage A port-map provenance (duplicated; worker must not import fairbeam).
+PORT_MAP_KEYS = ("design_port_type", "mapped_bc", "approximations", "accept_used")
+APPROX_FIXTURE_WG = "fixture RectangularWaveguide TE10"
+FIXTURE_PORT_MAP_ENTRY = {
+    "design_port_type": "waveguide",
+    "mapped_bc": "RectangularWaveguide",
+    "approximations": [APPROX_FIXTURE_WG],
+    "accept_used": [],
+}
+
+
+def _port_map_entry(source):
+    if not isinstance(source, dict) or not all(key in source for key in PORT_MAP_KEYS):
+        return None
+    return {
+        "design_port_type": source["design_port_type"],
+        "mapped_bc": source["mapped_bc"],
+        "approximations": list(source["approximations"]),
+        "accept_used": list(source["accept_used"]),
+    }
+
+
+def _attach_port_map(raw, entries):
+    port_map = [entry for entry in entries if entry is not None]
+    if port_map:
+        raw["port_map"] = port_map
+    return raw
 
 
 def _number(value):
@@ -85,6 +114,31 @@ def _point3(value, label):
     return [float(v) for v in value]
 
 
+def _optional_conductor(entry, label):
+    """Validate optional ThinConductor fields; return ``(sigma, thickness_m)`` or ``(None, None)``."""
+    has_sigma = "conductivity" in entry
+    has_thick = "thickness_m" in entry
+    if has_sigma != has_thick:
+        raise ValueError(f"{label} must supply conductivity and thickness_m together")
+    if not has_sigma:
+        return None, None
+    sigma, thickness = entry["conductivity"], entry["thickness_m"]
+    if not _number(sigma) or sigma <= 0:
+        raise ValueError(f"{label}.conductivity must be a positive finite number")
+    if not _number(thickness) or thickness <= 0:
+        raise ValueError(f"{label}.thickness_m must be a positive finite number")
+    return float(sigma), float(thickness)
+
+
+def _apply_metal_bc(sim, em, geo, sigma, thickness_m):
+    """PEC when σ is absent; otherwise EMerge ThinConductor with bulk conductivity and thickness."""
+    if sigma is None:
+        sim.mw.bc.PEC(geo)
+        return
+    material = em.Material(cond=sigma)
+    sim.mw.bc.ThinConductor(geo, material=material, thickness=thickness_m)
+
+
 def _load_design_case(case):
     if case.get("phasor_convention_out") != NATIVE_PHASOR:
         raise ValueError("phasor_convention_out must be exp(+i omega t)")
@@ -119,6 +173,7 @@ def _load_design_case(case):
             raise ValueError(f"sheets[{i}].normal_axis must be 0, 1 or 2")
         if hi[axis] != lo[axis] or any(hi[k] <= lo[k] for k in range(3) if k != axis):
             raise ValueError(f"sheets[{i}] must be a finite plate normal to axis {axis}")
+        _optional_conductor(sheet, f"sheets[{i}]")
     port = case.get("port")
     if not isinstance(port, dict):
         raise ValueError("port must be an object")
@@ -151,8 +206,9 @@ def _load_planar_case(case):
         raise ValueError("resolution must be a wavelength fraction in (0, 0.5]")
     if case.get("enclosure") not in ("shielded", "open"):
         raise ValueError("enclosure must be shielded or open")
-    if not _number(case.get("metal_edge_m")) or case["metal_edge_m"] <= 0:
-        raise ValueError("metal_edge_m must be a positive finite number")
+    if "metal_edge_m" in case and case["metal_edge_m"] is not None:
+        if not _number(case["metal_edge_m"]) or case["metal_edge_m"] <= 0:
+            raise ValueError("metal_edge_m must be a positive finite number when set")
     frequencies = case.get("frequencies_hz")
     if (not isinstance(frequencies, list) or len(frequencies) < 3
             or not all(map(_number, frequencies)) or any(f <= 0 for f in frequencies)
@@ -184,9 +240,10 @@ def _load_planar_case(case):
             if (not isinstance(point, list) or len(point) != 2
                     or not all(map(_number, point))):
                 raise ValueError(f"traces[{i}].xy[{j}] must be two finite numbers")
+        _optional_conductor(trace, f"traces[{i}]")
     terminals = case.get("terminals")
-    if not isinstance(terminals, list) or len(terminals) != 2:
-        raise ValueError("terminals must be a list of two ports")
+    if not isinstance(terminals, list) or not (1 <= len(terminals) <= N_MAX):
+        raise ValueError(f"terminals must be a list of 1 to {N_MAX} ports")
     numbers = []
     for i, port in enumerate(terminals):
         if not isinstance(port, dict):
@@ -198,11 +255,12 @@ def _load_planar_case(case):
         for key in ("width", "height", "z0"):
             if not _number(port.get(key)) or port[key] <= 0:
                 raise ValueError(f"terminals[{i}].{key} must be a positive finite number")
-        if type(port.get("number")) is not int or port["number"] not in (1, 2):
-            raise ValueError(f"terminals[{i}].number must be 1 or 2")
-        numbers.append(port["number"])
-    if sorted(numbers) != [1, 2]:
-        raise ValueError("terminals must be port numbers 1 and 2")
+        number = port.get("number")
+        if type(number) is not int or number < 1 or number > len(terminals):
+            raise ValueError(f"terminals[{i}].number must be an integer 1…{len(terminals)}")
+        numbers.append(number)
+    if set(numbers) != set(range(1, len(terminals) + 1)):
+        raise ValueError(f"terminals must be contiguous port numbers 1…{len(terminals)}")
     air = case.get("air")
     if not isinstance(air, dict):
         raise ValueError("air must be an object")
@@ -234,6 +292,110 @@ def _series(values, name, count):
     return flat
 
 
+MESH_SURFACE_SCHEMA = "fairbeam.emerge-mesh-surface/1"
+# Cap exterior edges exported for the designer overlay (payload / WebGL).
+MESH_SURFACE_MAX_EDGES = 40000
+
+
+def pack_surface_edges(nodes_m, edge_pairs, *, max_edges=MESH_SURFACE_MAX_EDGES):
+    """Pack exterior edge wireframe for Fairbeam (metres in → millimetres out).
+
+    ``nodes_m`` is shape (3, n) in metres. ``edge_pairs`` is shape (2, m) of node indices.
+    Pure NumPy; used by the worker and by unit tests without importing EMerge.
+    """
+    import numpy as np
+
+    nodes = np.asarray(nodes_m, dtype=float)
+    edges = np.asarray(edge_pairs, dtype=np.int64)
+    if nodes.ndim != 2 or nodes.shape[0] != 3:
+        raise ValueError("nodes_m must have shape (3, n)")
+    if edges.ndim != 2 or edges.shape[0] != 2:
+        raise ValueError("edge_pairs must have shape (2, m)")
+    if edges.size == 0:
+        return {"schema": MESH_SURFACE_SCHEMA, "units": "mm", "nodes_mm": [], "edges": [],
+                "thinned": False, "edge_stride": 1, "edge_count": 0}
+    if not np.isfinite(nodes).all():
+        raise ValueError("nodes_m must be finite")
+    if edges.min(initial=0) < 0 or edges.max(initial=0) >= nodes.shape[1]:
+        raise ValueError("edge_pairs index out of range for nodes_m")
+
+    stride = 1
+    thinned = False
+    count = int(edges.shape[1])
+    if count > max_edges:
+        stride = int(math.ceil(count / max_edges))
+        edges = edges[:, ::stride]
+        thinned = True
+        count = int(edges.shape[1])
+
+    used = np.unique(edges.reshape(-1))
+    remap = {int(old): i for i, old in enumerate(used.tolist())}
+    nodes_mm = (nodes[:, used] * 1000.0).T
+    packed_edges = [[remap[int(a)], remap[int(b)]] for a, b in edges.T.tolist()]
+    return {
+        "schema": MESH_SURFACE_SCHEMA,
+        "units": "mm",
+        "nodes_mm": [[float(x), float(y), float(z)] for x, y, z in nodes_mm.tolist()],
+        "edges": packed_edges,
+        "thinned": thinned,
+        "edge_stride": stride,
+        "edge_count": count,
+    }
+
+
+def export_mesh_surface(sim_mesh, *, max_edges=MESH_SURFACE_MAX_EDGES):
+    """Exterior surface edges from an EMerge 3.x ``Mesh3D`` (``sim.mesh`` after generate_mesh)."""
+    import numpy as np
+
+    tags = list(getattr(sim_mesh, "exterior_face_tags", None) or [])
+    if not tags:
+        tags = list(getattr(sim_mesh, "ftag_to_edge", {}) or {})
+    if tags:
+        edge_ids = np.asarray(sim_mesh.get_edges(tags), dtype=np.int64).reshape(-1)
+        if edge_ids.size == 0:
+            edge_pairs = np.zeros((2, 0), dtype=np.int64)
+        else:
+            edge_pairs = np.asarray(sim_mesh.edges[:, edge_ids], dtype=np.int64)
+    else:
+        edge_pairs = np.asarray(sim_mesh.edges, dtype=np.int64)
+    return pack_surface_edges(sim_mesh.nodes, edge_pairs, max_edges=max_edges)
+
+
+def mesh_counts(sim, *, include_surface=True):
+    """Node/tet counts plus optional exterior surface wireframe for the designer overlay."""
+    mesh = {"nodes": int(sim.mesh.n_nodes), "tetrahedra": int(sim.mesh.n_tets)}
+    if include_surface:
+        mesh["surface"] = export_mesh_surface(sim.mesh)
+    return mesh
+
+
+def _mesh_raw_block(mesh):
+    """``raw.json`` mesh object: counts required; surface optional."""
+    if (not isinstance(mesh, dict)
+            or any(isinstance(mesh.get(k), bool) or type(mesh.get(k)) is not int or mesh[k] < 0
+                   for k in ("nodes", "tetrahedra"))):
+        raise ValueError("mesh must hold non-negative integer nodes and tetrahedra")
+    block = {"nodes": int(mesh["nodes"]), "tetrahedra": int(mesh["tetrahedra"])}
+    surface = mesh.get("surface")
+    if surface is not None:
+        if not isinstance(surface, dict) or surface.get("schema") != MESH_SURFACE_SCHEMA:
+            raise ValueError("mesh.surface must use fairbeam.emerge-mesh-surface/1")
+        block["surface"] = surface
+    return block
+
+
+def build_mesh_raw(case, emerge_version, mesh, elapsed_seconds):
+    """Assemble mesh-only ``raw.json`` (no frequency sweep / S-parameters)."""
+    kind = case.get("kind", "fixture")
+    if kind not in ("fixture", "design", "planar"):
+        raise ValueError("mesh-only case kind must be fixture, design or planar")
+    return {"mesh_only": True, "kind": kind, "emerge_version": str(emerge_version),
+            "elapsed_seconds": float(elapsed_seconds),
+            "mesh": _mesh_raw_block(mesh),
+            "solver_setup": {"mesh_only": True, "nthreads": _nthreads(case),
+                             "resolution": case.get("resolution")}}
+
+
 def build_raw(case, emerge_version, frequencies, s11, s21, mesh, elapsed_seconds):
     """Assemble fixture ``raw.json`` content. S-parameters are EMerge's, unmodified."""
     expected = case["frequency_hz"]
@@ -251,11 +413,138 @@ def build_raw(case, emerge_version, frequencies, s11, s21, mesh, elapsed_seconds
                             "sparam_enforce_reciprocity": False,
                             **(case.get("_sweep_setup") or {"nthreads": _nthreads(case)})}}
     if mesh:
-        raw["mesh"] = {"nodes": int(mesh["nodes"]), "tetrahedra": int(mesh["tetrahedra"])}
+        raw["mesh"] = _mesh_raw_block(mesh)
+    if isinstance(case.get("port_map"), list) and case["port_map"]:
+        raw["port_map"] = list(case["port_map"])
+    else:
+        raw["port_map"] = [dict(FIXTURE_PORT_MAP_ENTRY), dict(FIXTURE_PORT_MAP_ENTRY)]
     return raw
 
 
-def build_design_raw(case, emerge_version, frequencies, s11, mesh, elapsed_seconds):
+FIELD_CUT_SCHEMA = "fairbeam.emerge-field-cut/1"
+# Cap samples along the longer in-plane edge (Fairbeam field_planes MAX_SAMPLES is 200).
+FIELD_CUT_MAX_EDGE = 100
+
+
+def _pick_efield_cut_freq(frequencies, *, s11=None, s21=None):
+    """Choose one sweep frequency for the post-solve E cut (documented in ``freq_choice``)."""
+    freqs = [float(f) for f in frequencies]
+    if not freqs:
+        raise ValueError("frequencies required for E-field cut")
+    if s21 is not None:
+        series = [complex(v) for v in s21]
+        index = max(range(len(series)), key=lambda i: abs(series[i]))
+        return freqs[index], "max_abs_s21"
+    if s11 is not None:
+        series = [complex(v) for v in s11]
+        index = min(range(len(series)), key=lambda i: abs(series[i]))
+        return freqs[index], "min_abs_s11"
+    return freqs[len(freqs) // 2], "band_center"
+
+
+def _field_cut_s_kwargs(s_params, n_ports):
+    """S-series kwargs for ``try_export_efield_cut``.
+
+    Prefer ``S(2,1)`` when ``n_ports >= 2`` (max-|S21| pick); otherwise ``S(1,1)`` (min-|S11|).
+    Heuristic for a representative cut frequency only — not a physics claim.
+    """
+    if n_ports >= 2:
+        return {"s21": s_params["2,1"]}
+    return {"s11": s_params["1,1"]}
+
+
+def _extract_s_matrix(grid, n_ports):
+    """Build ``{"i,j": complex sequence}`` for ``i,j in 1…n`` from ``grid.S(i, j)``."""
+    import numpy as np
+    s_params = {}
+    for i in range(1, n_ports + 1):
+        for j in range(1, n_ports + 1):
+            s_params[f"{i},{j}"] = np.asarray(grid.S(i, j)).reshape(-1).tolist()
+    return s_params
+
+
+def _efield_cut_z_m(case):
+    """Board-parallel cut height (metres): substrate mid for planar, else first box / air mid-z."""
+    if case.get("kind") == "planar":
+        lo, hi = case["substrate"]["lo"], case["substrate"]["hi"]
+        return 0.5 * (float(lo[2]) + float(hi[2]))
+    boxes = case.get("boxes") or []
+    if boxes:
+        lo, hi = boxes[0]["lo"], boxes[0]["hi"]
+        return 0.5 * (float(lo[2]) + float(hi[2]))
+    lo, hi = case["air"]["lo"], case["air"]["hi"]
+    return 0.5 * (float(lo[2]) + float(hi[2]))
+
+
+def _grid_lists(arr):
+    """Finite (nv, nu) float grid as nested lists (NaN/Inf → 0)."""
+    import numpy as np
+    a = np.asarray(arr, dtype=float)
+    if a.ndim != 2:
+        raise ValueError(f"field cut grid must be 2-D, got shape {a.shape}")
+    a = np.where(np.isfinite(a), a, 0.0)
+    return [[float(v) for v in row] for row in a]
+
+
+def export_efield_cut(data, *, z_m, freq_hz, freq_choice, max_edge_samples=FIELD_CUT_MAX_EDGE):
+    """Sample a complex E cutplane at ``freq_hz`` (port-1 excitation). Returns a JSON-safe dict.
+
+    Uses EMerge ``MWField.cutplane`` + complex Ex/Ey/Ez. Outside-mesh samples are zeroed
+    (``usenan=False``). Units are SI (metres, V/m); the Fairbeam bundle converts to drawing units.
+    """
+    import numpy as np
+
+    field = data.field.find(freq=float(freq_hz))
+    field.set_field_vector()  # port 1 driven (howto / MWField default)
+    xb, yb, _zb = field.basis.bounds
+    span = max(float(xb[1] - xb[0]), float(yb[1] - yb[0]))
+    if not math.isfinite(span) or span <= 0:
+        raise ValueError("mesh bounds are empty; cannot build E-field cut")
+    n = max(2, min(int(max_edge_samples), 200))
+    ds = span / (n - 1)
+    cut = field.cutplane(ds=ds, z=float(z_m), usenan=False)
+    ex = np.asarray(cut.Ex, dtype=complex)
+    ey = np.asarray(cut.Ey, dtype=complex)
+    ez = np.asarray(cut.Ez, dtype=complex)
+    x = np.asarray(cut.x, dtype=float)
+    y = np.asarray(cut.y, dtype=float)
+    if ex.ndim != 2 or ey.shape != ex.shape or ez.shape != ex.shape:
+        raise ValueError(f"cutplane E shape mismatch: {ex.shape}, {ey.shape}, {ez.shape}")
+    # meshgrid default indexing='xy' → shape (len(ys), len(xs)) = (nv, nu) for normal=z
+    nv, nu = ex.shape
+    u0, u1 = float(np.min(x)), float(np.max(x))
+    v0, v1 = float(np.min(y)), float(np.max(y))
+    return {
+        "schema": FIELD_CUT_SCHEMA,
+        "quantity": "E",
+        "component": "abs",
+        "normal": "z",
+        "axis": 2,
+        "position_m": float(z_m),
+        "freq_hz": float(freq_hz),
+        "freq_choice": str(freq_choice),
+        "port": 1,
+        "u_m": [u0, u1],
+        "v_m": [v0, v1],
+        "nu": int(nu),
+        "nv": int(nv),
+        "ex_re": _grid_lists(ex.real), "ex_im": _grid_lists(ex.imag),
+        "ey_re": _grid_lists(ey.real), "ey_im": _grid_lists(ey.imag),
+        "ez_re": _grid_lists(ez.real), "ez_im": _grid_lists(ez.imag),
+    }
+
+
+def try_export_efield_cut(data, case, frequencies, *, s11=None, s21=None):
+    """Best-effort cut export; on failure returns ``(None, note)`` so S-results still ship."""
+    try:
+        freq_hz, choice = _pick_efield_cut_freq(frequencies, s11=s11, s21=s21)
+        cut = export_efield_cut(data, z_m=_efield_cut_z_m(case), freq_hz=freq_hz, freq_choice=choice)
+        return cut, None
+    except Exception as exc:  # noqa: BLE001 — experimental path must not fail the solve
+        return None, f"E-field cut export skipped: {exc}"
+
+
+def build_design_raw(case, emerge_version, frequencies, s11, mesh, elapsed_seconds, field_cut=None):
     """Assemble design ``raw.json`` content. S11 is EMerge's, unmodified."""
     expected = case["frequencies_hz"]
     frequencies = match_frequencies(expected, frequencies)
@@ -275,27 +564,35 @@ def build_design_raw(case, emerge_version, frequencies, s11, mesh, elapsed_secon
            "limitations": list(case["limitations"]),
            "pec_approximations": list(case["pec_approximations"])}
     if mesh:
-        raw["mesh"] = {"nodes": int(mesh["nodes"]), "tetrahedra": int(mesh["tetrahedra"])}
-    return raw
+        raw["mesh"] = _mesh_raw_block(mesh)
+    if field_cut is not None:
+        raw["field_cut"] = field_cut
+    return _attach_port_map(raw, [_port_map_entry(case.get("port"))])
 
 
-def build_planar_raw(case, emerge_version, frequencies, s_params, mesh, elapsed_seconds):
+def build_planar_raw(case, emerge_version, frequencies, s_params, mesh, elapsed_seconds, field_cut=None):
     """Assemble planar ``raw.json`` content. S-parameters are EMerge's, unmodified.
 
-    ``s_params`` maps ``"i,j"`` keys to complex sequences (response at i driven at j).
+    ``s_params`` maps ``"i,j"`` keys to complex sequences (response at i driven at j) for all
+    ``i,j in 1…n`` where ``n`` is the terminal count.
     """
     expected = case["frequencies_hz"]
     frequencies = match_frequencies(expected, frequencies)
     count = len(frequencies)
-    s_out = {}
-    for key in ("1,1", "2,1", "1,2", "2,2"):
-        if key not in s_params:
-            raise ValueError(f"missing S-parameter series {key}")
-        series = _series(s_params[key], f"S{key}", count)
-        s_out[key] = {"re": [v.real for v in series], "im": [v.imag for v in series]}
     terminals = sorted(case["terminals"], key=lambda t: t["number"])
+    n = len(terminals)
+    if n < 1 or n > N_MAX:
+        raise ValueError(f"planar raw needs 1 to {N_MAX} terminals")
+    s_out = {}
+    for i in range(1, n + 1):
+        for j in range(1, n + 1):
+            key = f"{i},{j}"
+            if key not in s_params:
+                raise ValueError(f"missing S-parameter series {key}")
+            series = _series(s_params[key], f"S{key}", count)
+            s_out[key] = {"re": [v.real for v in series], "im": [v.imag for v in series]}
     raw = {"kind": "planar", "emerge_version": str(emerge_version), "frequency_hz": frequencies,
-           "s": s_out, "z_ref": [float(terminals[0]["z0"]), float(terminals[1]["z0"])],
+           "s": s_out, "z_ref": [float(t["z0"]) for t in terminals],
            "enclosure": case["enclosure"],
            "phasor_convention": NATIVE_PHASOR,
            "native_phasor_convention": NATIVE_PHASOR,
@@ -304,7 +601,8 @@ def build_planar_raw(case, emerge_version, frequencies, s_params, mesh, elapsed_
            "solver_setup": {"resolution": case["resolution"],
                             "resolution_name": case.get("resolution_name"),
                             "enclosure": case["enclosure"],
-                            "metal_edge_m": case["metal_edge_m"],
+                            **({"metal_edge_m": case["metal_edge_m"]}
+                              if case.get("metal_edge_m") is not None else {}),
                             "abc_order": ABC_ORDER, "abc_type": ABC_TYPE,
                             "sparam_cap_single": False, "sparam_cap_column": False,
                             "sparam_enforce_reciprocity": False,
@@ -312,8 +610,10 @@ def build_planar_raw(case, emerge_version, frequencies, s_params, mesh, elapsed_
            "limitations": list(case["limitations"]),
            "pec_approximations": list(case["pec_approximations"])}
     if mesh:
-        raw["mesh"] = {"nodes": int(mesh["nodes"]), "tetrahedra": int(mesh["tetrahedra"])}
-    return raw
+        raw["mesh"] = _mesh_raw_block(mesh)
+    if field_cut is not None:
+        raw["field_cut"] = field_cut
+    return _attach_port_map(raw, [_port_map_entry(terminal) for terminal in terminals])
 
 
 def _nthreads(case):
@@ -394,7 +694,9 @@ def solve_fixture(case):
             raise ValueError(f"port {port.port_number} face is {width} x {height} m, not the fixture cross-section")
 
     sim.generate_mesh()
-    mesh = {"nodes": int(sim.mesh.n_nodes), "tetrahedra": int(sim.mesh.n_tets)}
+    mesh = mesh_counts(sim)
+    if case.get("mesh_only"):
+        return build_mesh_raw(case, em.__version__, mesh, time.monotonic() - started)
     data, sweep = _run_frequency_sweep(sim, case)
     case = {**case, "_sweep_setup": sweep}
 
@@ -437,13 +739,26 @@ def solve_design(case):
     for box in case["boxes"]:
         _box(em, box["lo"], box["hi"]).set_material(
             em.Material(box["eps_r"], box["mu_r"], box["tan_d"]))
-    sheets = [_plate(em, sheet["lo"], sheet["hi"], sheet["normal_axis"]) for sheet in case["sheets"]]
-    port = case["port"]
-    # Admit keeps one transverse axis at zero extent; that axis is the plate normal.
-    port_flat = [k for k in range(3) if port["hi"][k] == port["lo"][k]]
-    if len(port_flat) != 1:
-        raise ValueError("port plate must be flat on exactly one axis")
-    port_plate = _plate(em, port["lo"], port["hi"], port_flat[0])
+    sheets = []
+    for sheet in case["sheets"]:
+        geo = _plate(em, sheet["lo"], sheet["hi"], sheet["normal_axis"])
+        sigma, thickness_m = _optional_conductor(sheet, "sheet")
+        if sigma is None:
+            geo.set_material(em.lib.PEC)
+        else:
+            geo.set_material(em.Material(cond=sigma))
+        sheets.append((geo, sigma, thickness_m))
+    # Prefer the multiport list from admit; fall back to legacy singular ``port``.
+    ports = case.get("ports") or [case["port"]]
+    if not (1 <= len(ports) <= N_MAX):
+        raise ValueError(f"design case needs 1 to {N_MAX} ports")
+    port_plates = []
+    for port in sorted(ports, key=lambda p: p.get("number", 1)):
+        # Admit keeps one transverse axis at zero extent; that axis is the plate normal.
+        port_flat = [k for k in range(3) if port["hi"][k] == port["lo"][k]]
+        if len(port_flat) != 1:
+            raise ValueError(f"port {port.get('number')} plate must be flat on exactly one axis")
+        port_plates.append((port, _plate(em, port["lo"], port["hi"], port_flat[0])))
 
     sim.set_resolution(case["resolution"])
     sim.mw.set_frequency(list(case["frequencies_hz"]))
@@ -451,34 +766,46 @@ def solve_design(case):
 
     for face in ("left", "right", "front", "back", "bottom", "top"):
         sim.mw.bc.AbsorbingBoundary(air.face(face), order=ABC_ORDER, abctype=ABC_TYPE)
-    for sheet in sheets:
-        sim.mw.bc.PEC(sheet)
+    for geo, sigma, thickness_m in sheets:
+        _apply_metal_bc(sim, em, geo, sigma, thickness_m)
     axes = (em.XAX, em.YAX, em.ZAX)
-    direction = axes[port["direction_axis"]]
-    if port["sign"] < 0:
-        direction = -direction
-    sim.mw.bc.LumpedPort(port_plate, 1, width=port["width"], height=port["height"],
-                         direction=direction, Z0=port["z0"])
+    for port, port_plate in port_plates:
+        direction = axes[port["direction_axis"]]
+        if port["sign"] < 0:
+            direction = -direction
+        number = int(port.get("number", 1))
+        sim.mw.bc.LumpedPort(port_plate, number, width=port["width"], height=port["height"],
+                             direction=direction, Z0=port["z0"])
 
     sim.generate_mesh()
-    mesh = {"nodes": int(sim.mesh.n_nodes), "tetrahedra": int(sim.mesh.n_tets)}
+    mesh = mesh_counts(sim)
+    if case.get("mesh_only"):
+        return build_mesh_raw(case, em.__version__, mesh, time.monotonic() - started)
     data, sweep = _run_frequency_sweep(sim, case)
     case = {**case, "_sweep_setup": sweep}
 
     grid = data.scalar.grid
     frequencies = np.asarray(data.scalar.axis("freq"), dtype=float).reshape(-1)
-    s11 = np.asarray(grid.S(1, 1)).reshape(-1)
-    return build_design_raw(case, em.__version__, frequencies.tolist(), s11.tolist(), mesh,
-                            time.monotonic() - started)
+    s_params = _extract_s_matrix(grid, len(port_plates))
+    # Driven result schema still ships S11 until unified emerge-result/2 (B3 Task 3).
+    s11 = s_params["1,1"]
+    field_cut, cut_note = try_export_efield_cut(
+        data, case, frequencies.tolist(), **_field_cut_s_kwargs(s_params, len(port_plates)))
+    if cut_note:
+        case = {**case, "limitations": list(case["limitations"]) + [cut_note]}
+    return build_design_raw(case, em.__version__, frequencies.tolist(), s11, mesh,
+                            time.monotonic() - started, field_cut=field_cut)
 
 
 def solve_planar(case):
-    """Build and solve an admitted planar two-port case with EMerge.
+    """Build and solve an admitted planar N-port case with EMerge.
 
     Physics mirror the Level B2 Task 1 spike (originally measured on EMerge 2.8.9; pin is now 3.0.0b12): substrate ``Box``, zero-thickness
-    ``XYPolygon.geo()`` PEC sheets, ``PEC`` on the substrate bottom, optional second-order ABC on
-    the four sides and top when ``enclosure == "open"``, two ``LumpedPort`` strip-to-ground
-    terminals (+z), and ``mesher.set_boundary_size`` on each trace (``metal_edge_m``, growth 3).
+    ``XYPolygon.geo()`` traces with ``ThinConductor`` when σ is present (else PEC), ``PEC`` on the
+    substrate bottom, optional second-order ABC on the four sides and top when
+    ``enclosure == "open"``, ``1…N_MAX`` ``LumpedPort`` strip-to-ground terminals (+z), and
+    optional ``mesher.set_boundary_size`` on each trace when ``metal_edge_m`` is set
+    (Fairbeam default 0.4 mm, growth 3).
     """
     nthreads = _nthreads(case)
     _prepare_env(nthreads)
@@ -501,8 +828,12 @@ def solve_planar(case):
         ys = [float(p[1]) for p in trace["xy"]]
         cs = em.GCS.displace(0.0, 0.0, float(trace["z"]))
         metal = em.geo.XYPolygon(xs, ys).geo(cs=cs, name=f"Cu_{i}")
-        metal.set_material(em.lib.PEC)
-        metals.append(metal)
+        sigma, thickness_m = _optional_conductor(trace, f"traces[{i}]")
+        if sigma is None:
+            metal.set_material(em.lib.PEC)
+        else:
+            metal.set_material(em.Material(cond=sigma))
+        metals.append((metal, sigma, thickness_m))
     terminals = []
     for port in sorted(case["terminals"], key=lambda t: t["number"]):
         flat = [k for k in range(3) if port["hi"][k] == port["lo"][k]]
@@ -518,29 +849,33 @@ def solve_planar(case):
     if case["enclosure"] == "open":
         for face in ("left", "right", "front", "back", "top"):
             sim.mw.bc.AbsorbingBoundary(air.face(face), order=ABC_ORDER, abctype=ABC_TYPE)
-    for metal in metals:
-        sim.mw.bc.PEC(metal)
+    for metal, sigma, thickness_m in metals:
+        _apply_metal_bc(sim, em, metal, sigma, thickness_m)
     for port, plate in terminals:
         sim.mw.bc.LumpedPort(plate, port["number"], width=port["width"], height=port["height"],
                              direction=em.ZAX, Z0=port["z0"])
-    for metal in metals:
-        sim.mesher.set_boundary_size(metal, case["metal_edge_m"], growth_rate=3.0)
+    edge = case.get("metal_edge_m")
+    if edge is not None:
+        for metal, _sigma, _thick in metals:
+            sim.mesher.set_boundary_size(metal, edge, growth_rate=3.0)
 
     sim.generate_mesh()
-    mesh = {"nodes": int(sim.mesh.n_nodes), "tetrahedra": int(sim.mesh.n_tets)}
+    mesh = mesh_counts(sim)
+    if case.get("mesh_only"):
+        return build_mesh_raw(case, em.__version__, mesh, time.monotonic() - started)
     data, sweep = _run_frequency_sweep(sim, case)
     case = {**case, "_sweep_setup": sweep}
 
     grid = data.scalar.grid
     frequencies = np.asarray(data.scalar.axis("freq"), dtype=float).reshape(-1)
-    s_params = {
-        "1,1": np.asarray(grid.S(1, 1)).reshape(-1).tolist(),
-        "2,1": np.asarray(grid.S(2, 1)).reshape(-1).tolist(),
-        "1,2": np.asarray(grid.S(1, 2)).reshape(-1).tolist(),
-        "2,2": np.asarray(grid.S(2, 2)).reshape(-1).tolist(),
-    }
+    n_ports = len(terminals)
+    s_params = _extract_s_matrix(grid, n_ports)
+    field_cut, cut_note = try_export_efield_cut(
+        data, case, frequencies.tolist(), **_field_cut_s_kwargs(s_params, n_ports))
+    if cut_note:
+        case = {**case, "limitations": list(case["limitations"]) + [cut_note]}
     return build_planar_raw(case, em.__version__, frequencies.tolist(), s_params, mesh,
-                            time.monotonic() - started)
+                            time.monotonic() - started, field_cut=field_cut)
 
 
 def solve(case):

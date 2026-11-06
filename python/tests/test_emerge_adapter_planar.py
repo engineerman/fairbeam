@@ -30,9 +30,17 @@ def sample_case(**overrides):
         "ground_z": 0.0,
         "terminals": [
             {"number": 1, "lo": [-0.015, -0.029, 0.0], "hi": [-0.013, -0.029, 0.0016],
-             "width": 0.002, "height": 0.0016, "z0": 50.0},
+             "width": 0.002, "height": 0.0016, "z0": 50.0,
+             "design_port_type": "microstrip", "mapped_bc": "LumpedPort",
+             "approximations": [
+                 "microstrip → lumped strip-to-ground terminal; feed_shift/measurement_shift unused"],
+             "accept_used": ["accept_lumped_terminals"]},
             {"number": 2, "lo": [0.013, -0.029, 0.0], "hi": [0.015, -0.029, 0.0016],
-             "width": 0.002, "height": 0.0016, "z0": 50.0},
+             "width": 0.002, "height": 0.0016, "z0": 50.0,
+             "design_port_type": "microstrip", "mapped_bc": "LumpedPort",
+             "approximations": [
+                 "microstrip → lumped strip-to-ground terminal; feed_shift/measurement_shift unused"],
+             "accept_used": ["accept_lumped_terminals"]},
         ],
         "air": {"lo": [-0.025, -0.030, 0.0], "hi": [0.025, 0.029, 0.008]},
         "enclosure": "shielded",
@@ -85,7 +93,8 @@ class AssessPlanar(unittest.TestCase):
     def test_exports_results_without_validating(self):
         case = sample_case()
         result = fem.assess_planar(synthetic_raw(case), case)
-        self.assertEqual(result["schema"], fem.PLANAR_RESULT_SCHEMA)
+        self.assertEqual(result["schema"], fem.NPORT_RESULT_SCHEMA)
+        self.assertEqual(result["geometry_kind"], fem.GEOMETRY_PLANAR)
         self.assertEqual(result["status"], "results_exported")
         self.assertFalse(result["precision_converged"])
         self.assertFalse(result["gain_qualified"])
@@ -96,6 +105,10 @@ class AssessPlanar(unittest.TestCase):
         self.assertEqual(result["mesh"], {"nodes": 100, "tetrahedra": 400})
         self.assertEqual(result["settings"]["resolution"], 0.25)
         self.assertEqual(result["s"]["2,1"]["re"][0], 0.5)
+        self.assertEqual(len(result["port_map"]), 2)
+        self.assertEqual(result["port_map"][0]["mapped_bc"], "LumpedPort")
+        self.assertEqual(result["port_map"][0]["design_port_type"], "microstrip")
+        self.assertEqual(result["port_map"][1]["accept_used"], ["accept_lumped_terminals"])
 
     def test_rejects_wrong_frequencies(self):
         case = sample_case()
@@ -111,7 +124,8 @@ class AssessPlanar(unittest.TestCase):
 
     def test_rejects_s21_above_bound(self):
         case = sample_case()
-        with self.assertRaisesRegex(ValueError, r"\|S2,1\|"):
+        # Iteration order is i outer, j inner → S1,2 is reported before S2,1 when both exceed.
+        with self.assertRaisesRegex(ValueError, r"\|S1,2\||\|S2,1\|"):
             fem.assess_planar(synthetic_raw(case, s21=1.02, s12=1.02, s11=0.0, s22=0.0), case)
 
     def test_rejects_column_power(self):
@@ -122,7 +136,7 @@ class AssessPlanar(unittest.TestCase):
 
     def test_rejects_reciprocity(self):
         case = sample_case()
-        with self.assertRaisesRegex(ValueError, r"S21"):
+        with self.assertRaisesRegex(ValueError, r"S1,2|S2,1"):
             fem.assess_planar(synthetic_raw(case, s21=0.5, s12=0.55), case)
 
     def test_rejects_wrong_convention(self):
@@ -278,6 +292,34 @@ class PlanarWorkerContract(unittest.TestCase):
         self.assertEqual(result["s"]["2,1"]["re"][0], 0.5)
         self.assertEqual(self.worker.ABC_ORDER, 2)
         self.assertEqual(self.worker.ABC_TYPE, "B")
+
+    def test_build_planar_raw_accepts_three_port_s_matrix(self):
+        t3 = {"number": 3, "lo": [-0.001, 0.029, 0.0], "hi": [0.001, 0.029, 0.0016],
+              "width": 0.002, "height": 0.0016, "z0": 50.0,
+              "design_port_type": "microstrip", "mapped_bc": "LumpedPort",
+              "approximations": [], "accept_used": ["accept_lumped_terminals"]}
+        case = sample_case()
+        case["terminals"] = list(case["terminals"]) + [t3]
+        n = 3
+        freqs = case["frequencies_hz"]
+        s_params = {f"{i},{j}": [0.1 / max(i, j)] * len(freqs)
+                    for i in range(1, n + 1) for j in range(1, n + 1)}
+        # Make off-diagonals reciprocal so assess_planar passes.
+        for i in range(1, n + 1):
+            for j in range(i + 1, n + 1):
+                s_params[f"{j},{i}"] = list(s_params[f"{i},{j}"])
+        raw = self.worker.build_planar_raw(case, "3.0.0b12", freqs, s_params,
+                                           {"nodes": 4, "tetrahedra": 2}, 0.5)
+        self.assertEqual(len(raw["z_ref"]), 3)
+        self.assertEqual(set(raw["s"]), {f"{i},{j}" for i in range(1, 4) for j in range(1, 4)})
+        result = fem.assess_planar(raw, case)
+        self.assertEqual(result["status"], "results_exported")
+        self.assertEqual(len(result["z_ref"]), 3)
+
+    def test_field_cut_s_kwargs_fallback(self):
+        s = {"1,1": [0.2], "2,1": [0.5], "1,2": [0.5], "2,2": [0.1]}
+        self.assertEqual(self.worker._field_cut_s_kwargs(s, 2), {"s21": s["2,1"]})
+        self.assertEqual(self.worker._field_cut_s_kwargs({"1,1": [0.3]}, 1), {"s11": [0.3]})
 
 
 if __name__ == "__main__":

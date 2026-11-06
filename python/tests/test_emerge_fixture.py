@@ -176,6 +176,9 @@ class Fixture(unittest.TestCase):
         self.assertEqual(case["geometry"]["length_m"], fem.L_M)
         self.assertEqual([p["face_z_m"] for p in case["ports"]], [0.0, fem.L_M])
         self.assertEqual(case["phasor_convention_out"], NATIVE_PLUS)
+        self.assertEqual(case["port_map"], fem.fixture_port_map())
+        self.assertEqual(case["ports"][0]["mapped_bc"], "RectangularWaveguide")
+        self.assertEqual(case["ports"][0]["approximations"], [fem.APPROX_FIXTURE_WG])
         json.dumps(case, allow_nan=False)
 
     def test_analytic_reference(self):
@@ -203,6 +206,7 @@ class Assess(unittest.TestCase):
         self.assertIs(result["precision_converged"], False)
         self.assertIs(result["qualifies_driven_antenna"], False)
         self.assertTrue(result["limitations"])
+        self.assertEqual(result["port_map"], fem.fixture_port_map())
         self.assertEqual(len(result["analytic_s21_re"]), 5)
         metrics = result["metrics"]
         self.assertAlmostEqual(metrics["s11_max"], 0.0)

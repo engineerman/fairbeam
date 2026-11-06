@@ -32,6 +32,16 @@ source is provided at no charge beyond the cost of delivery, if any.
   Windows only. The app does not contain it; it downloads the official portable package only when you
   choose Install Elmer in the experimental solvers panel. The package includes its license texts.
   Source: <https://github.com/ElmerCSC/elmerfem/tree/release-26.1>.
+- **EMerge** 3.0.0b12 (GPL-2.0-or-later), optional experimental FEM backend. The Fairbeam installer
+  does not bundle EMerge. On Windows, **Install EMerge** creates a managed per-user Python
+  environment from a hash-locked wheel set on PyPI (`python/fairbeam/emerge_lock/`); on other
+  platforms you supply your own environment. Fairbeam never imports `emerge` in-process: only a
+  separate worker started in that environment does. Component licenses in the managed lock include
+  gmsh (GPL-2.0-or-later) and other wheels under their own terms; the install also downloads
+  **Intel MKL** and related runtime packages under Intel's proprietary Simplified Software License
+  (shown in the Research / Install UI before install). Source:
+  <https://github.com/FennisRobert/EMerge>. Experiment notes:
+  [docs/EMERGE-EXPERIMENT.md](docs/EMERGE-EXPERIMENT.md).
 - Bundled open-source libraries, under their respective licenses (versions are recorded in the lockfiles):
   - desktop shell: Tauri and the Rust crates in `src-tauri/Cargo.lock`;
   - viewer: three.js, SolidJS, lucide, jsPDF, CodeMirror and the other npm packages in

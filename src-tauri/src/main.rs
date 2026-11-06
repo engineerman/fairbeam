@@ -873,6 +873,10 @@ mod external_link_tests {
             Some("https://github.com/thliebig/CSXCAD")
         );
         assert_eq!(
+            external_url("emerge"),
+            Some("https://github.com/FennisRobert/EMerge")
+        );
+        assert_eq!(
             external_url("privacy"),
             Some("https://fairbeam.org/privacy.html")
         );
@@ -1920,6 +1924,7 @@ fn external_url(link: &str) -> Option<&'static str> {
         "openems" => "https://github.com/thliebig/openEMS",
         "licenses" => concat!("https://github.com/ismailakdag/fairbeam/blob/v", env!("CARGO_PKG_VERSION"), "/THIRD-PARTY-NOTICES.md"),
         "csxcad" => "https://github.com/thliebig/CSXCAD",
+        "emerge" => "https://github.com/FennisRobert/EMerge",
         // what usage statistics would collect (docs/TELEMETRY.md)
         "privacy" => "https://fairbeam.org/privacy.html",
         _ => return None,

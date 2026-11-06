@@ -26,7 +26,10 @@ def sample_case(**overrides):
             {"lo": [0.0, 0.0, 0.0], "hi": [0.04, 0.04, 0.0], "normal_axis": 2},
         ],
         "port": {"lo": [0.0195, 0.02, 0.0], "hi": [0.0205, 0.02, 0.0016],
-                 "direction_axis": 2, "sign": 1, "width": 0.001, "height": 0.0016, "z0": 50.0},
+                 "direction_axis": 2, "sign": 1, "width": 0.001, "height": 0.0016, "z0": 50.0,
+                 "design_port_type": "lumped", "mapped_bc": "LumpedPort",
+                 "approximations": ["finite-width lumped feed plate"],
+                 "accept_used": ["accept_finite_feed"]},
         "air": {"lo": [-0.04, -0.04, -0.04], "hi": [0.08, 0.08, 0.0416]},
         "frequencies_hz": [2.0e9, 2.5e9, 3.0e9],
         "resolution": 0.25,
@@ -67,15 +70,21 @@ class AssessDesign(unittest.TestCase):
     def test_exports_results_without_validating(self):
         case = sample_case()
         result = fem.assess_design(synthetic_raw(case), case)
-        self.assertEqual(result["schema"], fem.DESIGN_RESULT_SCHEMA)
+        self.assertEqual(result["schema"], fem.NPORT_RESULT_SCHEMA)
+        self.assertEqual(result["geometry_kind"], fem.GEOMETRY_DRIVEN)
         self.assertEqual(result["status"], "results_exported")
         self.assertFalse(result["precision_converged"])
         self.assertFalse(result["gain_qualified"])
         self.assertEqual(result["phasor_convention"], NATIVE)
         self.assertEqual(result["native_phasor_convention"], NATIVE)
-        self.assertEqual(result["z_ref"], 50.0)
+        self.assertEqual(result["z_ref"], [50.0])
         self.assertEqual(result["mesh"], {"nodes": 100, "tetrahedra": 400})
         self.assertEqual(result["settings"]["resolution"], 0.25)
+        self.assertEqual(result["port_map"], [{
+            "design_port_type": "lumped", "mapped_bc": "LumpedPort",
+            "approximations": ["finite-width lumped feed plate"],
+            "accept_used": ["accept_finite_feed"],
+        }])
 
     def test_rejects_wrong_frequencies(self):
         case = sample_case()
@@ -103,7 +112,7 @@ class AssessDesign(unittest.TestCase):
         case = sample_case()
         result = fem.assess_design(synthetic_raw(case, s11=1.01), case)
         self.assertEqual(result["status"], "results_exported")
-        self.assertAlmostEqual(abs(complex(result["s11_re"][0], result["s11_im"][0])), 1.01)
+        self.assertAlmostEqual(abs(complex(result["s"]["1,1"]["re"][0], result["s"]["1,1"]["im"][0])), 1.01)
 
 
 class RunDesign(unittest.TestCase):
@@ -234,6 +243,80 @@ class DesignWorkerContract(unittest.TestCase):
         self.assertEqual(result["mesh"], {"nodes": 10, "tetrahedra": 5})
         self.assertEqual(self.worker.ABC_ORDER, 2)
         self.assertEqual(self.worker.ABC_TYPE, "B")
+
+    def test_pick_efield_cut_freq_min_abs_s11(self):
+        freqs = [2e9, 2.5e9, 3e9]
+        s11 = [0.4, 0.05, 0.3]
+        chosen, how = self.worker._pick_efield_cut_freq(freqs, s11=s11)
+        self.assertEqual(chosen, 2.5e9)
+        self.assertEqual(how, "min_abs_s11")
+
+    def test_assess_passes_field_cut(self):
+        case = sample_case()
+        raw = synthetic_raw(case)
+        raw["field_cut"] = {
+            "schema": fem.FIELD_CUT_SCHEMA,
+            "quantity": "E", "component": "abs", "normal": "z", "axis": 2,
+            "position_m": 0.0008, "freq_hz": 2.5e9, "freq_choice": "min_abs_s11", "port": 1,
+            "u_m": [-0.01, 0.01], "v_m": [-0.01, 0.01], "nu": 2, "nv": 2,
+            "ex_re": [[1.0, 0.0], [0.0, 0.0]], "ex_im": [[0.0, 0.0], [0.0, 0.0]],
+            "ey_re": [[0.0, 0.0], [0.0, 0.0]], "ey_im": [[0.0, 0.0], [0.0, 0.0]],
+            "ez_re": [[0.0, 0.0], [0.0, 0.0]], "ez_im": [[0.0, 0.0], [0.0, 0.0]],
+        }
+        result = fem.assess_design(raw, case)
+        self.assertEqual(result["field_cut"]["freq_hz"], 2.5e9)
+        self.assertEqual(result["field_cut"]["freq_choice"], "min_abs_s11")
+
+    def test_build_mesh_raw_and_assess(self):
+        case = sample_case()
+        raw = self.worker.build_mesh_raw(case, "3.0.0b12", {"nodes": 42, "tetrahedra": 99}, 0.75)
+        json.dumps(raw, allow_nan=False)
+        self.assertTrue(raw["mesh_only"])
+        self.assertNotIn("s11_re", raw)
+        result = fem.assess_mesh(raw, case)
+        self.assertEqual(result["schema"], fem.MESH_RESULT_SCHEMA)
+        self.assertEqual(result["status"], "mesh_exported")
+        self.assertEqual(result["nodes"], 42)
+        self.assertEqual(result["tetrahedra"], 99)
+        self.assertEqual(result["duration_s"], 0.75)
+        self.assertFalse(result["precision_converged"])
+
+
+class RunDesignMeshOnly(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.exe, _ = fake_venv(self.root / "venv")
+        self.worker = self.root / "fairbeam_emerge_worker.py"
+        self.worker.write_text("# stand-in worker\n", encoding="utf-8")
+        self.case = sample_case(mesh_only=True)
+        patcher = patch.object(fem, "WORKER", self.worker)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_mesh_only_writes_counts_without_s_parameters(self):
+        raw = {"mesh_only": True, "kind": "design", "emerge_version": "3.0.0b12",
+               "elapsed_seconds": 1.5, "mesh": {"nodes": 12, "tetrahedra": 34}}
+
+        def fake(*args, **kwargs):
+            Path(kwargs["cwd"], "raw.json").write_text(json.dumps(raw), encoding="utf-8")
+            return subprocess.CompletedProcess(args[0], 0, "mesh only")
+
+        with patch.object(fem.subprocess, "run", side_effect=fake) as launch:
+            result = fem.run_design(self.root / "run", self.case, root=self.root / "venv",
+                                    experimental=True)
+        self.assertEqual(result["status"], "mesh_exported")
+        self.assertEqual(result["nodes"], 12)
+        self.assertEqual(result["tetrahedra"], 34)
+        self.assertEqual(result["duration_s"], 1.5)
+        self.assertNotIn("s11_re", result)
+        written = json.loads((self.root / "run" / "case.json").read_text(encoding="utf-8"))
+        self.assertTrue(written["mesh_only"])
+        self.assertEqual(launch.call_args.kwargs["timeout"], fem.MESH_WORKER_TIMEOUT_S)
+        manifest = json.loads((self.root / "run" / "manifest.json").read_text(encoding="utf-8"))
+        self.assertTrue(manifest["mesh_only"])
+        self.assertEqual(manifest["status"], "mesh_exported")
 
 
 if __name__ == "__main__":
