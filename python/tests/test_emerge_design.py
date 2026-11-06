@@ -7,12 +7,13 @@ from pathlib import Path
 from fairbeam import elmer_driven, emerge_design
 from fairbeam.design import blank_design
 from fairbeam.emerge_design import admit
+from fairbeam.emerge_limits import N_MAX
 
 C0 = 299792458.0
 
 
 def settings(**over):
-    s = dict(analysis="driven", accept_finite_feed=True, feed_width_mm=1., padding_mm=40.,
+    s = dict(analysis="emerge_nport", accept_finite_feed=True, feed_width_mm=1., padding_mm=40.,
              resolution="coarse", f_min_hz=2e9, f_max_hz=3e9, points=5)
     s.update(over)
     return s
@@ -40,6 +41,28 @@ def conductive(d):
 
 def two_ports(d):
     d["ports"].append({**copy.deepcopy(d["ports"][0]), "number": 2})
+
+
+def three_lumped_ports(d):
+    """Three probe feeds contacting ground and patch (synthetic multiport admit)."""
+    base = copy.deepcopy(d["ports"][0])
+    d["ports"] = [
+        {**copy.deepcopy(base), "number": 1, "start": ["feed", "0", "0"], "stop": ["feed", "0", "h"]},
+        {**copy.deepcopy(base), "number": 2, "start": ["0", "0", "0"], "stop": ["0", "0", "h"]},
+        {**copy.deepcopy(base), "number": 3, "start": ["W/4", "0", "0"], "stop": ["W/4", "0", "h"]},
+    ]
+
+
+def nine_lumped_ports(d):
+    base = copy.deepcopy(d["ports"][0])
+    d["ports"] = [{**copy.deepcopy(base), "number": i} for i in range(1, N_MAX + 2)]
+
+
+def mixed_lumped_and_waveguide(d):
+    d["ports"].append({
+        "type": "waveguide", "number": 2, "mode": "TE10", "a": "22.86", "b": "10.16",
+        "start": ["-G/2", "-L/2", "0"], "stop": ["G/2", "L/2", "0"], "direction": "z",
+    })
 
 
 def resistor(d):
@@ -132,7 +155,17 @@ class AdmitTests(unittest.TestCase):
             self.assertAlmostEqual(got, want, places=12)
         self.assertEqual(sorted(s["normal_axis"] for s in case["sheets"]), [2, 2])
         self.assertEqual(set(case["sheets"][0]), {"lo", "hi", "normal_axis"})
-        self.assertEqual(set(case["port"]), {"lo", "hi", "direction_axis", "sign", "width", "height", "z0"})
+        self.assertEqual(
+            set(case["port"]),
+            {"number", "lo", "hi", "direction_axis", "sign", "width", "height", "z0",
+             "design_port_type", "mapped_bc", "approximations", "accept_used"})
+        self.assertEqual(case["port"]["number"], 1)
+        self.assertEqual([p["number"] for p in case["ports"]], [1])
+        self.assertEqual(case["ports"][0], case["port"])
+        self.assertEqual(case["port"]["design_port_type"], "lumped")
+        self.assertEqual(case["port"]["mapped_bc"], "LumpedPort")
+        self.assertEqual(case["port"]["accept_used"], ["accept_finite_feed"])
+        self.assertEqual(case["port"]["approximations"], ["finite-width lumped feed plate"])
         self.assertEqual(case["frequencies_hz"][0], 2e9)
         self.assertEqual(case["frequencies_hz"][-1], 3e9)
         self.assertEqual(len(case["frequencies_hz"]), 5)
@@ -181,17 +214,22 @@ class AdmitTests(unittest.TestCase):
         self.assertEqual(d, original)
         self.assertEqual(s, s_original)
 
-    def test_approximate_metals_is_explicit_and_recorded(self):
+    def test_conductive_sheets_keep_thin_conductor_fields(self):
         d = patch()
         conductive(d)
-        with self.assertRaises(ValueError):
-            admit(d, settings())
-        with self.assertRaises(ValueError):
-            admit(d, settings(approximate_metals=False))
-        case = admit(d, settings(approximate_metals=True))
-        self.assertEqual(case["pec_approximations"], ["copper"])
-        self.assertTrue(any("PEC approximation" in t and "copper" in t for t in case["limitations"]))
-        self.assertEqual(case["boxes"], admit(patch(), settings())["boxes"])
+        case = admit(d, settings(approximate_metals=False))
+        self.assertEqual(case["pec_approximations"], [])
+        self.assertTrue(any(s.get("conductivity") == 5.8e7 for s in case["sheets"]))
+        self.assertTrue(all(
+            (s.get("conductivity") is None and s.get("thickness_m") is None)
+            or (s["conductivity"] == 5.8e7 and abs(s["thickness_m"] - 0.035e-3) < 1e-15)
+            for s in case["sheets"]))
+        self.assertTrue(any("ThinConductor" in t for t in case["limitations"]))
+        approx = admit(d, settings(approximate_metals=True))
+        self.assertEqual(approx["pec_approximations"], ["copper"])
+        self.assertTrue(any("PEC approximation" in t and "copper" in t for t in approx["limitations"]))
+        self.assertTrue(all("conductivity" not in s for s in approx["sheets"]))
+        self.assertEqual(approx["boxes"], admit(patch(), settings())["boxes"])
 
     def test_lossless_dielectric_has_no_loss_limitation(self):
         d = patch()
@@ -202,16 +240,39 @@ class AdmitTests(unittest.TestCase):
         self.assertEqual(case["boxes"][0]["tan_d"], 0.)
         self.assertFalse(any("loss tangent" in t for t in case["limitations"]))
 
+    def test_three_lumped_ports_are_admitted(self):
+        d = patch()
+        three_lumped_ports(d)
+        case = admit(d, settings())
+        self.assertEqual([p["number"] for p in case["ports"]], [1, 2, 3])
+        self.assertEqual(case["port"], case["ports"][0])
+        self.assertTrue(all(p["mapped_bc"] == "LumpedPort" for p in case["ports"]))
+
+    def test_nine_ports_exceed_n_max(self):
+        d = patch()
+        nine_lumped_ports(d)
+        with self.assertRaises(ValueError) as caught:
+            admit(d, settings())
+        self.assertIn(str(N_MAX), str(caught.exception))
+        self.assertIn("1 to", str(caught.exception))
+
+    def test_mixed_port_types_are_rejected(self):
+        d = patch()
+        mixed_lumped_and_waveguide(d)
+        with self.assertRaises(ValueError) as caught:
+            admit(d, settings())
+        self.assertIn("lumped", str(caught.exception).lower())
+
     def test_rejections(self):
         cases = [
-            (two_ports, "one rectangular lumped port"), (resistor, "lumped elements"),
+            (resistor, "lumped elements"),
             (lumped_element, "lumped elements"), (transform, "untransformed"), (rotated, "untransformed"),
-            (cut, "untransformed"), (curved, "axis-aligned boxes"), (metal_volume, "PEC sheet"),
+            (cut, "untransformed"), (curved, "axis-aligned boxes"), (metal_volume, "sheet"),
             (flat_dielectric, "must have volume"), (overlap, "Overlapping"),
-            (no_tan_d_freq, "tan_d_freq"), (feed_floats, "contact PEC"), (crossing_sheet, "crosses the feed gap"),
+            (no_tan_d_freq, "tan_d_freq"), (feed_floats, "contact metal"), (crossing_sheet, "crosses the feed gap"),
             (real_feed, "ideal line feed"), (reactive, "port properties"),
             (unknown_port_key, "port properties"), (unknown_material_key, "material properties"),
-            (not_excited, "excited"), (edge_feed, "contact PEC"),
+            (not_excited, "excited"), (edge_feed, "contact metal"),
         ]
         for mutate, text in cases:
             with self.subTest(mutate.__name__):
@@ -244,7 +305,7 @@ class AdmitTests(unittest.TestCase):
             dict(unknown=1), dict(analysis="eigen"), dict(accept_finite_feed=False),
             dict(accept_finite_feed="yes"), dict(feed_width_mm=0), dict(feed_width_mm=True),
             dict(feed_width_mm=float("nan")), dict(padding_mm=-1), dict(padding_mm="40"),
-            dict(resolution="medium"), dict(resolution=.2),
+            dict(resolution="medium"), dict(resolution=0.6), dict(resolution=0),
             dict(points=2), dict(points=22), dict(points=5.), dict(points=True),
             dict(f_min_hz=3e9), dict(f_min_hz=4e9), dict(f_min_hz=5e5), dict(f_max_hz=2e11),
             dict(f_max_hz=float("inf")), dict(f_min_hz=True), dict(approximate_metals="no"),
@@ -265,6 +326,9 @@ class AdmitTests(unittest.TestCase):
             admit(patch(), None)
         self.assertEqual(admit(patch(), settings(points=3))["frequencies_hz"], [2e9, 2.5e9, 3e9])
         self.assertEqual(len(admit(patch(), settings(points=21))["frequencies_hz"]), 21)
+        custom = admit(patch(), settings(resolution=0.2))
+        self.assertEqual(custom["resolution"], 0.2)
+        self.assertEqual(custom["resolution_name"], "custom")
 
     def test_too_large_domain_is_rejected_before_launch(self):
         with self.assertRaisesRegex(ValueError, "Domain too large"):
@@ -315,7 +379,8 @@ def _variants():
         out.append((name, make, conductive_metal))
 
     add("approximated conductive metal", conductive, True)
-    for fn in (two_ports, resistor, lumped_element, transform, rotated, cut, curved, metal_volume,
+    # two_ports is intentionally omitted: EMerge admits 1…N_MAX lumped; Elmer still requires one.
+    for fn in (resistor, lumped_element, transform, rotated, cut, curved, metal_volume,
                flat_dielectric, overlap, no_tan_d_freq, feed_floats, crossing_sheet, real_feed,
                reactive, unknown_port_key, unknown_material_key, not_excited, edge_feed):
         add(fn.__name__, fn)
@@ -347,6 +412,14 @@ class ParityTests(unittest.TestCase):
                 rejected += not emerge_ok
         self.assertGreaterEqual(accepted, 2)
         self.assertGreaterEqual(rejected, 10)
+
+    def test_two_ports_admit_while_elmer_still_rejects(self):
+        d = patch()
+        two_ports(d)
+        with self.assertRaises(ValueError):
+            elmer_driven.prepare(d, cell_mm=40, padding_mm=40)
+        case = admit(copy.deepcopy(d), settings(padding_mm=40))
+        self.assertEqual([p["number"] for p in case["ports"]], [1, 2])
 
 
 if __name__ == "__main__":

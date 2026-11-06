@@ -7,7 +7,7 @@ import type { Bundle, FarField } from "../types";
 import { appMode } from "../workspace";
 import type { RunContent } from "./navModel";
 import { focusResult, resultFocus, type ResultView } from "./resultFocus";
-import { runContentOf } from "./runResults";
+import { designRunBundle, runContentOf } from "./runResults";
 import { designResultState } from "./activeResult";
 import { t } from "../i18n";
 
@@ -22,12 +22,31 @@ export const ribbonExportReason = () => (designResultState().loading ? t("packag
 
 export interface Availability { ok: boolean; reason: string }
 
+/** EMerge experimental export: Fairbeam marks solver.engine and experimental.solver. */
+export function isEmergeExperimentalBundle(b: Bundle | null | undefined): boolean {
+  return !!b && (b.experimental?.solver === "EMerge" || b.solver.engine === "EMerge");
+}
+
+/** Bundle of the focused Post run (or the dock's latest), once loaded. */
+export function ribbonResultBundle(): Bundle | null {
+  const result = ribbonResult();
+  if (!result) return null;
+  const shown = designResult();
+  if (shown?.file === result.file) return shown.bundle;
+  return designRunBundle(result.file) ?? null;
+}
+
+/** Focused / latest run is an EMerge experimental export (gate Post on the run, not chrome). */
+export function ribbonIsEmergeResult(): boolean {
+  return isEmergeExperimentalBundle(ribbonResultBundle());
+}
+
 /** Whether a run holds surface-current maps (#90): only a run with maps offers Currents, and the
  * reason says why not (null content = its bundle is still being read). */
-export function currentsAvailability(content: RunContent | null): Availability {
+export function currentsAvailability(content: RunContent | null, emerge = false): Availability {
   if (!content) return { ok: false, reason: t("ribbon.results.reading") };
   if (!content.currents.length) {
-    return { ok: false, reason: t("ribbon.results.noCurrents") };
+    return { ok: false, reason: emerge ? t("ribbon.post.currentsEmergeDisabled") : t("ribbon.results.noCurrents") };
   }
   const n = content.currents.length;
   return { ok: true, reason: t("ribbon.results.showCurrents", { count: n }) };
@@ -37,14 +56,14 @@ export function currentsAvailability(content: RunContent | null): Availability {
 export function ribbonCurrents(): Availability {
   const result = ribbonResult();
   if (!result) return { ok: false, reason: t("ribbon.results.selectResult") };
-  return currentsAvailability(runContentOf(result.file));
+  return currentsAvailability(runContentOf(result.file), ribbonIsEmergeResult());
 }
 
 /** Whether a run holds E/H field-plane maps (monitors.field_planes); null content = still reading. */
-export function fieldPlanesAvailability(content: RunContent | null): Availability {
+export function fieldPlanesAvailability(content: RunContent | null, emerge = false): Availability {
   if (!content) return { ok: false, reason: t("ribbon.results.reading") };
   const n = content.fieldPlanes?.length ?? 0;
-  if (!n) return { ok: false, reason: t("ribbon.results.noFieldPlanes") };
+  if (!n) return { ok: false, reason: emerge ? t("ribbon.post.fieldEmergeDisabled") : t("ribbon.results.noFieldPlanes") };
   return { ok: true, reason: t("ribbon.results.showFieldPlane", { count: n }) };
 }
 
@@ -52,14 +71,33 @@ export function fieldPlanesAvailability(content: RunContent | null): Availabilit
 export function ribbonFieldPlanes(): Availability {
   const result = ribbonResult();
   if (!result) return { ok: false, reason: t("ribbon.results.selectResult") };
-  return fieldPlanesAvailability(runContentOf(result.file));
+  return fieldPlanesAvailability(runContentOf(result.file), ribbonIsEmergeResult());
+}
+
+/** Efficiency tab: openEMS far-field post-process; never offered for EMerge S-only exports. */
+export function ribbonEfficiency(): Availability {
+  const result = ribbonResult();
+  if (!result) return { ok: false, reason: t("ribbon.post.runFirst") };
+  if (ribbonIsEmergeResult()) return { ok: false, reason: t("ribbon.post.efficiencyEmergeDisabled") };
+  return { ok: true, reason: t("ribbon.post.efficiencyTitle") };
+}
+
+/** 2D pattern cuts: need far field; EMerge Fairbeam exports leave farfield empty. */
+export function ribbonPattern(): Availability {
+  const result = ribbonResult();
+  if (!result) return { ok: false, reason: t("ribbon.post.runFirst") };
+  if (ribbonIsEmergeResult()) return { ok: false, reason: t("ribbon.post.patternEmergeDisabled") };
+  return { ok: true, reason: t("ribbon.post.patternTitle") };
 }
 
 /** Array synthesis is available only for stored multi-element fields. */
 export function ribbonArray(): Availability {
   const result = ribbonResult();
-  const ready = !!result && !!runContentOf(result.file)?.array?.length;
-  return { ok: ready, reason: ready ? t("dock.results.array") : t("array.noPatterns") };
+  if (!result) return { ok: false, reason: t("array.noPatterns") };
+  const ready = !!runContentOf(result.file)?.array?.length;
+  if (ready) return { ok: true, reason: t("dock.results.array") };
+  if (ribbonIsEmergeResult()) return { ok: false, reason: t("ribbon.post.patternEmergeDisabled") };
+  return { ok: false, reason: t("array.noPatterns") };
 }
 
 /** The 3D pattern of the focused run: only a run with far fields offers it. */
@@ -68,7 +106,9 @@ export function ribbonPattern3d(): Availability {
   if (!result) return { ok: false, reason: t("ribbon.results.selectResult") };
   const content = runContentOf(result.file);
   if (!content) return { ok: false, reason: t("ribbon.results.reading") };
-  if (!content.farfield.length) return { ok: false, reason: t("ribbon.results.noFarfield") };
+  if (!content.farfield.length) {
+    return { ok: false, reason: ribbonIsEmergeResult() ? t("ribbon.post.patternEmergeDisabled") : t("ribbon.results.noFarfield") };
+  }
   return { ok: true, reason: resultFocus()?.view === "pattern3d" ? t("ribbon.results.hidePattern3d") : t("ribbon.results.showPattern3d") };
 }
 
@@ -91,6 +131,9 @@ export function openRibbonResult(action: ResultView | "report" | "export") {
     if (ribbonExportReady()) setPackageOpen(true);
     return;
   }
+  // EMerge S-only exports: never open empty Efficiency / Pattern tabs
+  if (action === "efficiency" && !ribbonEfficiency().ok) return;
+  if (action === "pattern" && !ribbonPattern().ok) return;
   // a run without maps has no current view: never focus it (the layer and dock tab would be empty)
   if (action === "currents" && !ribbonCurrents().ok) return;
   // a field plane: the focused one stays, else the run's first map

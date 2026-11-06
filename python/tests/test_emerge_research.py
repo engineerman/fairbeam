@@ -31,52 +31,39 @@ def emerge_result(status="results_validated", **overrides):
 
 
 def design_settings(**over):
-    s = dict(analysis="driven", accept_finite_feed=True, feed_width_mm=1., padding_mm=40.,
+    s = dict(analysis="emerge_nport", accept_finite_feed=True, feed_width_mm=1., padding_mm=40.,
              resolution="coarse", f_min_hz=2e9, f_max_hz=3e9, points=3)
     s.update(over)
     return s
 
 
 def planar_settings(**over):
-    s = dict(analysis="planar_two_port", accept_lumped_terminals=True, enclosure="shielded",
+    s = dict(analysis="emerge_nport", accept_lumped_terminals=True, enclosure="shielded",
              air_height_mm=6.4, resolution="coarse", f_min_hz=0.75e9, f_max_hz=1.25e9, points=3,
              approximate_metals=True)
     s.update(over)
     return s
 
 
-def emerge_design_result(**overrides):
-    value = {
-        "schema": fem.DESIGN_RESULT_SCHEMA, "backend": "emerge",
-        "research_schema": "fairbeam-research-result-1", "status": "results_exported",
-        "precision_converged": False, "gain_qualified": False,
-        "frequency_hz": [2e9, 2.5e9, 3e9], "s11_re": [0.1, 0.2, 0.1], "s11_im": [0.0, 0.0, 0.0],
-        "z_ref": 50.0, "settings": design_settings(), "phasor_convention": fem.PHASOR,
-        "native_phasor_convention": fem.PHASOR, "limitations": ["Experimental"],
-        "pec_approximations": [],
-    }
-    value.update(overrides)
-    return value
-
-
-def emerge_planar_result(**overrides):
+def emerge_nport_result(n_ports=2, geometry_kind="planar_microstrip", **overrides):
     n = 3
+    s = {f"{i},{j}": {"re": [0.1] * n, "im": [0.0] * n}
+         for i in range(1, n_ports + 1) for j in range(1, n_ports + 1)}
     value = {
-        "schema": fem.PLANAR_RESULT_SCHEMA, "backend": "emerge",
+        "schema": fem.NPORT_RESULT_SCHEMA, "backend": "emerge",
         "research_schema": "fairbeam-research-result-1", "status": "results_exported",
+        "geometry_kind": geometry_kind,
         "precision_converged": False, "gain_qualified": False,
-        "frequency_hz": [0.75e9, 1.0e9, 1.25e9],
-        "s": {
-            "1,1": {"re": [0.1] * n, "im": [0.0] * n},
-            "2,1": {"re": [0.5] * n, "im": [0.0] * n},
-            "1,2": {"re": [0.5] * n, "im": [0.0] * n},
-            "2,2": {"re": [0.1] * n, "im": [0.0] * n},
-        },
-        "z_ref": [50.0, 50.0], "enclosure": "shielded",
-        "settings": planar_settings(), "phasor_convention": fem.PHASOR,
-        "native_phasor_convention": fem.PHASOR, "limitations": ["Experimental"],
-        "pec_approximations": ["copper"],
+        "frequency_hz": [0.75e9, 1.0e9, 1.25e9] if geometry_kind == "planar_microstrip"
+        else [2e9, 2.5e9, 3e9],
+        "s": s, "z_ref": [50.0] * n_ports,
+        "settings": planar_settings() if geometry_kind == "planar_microstrip" else design_settings(),
+        "phasor_convention": fem.PHASOR, "native_phasor_convention": fem.PHASOR,
+        "limitations": ["Experimental"], "pec_approximations": [],
     }
+    if geometry_kind == "planar_microstrip":
+        value["enclosure"] = "shielded"
+        value["pec_approximations"] = ["copper"]
     value.update(overrides)
     return value
 
@@ -93,7 +80,7 @@ class EmergeResearchAdmission(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "resolution"):
                 research.prepare({**base, "settings": {"resolution": "ultra"}})
 
-    def test_prepare_admits_patch_design_and_rejects_two_ports(self):
+    def test_prepare_admits_patch_design_and_two_lumped_ports(self):
         with tempfile.TemporaryDirectory() as directory:
             exe, site = fake_venv(directory)
             record = site / "emerge-3.0.0b12.dist-info" / "RECORD"
@@ -109,10 +96,14 @@ class EmergeResearchAdmission(unittest.TestCase):
             two = copy.deepcopy(design)
             two["ports"].append(copy.deepcopy(two["ports"][0]))
             two["ports"][1]["number"] = 2
-            with self.assertRaises(ValueError):
-                research.prepare({
-                    "backend": "emerge", "path": directory, "design": two,
-                    "settings": design_settings()})
+            # Distinct feed location so both plates contact ground and patch.
+            two["ports"][1]["start"] = ["0", "0", "0"]
+            two["ports"][1]["stop"] = ["0", "0", "h"]
+            two_spec = research.prepare({
+                "backend": "emerge", "path": directory, "design": two,
+                "settings": design_settings()})
+            self.assertEqual(two_spec["normalized"]["kind"], "design")
+            self.assertEqual(len(two_spec["normalized"]["ports"]), 2)
 
     def test_prepare_admits_planar_hairpin_fixture(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -128,6 +119,26 @@ class EmergeResearchAdmission(unittest.TestCase):
             self.assertEqual(spec["path"], str(exe.resolve()))
             self.assertEqual(len(spec["normalized"]["terminals"]), 2)
             self.assertEqual(spec["normalized"]["enclosure"], "shielded")
+
+    def test_prepare_mesh_only_sets_flag_on_normalized_case(self):
+        with tempfile.TemporaryDirectory() as directory:
+            exe, site = fake_venv(directory)
+            record = site / "emerge-3.0.0b12.dist-info" / "RECORD"
+            record.write_text("emerge/__init__.py,sha256=abc,10\n", encoding="utf-8")
+            design = blank_design("p", "Patch")
+            spec = research.prepare({
+                "backend": "emerge", "path": directory, "design": design,
+                "settings": design_settings(mesh_only=True)})
+            self.assertTrue(spec["normalized"]["mesh_only"])
+            self.assertEqual(spec["normalized"]["kind"], "design")
+            self.assertTrue(spec["settings"]["mesh_only"])
+            with self.assertRaisesRegex(ValueError, "mesh_only requires a design"):
+                research.prepare({"backend": "emerge", "path": directory,
+                                  "settings": {"resolution": "coarse", "mesh_only": True}})
+            with self.assertRaisesRegex(ValueError, "mesh_only must be boolean"):
+                research.prepare({
+                    "backend": "emerge", "path": directory, "design": design,
+                    "settings": design_settings(mesh_only=1)})
 
     def test_prepare_refuses_unsupported_version_and_admits_fake_venv(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -168,28 +179,45 @@ class EmergeResearchValidation(unittest.TestCase):
         self.assertEqual(value["status"], "results_validated")
         self.assertTrue(research.completed_result(value))
 
-    def test_validate_result_accepts_design_exported(self):
-        value = research.validate_result(emerge_design_result(), "emerge")
-        self.assertEqual(value["status"], "results_exported")
-        self.assertTrue(research.completed_result(value))
-
-    def test_validate_result_accepts_planar_exported(self):
-        value = research.validate_result(emerge_planar_result(), "emerge")
-        self.assertEqual(value["status"], "results_exported")
-        self.assertEqual(value["schema"], fem.PLANAR_RESULT_SCHEMA)
-        self.assertTrue(research.completed_result(value))
-
-    def test_validate_result_rejects_design_validated_and_oversize_s11(self):
+    def test_validate_result_accepts_nport_exported(self):
+        planar = research.validate_result(emerge_nport_result(2), "emerge")
+        self.assertEqual(planar["schema"], fem.NPORT_RESULT_SCHEMA)
+        self.assertEqual(planar["geometry_kind"], "planar_microstrip")
+        self.assertTrue(research.completed_result(planar))
+        driven = research.validate_result(
+            emerge_nport_result(1, geometry_kind="driven_lumped"), "emerge")
+        self.assertEqual(driven["geometry_kind"], "driven_lumped")
+        self.assertTrue(research.completed_result(driven))
         with self.assertRaisesRegex(ValueError, "results_validated"):
-            research.validate_result(emerge_design_result(status="results_validated"), "emerge")
-        with self.assertRaisesRegex(ValueError, r"\|S11\|"):
+            research.validate_result(emerge_nport_result(status="results_validated"), "emerge")
+        bad = emerge_nport_result(2)
+        bad["s"] = {**bad["s"], "1,2": {"re": [1.1, 0.0, 0.0], "im": [0.0, 0.0, 0.0]}}
+        with self.assertRaisesRegex(ValueError, r"\|S1,2\|"):
+            research.validate_result(bad, "emerge")
+
+    def test_validate_result_accepts_mesh_exported(self):
+        value = {
+            "schema": fem.MESH_RESULT_SCHEMA, "backend": "emerge",
+            "research_schema": "fairbeam-research-result-1", "status": "mesh_exported",
+            "kind": "design", "frequency_hz": [], "nodes": 10, "tetrahedra": 20, "duration_s": 1.25,
+            "mesh": {"nodes": 10, "tetrahedra": 20},
+            "precision_converged": False, "gain_qualified": False,
+            "settings": {"mesh_only": True, "resolution": 0.25},
+            "limitations": ["Mesh generation only"],
+        }
+        checked = research.validate_result(value, "emerge")
+        self.assertEqual(checked["status"], "mesh_exported")
+        self.assertTrue(research.completed_result(checked))
+        bad = {**value, "nodes": -1}
+        with self.assertRaisesRegex(ValueError, "nodes"):
+            research.validate_result(bad, "emerge")
+
+    def test_validate_result_rejects_nport_validated_and_oversize_s(self):
+        with self.assertRaisesRegex(ValueError, "results_validated"):
             research.validate_result(
-                emerge_design_result(s11_re=[1.1, 0.0, 0.0], s11_im=[0.0, 0.0, 0.0]), "emerge")
-
-    def test_validate_result_rejects_planar_validated_and_oversize_s(self):
-        with self.assertRaisesRegex(ValueError, "results_validated"):
-            research.validate_result(emerge_planar_result(status="results_validated"), "emerge")
-        bad = emerge_planar_result()
+                emerge_nport_result(1, geometry_kind="driven_lumped", status="results_validated"),
+                "emerge")
+        bad = emerge_nport_result(2)
         bad["s"] = {**bad["s"], "2,1": {"re": [1.1, 0.0, 0.0], "im": [0.0, 0.0, 0.0]}}
         with self.assertRaisesRegex(ValueError, r"\|S2,1\|"):
             research.validate_result(bad, "emerge")
@@ -220,14 +248,12 @@ class EmergeResearchValidation(unittest.TestCase):
         self.assertFalse(research.completed_result(value))
         value = emerge_result(schema="other")
         self.assertFalse(research.completed_result(value))
-        exported = emerge_design_result(status="results_exported")
-        self.assertTrue(research.completed_result(exported))
+        nport = emerge_nport_result(status="results_exported")
+        self.assertTrue(research.completed_result(nport))
         self.assertFalse(research.completed_result(
-            emerge_design_result(status="validation_failed")))
-        planar = emerge_planar_result(status="results_exported")
-        self.assertTrue(research.completed_result(planar))
-        self.assertFalse(research.completed_result(
-            emerge_planar_result(status="validation_failed")))
+            emerge_nport_result(status="validation_failed")))
+        driven = emerge_nport_result(1, geometry_kind="driven_lumped")
+        self.assertTrue(research.completed_result(driven))
 
 
 class EmergeResearchHttp(unittest.TestCase):

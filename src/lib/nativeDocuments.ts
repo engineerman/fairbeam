@@ -51,7 +51,8 @@ export function documentJobMatches(file: DesignFile, job: ResultJob): boolean {
   const research = job.research, source = research?.source;
   const analysis = research?.settings.analysis;
   const designBound = (research?.backend === "elmer" && analysis === "driven")
-    || (research?.backend === "emerge" && (analysis === "driven" || analysis === "planar_two_port"));
+    || (research?.backend === "emerge" && (analysis === "driven" || analysis === "planar_two_port"
+      || analysis === "emerge_nport"));
   return !!designBound && !!source &&
     source.model_id === file.id && source.backup_scope === file.backup_scope &&
     /^[0-9a-f]{64}$/.test(source.workspace_hash) && /^[0-9a-f]{64}$/.test(source.design_sha256);

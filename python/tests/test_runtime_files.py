@@ -583,6 +583,8 @@ class RuntimePublicationRetry(unittest.TestCase):
             (package / "__init__.py").write_text("from ._meta import __version__\n", encoding="utf-8")
             (package / "_meta.py").write_text("__version__ = '1.2.3'\n", encoding="utf-8")
             (package.parent / "fairbeam_elmer.py").write_text("# standalone adapter\n", encoding="utf-8")
+            (package.parent / "fairbeam_emerge.py").write_text("# emerge adapter\n", encoding="utf-8")
+            (package.parent / "fairbeam_emerge_worker.py").write_text("# emerge worker\n", encoding="utf-8")
             app = root / "app"
             staging = root / "app.new"
             real_replace = install.os.replace
@@ -608,6 +610,8 @@ class RuntimePublicationRetry(unittest.TestCase):
             sleep.assert_called_once()
             self.assertTrue((app / "fairbeam" / "__init__.py").is_file())
             self.assertEqual((app / "fairbeam_elmer.py").read_text(encoding="utf-8"), "# standalone adapter\n")
+            self.assertEqual((app / "fairbeam_emerge.py").read_text(encoding="utf-8"), "# emerge adapter\n")
+            self.assertEqual((app / "fairbeam_emerge_worker.py").read_text(encoding="utf-8"), "# emerge worker\n")
             self.assertFalse(staging.exists())
             self.assertEqual((site / "fairbeam.pth").read_text(encoding="utf-8"), str(app) + "\n")
 
@@ -635,6 +639,42 @@ class RuntimePublicationRetry(unittest.TestCase):
                                     cwd=tmp, capture_output=True, text=True, timeout=20)
             self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_packaged_emerge_adapter_imports_without_checkout_on_pythonpath(self):
+        repo = INSTALL_PATH.parent.parent
+        resources_map = json.loads((repo / "src-tauri/tauri.conf.json").read_text(encoding="utf-8"))["bundle"]["resources"]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "runtime"
+            resources = Path(tmp) / "resources"
+            site = Path(tmp) / "site"
+            root.mkdir(); site.mkdir()
+            for source, target in resources_map.items():
+                if not target.startswith("python/"):
+                    continue
+                for item in (repo / "src-tauri").glob(source):
+                    dest = resources / target
+                    if target.endswith("/"):
+                        dest /= item.name
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(item, dest)
+            with mock.patch.object(install, "site_packages", return_value=site):
+                install.install_app(root, resources, Path(sys.executable))
+            # Import the adapters without loading fairbeam.__init__ (CSXCAD/openEMS).
+            code = (
+                "import sys; from pathlib import Path; "
+                "sys.path.insert(0, sys.argv[1]); "
+                "import fairbeam_emerge; "
+                "assert Path(fairbeam_emerge.__file__).resolve().parent == Path(sys.argv[1]).resolve(); "
+                "assert Path(fairbeam_emerge.WORKER).is_file(); "
+                "assert callable(fairbeam_emerge.run_fixture); "
+                "import importlib.util; "
+                "spec = importlib.util.spec_from_file_location('fairbeam.research', Path(sys.argv[1]) / 'fairbeam' / 'research.py'); "
+                "research = importlib.util.module_from_spec(spec); spec.loader.exec_module(research); "
+                "assert research.probe({'backend':'emerge','path':sys.argv[2]})['available'] is False"
+            )
+            result = subprocess.run([sys.executable, "-I", "-c", code, str(root / "app"), str(root / "missing-emerge")],
+                                    cwd=tmp, capture_output=True, text=True, timeout=20)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_missing_adapter_does_not_replace_existing_runtime(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "runtime"
@@ -644,6 +684,20 @@ class RuntimePublicationRetry(unittest.TestCase):
             package = Path(tmp) / "resources/python/fairbeam"
             package.mkdir(parents=True)
             (package / "__init__.py").touch()
+            with self.assertRaises(SystemExit), redirect_stderr(StringIO()):
+                install.install_app(root, Path(tmp) / "resources", Path(sys.executable))
+            self.assertEqual((app / "keep.txt").read_text(), "existing runtime")
+
+    def test_missing_emerge_adapter_does_not_replace_existing_runtime(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "runtime"
+            app = root / "app"
+            app.mkdir(parents=True)
+            (app / "keep.txt").write_text("existing runtime")
+            package = Path(tmp) / "resources/python/fairbeam"
+            package.mkdir(parents=True)
+            (package / "__init__.py").touch()
+            (package.parent / "fairbeam_elmer.py").write_text("# elmer\n", encoding="utf-8")
             with self.assertRaises(SystemExit), redirect_stderr(StringIO()):
                 install.install_app(root, Path(tmp) / "resources", Path(sys.executable))
             self.assertEqual((app / "keep.txt").read_text(), "existing runtime")

@@ -7,6 +7,7 @@ import { CircleAlert, Play, X } from "lucide-solid";
 import { useModal } from "../lib/dialog";
 import { engine as storedEngine, engineSource, health, lastManualThreads, probeServer, serverState, setThreads, submitError, submitErrorDetail, submitting, threads as storedThreads } from "../runner/store";
 import { prepareDesignSubmission, setRunDialogOpen, startDesignRun, storedPoints } from "../runner/designRun";
+import { openResearch } from "../runner/researchState";
 import { cellsText, estimateText } from "./meshStats";
 import { draftEstimate, draftExcitedPorts, draftMeshStats } from "./draftMesh";
 import { PreflightNote } from "./PreflightNote";
@@ -24,8 +25,8 @@ import "../styles/run-quality.css";
 import NumberField from "../components/NumberField";
 import ElmerDesignRun from "./ElmerDesignRun";
 import ElmerAntennaRun from "./ElmerAntennaRun";
-import EmergeAntennaRun from "./EmergeAntennaRun";
-import EmergePlanarRun from "./EmergePlanarRun";
+import EmergeRun from "./EmergeRun";
+import { applyRunSolverToChrome, resolveRunSolver } from "./activeEngine";
 
 
 /** i18n keys of the engine names */
@@ -52,11 +53,25 @@ export default function RunDialog() {
   const [name, setName] = createSignal("");
   const [err, setErr] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
-  const [solver, setSolver] = createSignal("openems");
+  // Ribbon activeEngine / emergeMode pick the form; remount on each open refreshes this.
+  const initialSolver = resolveRunSolver(health()?.emerge ?? 0);
+  const needEmergeInstall = initialSolver === null;
+  // string: select also includes Elmer paths that are not ActiveEngine chrome values.
+  const [solver, setSolverRaw] = createSignal<string>(needEmergeInstall ? "openems" : initialSolver);
+  const setSolver = (value: string) => {
+    setSolverRaw(value);
+    applyRunSolverToChrome(value);
+  };
   const [retainFarfield, setRetainFarfield] = createSignal(false);
 
   onMount(() => {
     if (serverState() !== "online") probeServer();
+    // EMerge chrome but health has no admitted mode → Research / Install (plan Task 6).
+    if (needEmergeInstall) {
+      close();
+      openResearch(undefined, "emerge");
+      return;
+    }
   });
 
   const errors = () => checks().filter((c) => c.severity === "error");
@@ -111,6 +126,9 @@ export default function RunDialog() {
     void openDesignerOptimize();
   };
 
+  // No form body while redirecting to Research / Install EMerge.
+  if (needEmergeInstall) return null;
+
   return (
     <div class="scrim" onPointerDown={(e) => e.target === e.currentTarget && close()}>
       <div class="dialog dialog-sm rd-dialog" role="dialog" aria-modal="true" aria-labelledby="rd-title" ref={box} tabindex={-1}>
@@ -120,7 +138,7 @@ export default function RunDialog() {
             <p class="muted">
               <b>{draft.model?.name}</b>
               <Show when={dirty()}> · {t("run.unsavedFirst")}</Show>
-              . {solver() === "openems" ? t("run.dockNote") : t(solver() === "elmer-driven" ? "elmerAntenna.resultHint" : solver() === "emerge-driven" ? "emergeAntenna.resultHint" : solver() === "emerge-planar" ? "emergePlanar.resultHint" : "elmerDesign.resultHint")}
+              . {solver() === "openems" ? t("run.dockNote") : t(solver() === "elmer-driven" ? "elmerAntenna.resultHint" : solver() === "emerge" ? "emergeExp.resultHint" : "elmerDesign.resultHint")}
             </p>
           </div>
           <button class="icon-btn" onClick={close} aria-label={t("common.close")}><X size={16} /></button>
@@ -129,10 +147,10 @@ export default function RunDialog() {
           <select class="rp-select dz-input" aria-label={t("elmerDesign.solver")} value={solver()} disabled={busy()} onChange={e => setSolver(e.currentTarget.value)}>
             <option value="openems">openEMS</option><option value="elmer">{t("elmerDesign.option")}</option>
             <option value="elmer-driven">{t("elmerAntenna.option")}</option>
-            <Show when={(health()?.emerge ?? 0) >= 2}><option value="emerge-driven">{t("emergeAntenna.option")}</option></Show>
-            <Show when={(health()?.emerge ?? 0) >= 3}><option value="emerge-planar">{t("emergePlanar.option")}</option></Show>
+            <Show when={(health()?.emerge ?? 0) >= 3}><option value="emerge">{t("emergeExp.option")}</option></Show>
           </select></label></div>
-        <Show when={solver() === "openems"} fallback={<Show when={solver() === "elmer-driven"} fallback={<Show when={solver() === "emerge-driven"} fallback={<Show when={solver() === "emerge-planar"} fallback={<ElmerDesignRun close={close} useOpenEMS={() => setSolver("openems")} />}><EmergePlanarRun close={close} /></Show>}><EmergeAntennaRun close={close} /></Show>}><ElmerAntennaRun close={close} /></Show>}>
+        {/* Solver body follows activeEngine on open; Elmer stays selectable without forcing chrome to Elmer. */}
+        <Show when={solver() === "openems"} fallback={<Show when={solver() === "elmer-driven"} fallback={<Show when={solver() === "emerge"} fallback={<ElmerDesignRun close={close} useOpenEMS={() => setSolver("openems")} />}><EmergeRun close={close} /></Show>}><ElmerAntennaRun close={close} /></Show>}>
         <form class="rd-body" id="rd-form" onSubmit={run}>
           <Show when={errors().length}>
             <div class="status-block status-critical" role="alert">

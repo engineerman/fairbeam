@@ -18,6 +18,8 @@ import { evaluate } from "./expr";
 import { cellsText } from "./meshStats";
 import { draftMeshStats } from "./draftMesh";
 import { meshView, toggleMeshView } from "./MeshView";
+import { isEmerge } from "./activeEngine";
+import { hasEmergeFemOverlay } from "./emergeFemMesh";
 import { checks, names, retryPreview } from "./store";
 import { setBottomDockCollapsed } from "./layoutState";
 import { t } from "../i18n";
@@ -103,7 +105,12 @@ export default function StatusBar() {
         </span>
       </Show>
       <span class="sb-item sb-t1" title={t("status.units.title")}>mm · GHz</span>
-      <button class="sb-item sb-btn sb-mesh" aria-pressed={meshView()} onClick={toggleMeshView} data-fresh={fresh()} title={meshTitle()}>
+      <button class="sb-item sb-btn sb-mesh" aria-pressed={meshView()}
+        disabled={isEmerge() && !hasEmergeFemOverlay()}
+        onClick={toggleMeshView} data-fresh={fresh()}
+        title={isEmerge()
+          ? (hasEmergeFemOverlay() ? t("ribbon.sim.meshViewOffFem") : t("ribbon.sim.meshViewEmergeNeedMesh"))
+          : meshTitle()}>
         <span class="mono sb-text">{meshText()}</span>
       </button>
       <button class="sb-item sb-btn" onClick={showChecks} title={t("status.checks.title")}>

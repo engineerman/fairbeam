@@ -17,7 +17,11 @@
           "edge_lo": false,
           "edge_hi": false
         }
-      ]
+      ],
+      "engine": "Metal",
+      "speed_mcells_s": 1157.08,
+      "host_cpu": "Apple M5 Pro",
+      "quality": "converged"
     },
     {
       "file": "collinear-867.json",
@@ -36,7 +40,11 @@
           "edge_lo": false,
           "edge_hi": false
         }
-      ]
+      ],
+      "engine": "GPU",
+      "speed_mcells_s": 2142.57,
+      "host_cpu": "AMD Ryzen 9 7900X 12-Core Processor",
+      "quality": "converged"
     },
     {
       "file": "dipole.json",
@@ -55,7 +63,299 @@
           "edge_lo": false,
           "edge_hi": false
         }
-      ]
+      ],
+      "engine": "CPU",
+      "speed_mcells_s": 131.19,
+      "host_cpu": "Apple M5 Pro",
+      "quality": "converged"
+    },
+    {
+      "file": "emerge-hairpin-20261104-211800-a213f9.json",
+      "name": "EMerge planar hairpin fixture",
+      "model": "emerge-hairpin",
+      "created": "2026-11-04T21:26:50+0300",
+      "simulated": true,
+      "bands": [
+        1.024
+      ],
+      "cells": 145152,
+      "band_ranges": [
+        {
+          "lo": 1.0231,
+          "hi": 1.0244,
+          "edge_lo": false,
+          "edge_hi": false
+        }
+      ],
+      "engine": "CPU",
+      "speed_mcells_s": 181.55,
+      "host_cpu": "Intel(R) Core(TM) Ultra 9 285K",
+      "quality": "converged"
+    },
+    {
+      "file": "emerge-hairpin-20261104-233344-5db3d0.json",
+      "name": "EMerge planar hairpin fixture",
+      "model": "emerge-hairpin",
+      "created": "2026-11-04T23:41:25+0300",
+      "simulated": true,
+      "bands": [
+        1.013
+      ],
+      "cells": 85652,
+      "band_ranges": [
+        {
+          "lo": 1.0125,
+          "hi": 1.0137,
+          "edge_lo": false,
+          "edge_hi": false
+        }
+      ],
+      "engine": "CPU",
+      "speed_mcells_s": 129.14,
+      "host_cpu": "Intel(R) Core(TM) Ultra 9 285K",
+      "quality": "converged"
+    },
+    {
+      "file": "emerge-hairpin-20261105-110532-0f7cfd.json",
+      "name": "EMerge planar hairpin fixture",
+      "model": "emerge-hairpin",
+      "created": "2026-11-05T11:14:33+0300",
+      "simulated": true,
+      "bands": [
+        1.024
+      ],
+      "cells": 145152,
+      "band_ranges": [
+        {
+          "lo": 1.0231,
+          "hi": 1.0244,
+          "edge_lo": false,
+          "edge_hi": false
+        }
+      ],
+      "engine": "CPU",
+      "speed_mcells_s": 178.04,
+      "host_cpu": "Intel(R) Core(TM) Ultra 9 285K",
+      "quality": "converged"
+    },
+    {
+      "file": "emerge-hairpin-20261105-112238-ab9b11.json",
+      "name": "EMerge planar hairpin fixture",
+      "model": "emerge-hairpin",
+      "created": "2026-11-05T11:32:00+0300",
+      "simulated": true,
+      "bands": [
+        1.024
+      ],
+      "cells": 145152,
+      "band_ranges": [
+        {
+          "lo": 1.0231,
+          "hi": 1.0244,
+          "edge_lo": false,
+          "edge_hi": false
+        }
+      ],
+      "engine": "CPU",
+      "speed_mcells_s": 171.57,
+      "host_cpu": "Intel(R) Core(TM) Ultra 9 285K",
+      "quality": "converged"
+    },
+    {
+      "file": "emerge-20261104-191921-204dbc.json",
+      "name": "EMerge planar hairpin fixture \u00b7 EMerge FEM",
+      "model": "emerge-hairpin",
+      "created": "2026-11-04T19:24:44+0300",
+      "simulated": true,
+      "bands": [],
+      "cells": 109920
+    },
+    {
+      "file": "emerge-20261104-192905-d27046.json",
+      "name": "EMerge planar hairpin fixture \u00b7 EMerge FEM",
+      "model": "emerge-hairpin",
+      "created": "2026-11-04T19:41:20+0300",
+      "simulated": true,
+      "bands": [],
+      "cells": 110345
+    },
+    {
+      "file": "emerge-20261104-194348-beaa9d.json",
+      "name": "EMerge planar hairpin fixture \u00b7 EMerge FEM",
+      "model": "emerge-hairpin",
+      "created": "2026-11-04T19:57:57+0300",
+      "simulated": true,
+      "bands": [],
+      "cells": 111755
+    },
+    {
+      "file": "emerge-20261104-202835-55c838.json",
+      "name": "EMerge planar hairpin fixture \u00b7 EMerge FEM",
+      "model": "emerge-hairpin",
+      "created": "2026-11-04T20:36:31+0300",
+      "simulated": true,
+      "bands": [],
+      "cells": 111802
+    },
+    {
+      "file": "emerge-20261104-211147-a52afc.json",
+      "name": "EMerge planar hairpin fixture \u00b7 EMerge FEM",
+      "model": "emerge-hairpin",
+      "created": "2026-11-04T21:15:11+0300",
+      "simulated": true,
+      "bands": [],
+      "cells": 111602
+    },
+    {
+      "file": "emerge-20261104-225455-624f40.json",
+      "name": "EMerge planar hairpin fixture \u00b7 EMerge FEM",
+      "model": "emerge-hairpin",
+      "created": "2026-11-04T22:58:24+0300",
+      "simulated": true,
+      "bands": [],
+      "cells": 111602,
+      "engine": "CPU",
+      "quality": "not-converged"
+    },
+    {
+      "file": "emerge-20261105-005114-460ef8.json",
+      "name": "EMerge planar hairpin fixture \u00b7 EMerge FEM",
+      "model": "emerge-hairpin",
+      "created": "2026-11-05T00:54:41+0300",
+      "simulated": true,
+      "bands": [],
+      "cells": 111602,
+      "engine": "CPU",
+      "quality": "not-converged"
+    },
+    {
+      "file": "emerge-20261105-010007-0bccf8.json",
+      "name": "EMerge planar hairpin fixture \u00b7 EMerge FEM",
+      "model": "emerge-hairpin",
+      "created": "2026-11-05T01:03:29+0300",
+      "simulated": true,
+      "bands": [],
+      "cells": 111627,
+      "engine": "CPU",
+      "quality": "not-converged"
+    },
+    {
+      "file": "emerge-20261105-104226-b8141d.json",
+      "name": "EMerge planar hairpin fixture \u00b7 EMerge FEM",
+      "model": "emerge-hairpin",
+      "created": "2026-11-05T10:46:30+0300",
+      "simulated": true,
+      "bands": [],
+      "cells": 111602,
+      "engine": "CPU",
+      "quality": "not-converged"
+    },
+    {
+      "file": "emerge-20261105-115537-f95911.json",
+      "name": "EMerge planar hairpin fixture \u00b7 EMerge FEM",
+      "model": "emerge-hairpin",
+      "created": "2026-11-05T12:02:32+0300",
+      "simulated": true,
+      "bands": [],
+      "cells": 111627,
+      "engine": "CPU",
+      "quality": "not-converged"
+    },
+    {
+      "file": "emerge-20261104-152028-225ee1.json",
+      "name": "EMerge Patch demo \u00b7 EMerge FEM",
+      "model": "emerge-patch-demo",
+      "created": "2026-11-04T15:20:37+0300",
+      "simulated": true,
+      "bands": [],
+      "cells": 1975
+    },
+    {
+      "file": "emerge-20261104-152214-d89f66.json",
+      "name": "EMerge Patch demo \u00b7 EMerge FEM",
+      "model": "emerge-patch-demo",
+      "created": "2026-11-04T15:22:23+0300",
+      "simulated": true,
+      "bands": [],
+      "cells": 2008
+    },
+    {
+      "file": "emerge-20261104-152304-39c138.json",
+      "name": "EMerge Patch demo \u00b7 EMerge FEM",
+      "model": "emerge-patch-demo",
+      "created": "2026-11-04T15:23:13+0300",
+      "simulated": true,
+      "bands": [],
+      "cells": 2008
+    },
+    {
+      "file": "hairpin-filter-cgrassin-20261104-114535-32fd0c.json",
+      "name": "Hairpin filter (CGrassin)",
+      "model": "hairpin-filter-cgrassin",
+      "created": "2026-11-04T11:46:31+0300",
+      "simulated": true,
+      "bands": [
+        1.068
+      ],
+      "cells": 51240,
+      "band_ranges": [
+        {
+          "lo": 1.0331,
+          "hi": 1.1031,
+          "edge_lo": false,
+          "edge_hi": false
+        }
+      ],
+      "engine": "CPU",
+      "speed_mcells_s": 78.9,
+      "host_cpu": "Intel(R) Core(TM) Ultra 9 285K",
+      "quality": "suspicious"
+    },
+    {
+      "file": "hairpin-filter-cgrassin-20261104-114659-e05812.json",
+      "name": "Hairpin filter (CGrassin)",
+      "model": "hairpin-filter-cgrassin",
+      "created": "2026-11-04T11:55:34+0300",
+      "simulated": true,
+      "bands": [
+        1.024
+      ],
+      "cells": 145152,
+      "band_ranges": [
+        {
+          "lo": 1.0231,
+          "hi": 1.0244,
+          "edge_lo": false,
+          "edge_hi": false
+        }
+      ],
+      "engine": "CPU",
+      "speed_mcells_s": 186.65,
+      "host_cpu": "Intel(R) Core(TM) Ultra 9 285K",
+      "quality": "converged"
+    },
+    {
+      "file": "half-wave-dipole-2-20261104-151812-22dcdf.json",
+      "name": "Half-wave dipole 2",
+      "model": "half-wave-dipole-2",
+      "created": "2026-11-04T15:18:36+0300",
+      "simulated": true,
+      "bands": [
+        2.393
+      ],
+      "cells": 196560,
+      "band_ranges": [
+        {
+          "lo": 2.2956,
+          "hi": 2.5026,
+          "edge_lo": false,
+          "edge_hi": false
+        }
+      ],
+      "engine": "CPU",
+      "speed_mcells_s": 114.85,
+      "host_cpu": "Intel(R) Core(TM) Ultra 9 285K",
+      "quality": "converged"
     },
     {
       "file": "helix-axial.json",
@@ -81,7 +381,11 @@
           "edge_lo": false,
           "edge_hi": false
         }
-      ]
+      ],
+      "engine": "Metal",
+      "speed_mcells_s": 2323.53,
+      "host_cpu": "Apple M5 Pro",
+      "quality": "converged"
     },
     {
       "file": "inset-patch.json",
@@ -100,7 +404,11 @@
           "edge_lo": false,
           "edge_hi": false
         }
-      ]
+      ],
+      "engine": "CPU",
+      "speed_mcells_s": 136.02,
+      "host_cpu": "Apple M5 Pro",
+      "quality": "converged"
     },
     {
       "file": "lowpass-stepped.json",
@@ -119,7 +427,11 @@
           "edge_lo": true,
           "edge_hi": false
         }
-      ]
+      ],
+      "engine": "Metal",
+      "speed_mcells_s": 1531.01,
+      "host_cpu": "Apple M5 Pro",
+      "quality": "converged"
     },
     {
       "file": "meander-dipole-867.json",
@@ -138,7 +450,11 @@
           "edge_lo": false,
           "edge_hi": false
         }
-      ]
+      ],
+      "engine": "CUDA",
+      "speed_mcells_s": 1743.43,
+      "host_cpu": "AMD Ryzen 9 7900X 12-Core Processor",
+      "quality": "converged"
     },
     {
       "file": "microstrip-line.json",
@@ -153,11 +469,15 @@
       "band_ranges": [
         {
           "lo": 0.5,
-          "hi": 6,
+          "hi": 6.0,
           "edge_lo": true,
           "edge_hi": true
         }
-      ]
+      ],
+      "engine": "Metal",
+      "speed_mcells_s": 879.644,
+      "host_cpu": "Apple M5 Pro",
+      "quality": "converged"
     },
     {
       "file": "minkowski-patch.json",
@@ -176,7 +496,11 @@
           "edge_lo": false,
           "edge_hi": false
         }
-      ]
+      ],
+      "engine": "CPU",
+      "speed_mcells_s": 222.85,
+      "host_cpu": "Apple M5 Pro",
+      "quality": "converged"
     },
     {
       "file": "patch-antenna.json",
@@ -195,7 +519,20 @@
           "edge_lo": false,
           "edge_hi": false
         }
-      ]
+      ],
+      "engine": "CPU",
+      "speed_mcells_s": 317.51,
+      "host_cpu": "Apple M5 Pro",
+      "quality": "converged"
+    },
+    {
+      "file": "emerge-20261104-153843-4f8c96.json",
+      "name": "Patch antenna starter \u00b7 EMerge FEM",
+      "model": "patch-antenna-starter",
+      "created": "2026-11-04T15:38:53+0300",
+      "simulated": true,
+      "bands": [],
+      "cells": 2008
     },
     {
       "file": "patch-array-2x1.json",
@@ -214,7 +551,11 @@
           "edge_lo": false,
           "edge_hi": false
         }
-      ]
+      ],
+      "engine": "Metal",
+      "speed_mcells_s": 775.407,
+      "host_cpu": "Apple M5 Pro",
+      "quality": "converged"
     },
     {
       "file": "patch-array-4x1.json",
@@ -233,7 +574,11 @@
           "edge_lo": false,
           "edge_hi": false
         }
-      ]
+      ],
+      "engine": "Metal",
+      "speed_mcells_s": 2587.25,
+      "host_cpu": "Apple M5 Pro",
+      "quality": "converged"
     },
     {
       "file": "pyramidal-horn.json",
@@ -247,16 +592,20 @@
       "cells": 1103856,
       "band_ranges": [
         {
-          "lo": 8,
-          "hi": 12,
+          "lo": 8.0,
+          "hi": 12.0,
           "edge_lo": true,
           "edge_hi": true
         }
-      ]
+      ],
+      "engine": "Metal",
+      "speed_mcells_s": 2052.05,
+      "host_cpu": "Apple M5 Pro",
+      "quality": "converged"
     },
     {
       "file": "sierpinski-monopole--iterations-0.json",
-      "name": "Sierpinski gasket monopole · iterations=0",
+      "name": "Sierpinski gasket monopole \u00b7 iterations=0",
       "model": "sierpinski-monopole",
       "created": "2026-09-24T22:36:46+0300",
       "simulated": true,
@@ -271,11 +620,18 @@
           "edge_lo": false,
           "edge_hi": false
         }
-      ]
+      ],
+      "engine": "CPU",
+      "speed_mcells_s": 790.72,
+      "host_cpu": "Apple M5 Pro",
+      "params": {
+        "iterations": 0
+      },
+      "quality": "converged"
     },
     {
       "file": "sierpinski-monopole--iterations-3.json",
-      "name": "Sierpinski gasket monopole · iterations=3",
+      "name": "Sierpinski gasket monopole \u00b7 iterations=3",
       "model": "sierpinski-monopole",
       "created": "2026-09-24T22:37:02+0300",
       "simulated": true,
@@ -304,7 +660,11 @@
           "edge_lo": false,
           "edge_hi": false
         }
-      ]
+      ],
+      "engine": "CPU",
+      "speed_mcells_s": 824.79,
+      "host_cpu": "Apple M5 Pro",
+      "quality": "converged"
     },
     {
       "file": "sleeve-dipole-867.json",
@@ -323,7 +683,113 @@
           "edge_lo": false,
           "edge_hi": false
         }
-      ]
+      ],
+      "engine": "GPU",
+      "speed_mcells_s": 1562.08,
+      "host_cpu": "AMD Ryzen 9 7900X 12-Core Processor",
+      "quality": "converged"
+    },
+    {
+      "file": "emerge-20261105-125853-ef71ed.json",
+      "name": "Stepped-impedance low-pass filter copy \u00b7 EMerge FEM",
+      "model": "stepped-impedance-low-pass-filter-copy",
+      "created": "2026-11-05T12:59:20+0300",
+      "simulated": true,
+      "bands": [],
+      "cells": 26928,
+      "engine": "CPU",
+      "quality": "not-converged"
+    },
+    {
+      "file": "emerge-20261105-131525-a4e75e.json",
+      "name": "Stepped-impedance low-pass filter copy \u00b7 EMerge FEM",
+      "model": "stepped-impedance-low-pass-filter-copy",
+      "created": "2026-11-05T13:15:52+0300",
+      "simulated": true,
+      "bands": [],
+      "cells": 26928,
+      "engine": "CPU",
+      "quality": "not-converged"
+    },
+    {
+      "file": "emerge-20261105-131707-8d8255.json",
+      "name": "Stepped-impedance low-pass filter copy \u00b7 EMerge FEM",
+      "model": "stepped-impedance-low-pass-filter-copy",
+      "created": "2026-11-05T13:18:03+0300",
+      "simulated": true,
+      "bands": [],
+      "cells": 26928,
+      "engine": "CPU",
+      "quality": "not-converged"
+    },
+    {
+      "file": "stepped-impedance-low-pass-filter-copy-2-20261105-130321-3819b3.json",
+      "name": "Stepped-impedance low-pass filter copy 2",
+      "model": "stepped-impedance-low-pass-filter-copy-2",
+      "created": "2026-11-05T13:03:59+0300",
+      "simulated": true,
+      "bands": [
+        1.193
+      ],
+      "cells": 133000,
+      "band_ranges": [
+        {
+          "lo": 0.2,
+          "hi": 2.1793,
+          "edge_lo": true,
+          "edge_hi": false
+        }
+      ],
+      "engine": "CPU",
+      "speed_mcells_s": 187.63,
+      "host_cpu": "Intel(R) Core(TM) Ultra 9 285K",
+      "quality": "converged"
+    },
+    {
+      "file": "stepped-impedance-low-pass-filter-copy-2-20261105-130444-625179.json",
+      "name": "Stepped-impedance low-pass filter copy 2",
+      "model": "stepped-impedance-low-pass-filter-copy-2",
+      "created": "2026-11-05T13:05:23+0300",
+      "simulated": true,
+      "bands": [
+        1.193
+      ],
+      "cells": 133000,
+      "band_ranges": [
+        {
+          "lo": 0.2,
+          "hi": 2.1793,
+          "edge_lo": true,
+          "edge_hi": false
+        }
+      ],
+      "engine": "CPU",
+      "speed_mcells_s": 175.48,
+      "host_cpu": "Intel(R) Core(TM) Ultra 9 285K",
+      "quality": "converged"
+    },
+    {
+      "file": "stepped-impedance-low-pass-filter-copy-2-20261105-131044-42c035.json",
+      "name": "Stepped-impedance low-pass filter copy 2",
+      "model": "stepped-impedance-low-pass-filter-copy-2",
+      "created": "2026-11-05T13:10:53+0300",
+      "simulated": true,
+      "bands": [
+        1.193
+      ],
+      "cells": 133000,
+      "band_ranges": [
+        {
+          "lo": 0.2,
+          "hi": 2.1793,
+          "edge_lo": true,
+          "edge_hi": false
+        }
+      ],
+      "engine": "CUDA",
+      "speed_mcells_s": 864.648,
+      "host_cpu": "Intel(R) Core(TM) Ultra 9 285K",
+      "quality": "converged"
     },
     {
       "file": "wideband-dipole-867.json",
@@ -342,7 +808,11 @@
           "edge_lo": false,
           "edge_hi": false
         }
-      ]
+      ],
+      "engine": "CUDA",
+      "speed_mcells_s": 1558.38,
+      "host_cpu": "AMD Ryzen 9 7900X 12-Core Processor",
+      "quality": "converged"
     },
     {
       "file": "wilkinson-divider.json",
@@ -361,7 +831,11 @@
           "edge_lo": false,
           "edge_hi": false
         }
-      ]
+      ],
+      "engine": "Metal",
+      "speed_mcells_s": 1592.47,
+      "host_cpu": "Apple M5 Pro",
+      "quality": "converged"
     },
     {
       "file": "yagi-867.json",
@@ -380,8 +854,12 @@
           "edge_lo": false,
           "edge_hi": false
         }
-      ]
+      ],
+      "engine": "GPU",
+      "speed_mcells_s": 1551.94,
+      "host_cpu": "AMD Ryzen 9 7900X 12-Core Processor",
+      "quality": "converged"
     }
   ],
-  "updated": "2026-10-03T18:06:14+0300"
+  "updated": "2026-11-05T13:18:03+0300"
 }

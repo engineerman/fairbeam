@@ -26,9 +26,15 @@ _LOG = logging.getLogger(__name__)
 
 
 def _research_source(model: str, metadata: dict | None) -> dict | None:
-    """Only server-bound driven Elmer/EMerge runs have portable source provenance."""
+    """Only server-bound Design Elmer/EMerge runs have portable source provenance."""
+    from .emerge_solver import EMERGE_DESIGN_ANALYSES
     if (not isinstance(metadata, dict) or metadata.get("backend") not in ("elmer", "emerge")
-            or not isinstance(metadata.get("settings"), dict) or metadata["settings"].get("analysis") != "driven"):
+            or not isinstance(metadata.get("settings"), dict)):
+        return None
+    analysis = metadata["settings"].get("analysis")
+    if metadata.get("backend") == "elmer" and analysis != "driven":
+        return None
+    if metadata.get("backend") == "emerge" and analysis not in EMERGE_DESIGN_ANALYSES:
         return None
     source = metadata.get("source")
     if (not isinstance(source, dict) or source.get("model_id") != model
@@ -421,9 +427,10 @@ class DocumentWorkspace:
             spec = json.loads(source_raw, object_pairs_hook=doc._unique_object)
             analysis = (spec.get("settings") or {}).get("analysis")
             backend = spec.get("backend")
+            from .emerge_solver import EMERGE_DESIGN_ANALYSES
             design_backed = (
                 (backend == "elmer" and analysis == "driven")
-                or (backend == "emerge" and analysis in ("driven", "planar_two_port"))
+                or (backend == "emerge" and analysis in EMERGE_DESIGN_ANALYSES)
             )
             if (spec.get("source") != admitted or not design_backed):
                 raise doc.DocumentError("The completed research source identity changed")
@@ -434,10 +441,8 @@ class DocumentWorkspace:
             research_result, checksum = load_result(job)
             if backend == "elmer":
                 expected_schema = "fairbeam.elmer-driven-result/1"
-            elif analysis == "planar_two_port":
-                expected_schema = "fairbeam.emerge-planar-result/1"
             else:
-                expected_schema = "fairbeam.emerge-driven-result/1"
+                expected_schema = "fairbeam.emerge-result/2"
             if (checksum != job.research.get("result_sha256")
                     or research_result.get("schema") != expected_schema
                     or research_result.get("input_sha256") != job.research["snapshot_sha256"]):

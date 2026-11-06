@@ -24,8 +24,10 @@ import { niceLength, viewportCoordinates, viewportMeasurement, viewportScaleBar 
 import { fmt, t } from "../i18n";
 import type { Bundle, LumpedElement, Part } from "../types";
 import {
-  boxLines, buildParts, lumpedObject, meshPlaneLines, type PartObject, portObject, type SceneColors, sceneRadius, solidLook, waveguidePortObject, SceneGeometryCache, updatePortGlyphs,
+  boxLines, buildParts, femSurfaceLines, lumpedObject, meshPlaneLines, type PartObject, portObject, type SceneColors, sceneRadius, solidLook, waveguidePortObject, SceneGeometryCache, updatePortGlyphs,
 } from "./geometry";
+import { isEmerge } from "../designer/activeEngine";
+import { emergeFemOverlay } from "../designer/emergeFemMesh";
 import type { PortGlyph } from "./portGlyphs";
 import { patternMesh } from "./pattern";
 import FarfieldCard from "../components/FarfieldCard";
@@ -852,8 +854,26 @@ export default function Viewport() {
     function buildMeshPlane() {
       const old = overlayRoot.getObjectByName("meshplane");
       if (old) retire(old);
+      const oldFem = overlayRoot.getObjectByName("fem-mesh");
+      if (oldFem) retire(oldFem);
+      if (!layers.mesh) return setMeshNote(null), requestRender();
+
+      // EMerge: exterior FEM surface edges only — never the openEMS FDTD plane builder.
+      if (isEmerge()) {
+        const fem = emergeFemOverlay();
+        if (!fem) return setMeshNote(t("viewport.femMeshMissing")), requestRender();
+        const obj = femSurfaceLines(fem.surface.nodes_mm, fem.surface.edges, cssVar("--al-action-emerge"), 0.55);
+        obj.name = "fem-mesh";
+        obj.renderOrder = 5;
+        overlayRoot.add(obj);
+        setMeshNote(fem.surface.thinned
+          ? t("viewport.femMeshThinned", { stride: fem.surface.edge_stride ?? 1, edges: fem.surface.edge_count ?? fem.surface.edges.length })
+          : t("viewport.femMeshShown", { edges: fem.surface.edges.length, nodes: fem.nodes, tets: fem.tetrahedra }));
+        return requestRender();
+      }
+
       const b = bundle();
-      if (!b || !layers.mesh) return setMeshNote(null), requestRender();
+      if (!b) return setMeshNote(null), requestRender();
       const axis = ({ x: 0, y: 1, z: 2 } as const)[meshPlane.axis];
       const lines = [b.mesh.x, b.mesh.y, b.mesh.z][axis];
       const pos = lines[Math.min(meshPlane.index, lines.length - 1)];
@@ -891,7 +911,7 @@ export default function Viewport() {
       overlayRoot.add(obj);
       requestRender();
     }
-    createEffect(on([() => layers.mesh, () => meshPlane.axis, () => meshPlane.index, meshHighlight], buildMeshPlane));
+    createEffect(on([() => layers.mesh, () => meshPlane.axis, () => meshPlane.index, meshHighlight, () => isEmerge(), emergeFemOverlay], buildMeshPlane));
     // Only an explicit inspector selection moves the camera; new previews and slider motion do not.
     createEffect(on(meshHighlight, h => {
       if (!h || h.source !== bundle()) return;

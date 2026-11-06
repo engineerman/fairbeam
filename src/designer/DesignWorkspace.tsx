@@ -5,11 +5,11 @@
 // src/designer/draw.ts + src/scene/drawOverlay.ts.
 import { createEffect, createSignal, For, type JSX, lazy, Match, on, onCleanup, onMount, Show, Suspense, Switch } from "solid-js";
 import {
-  Box, CircleDot, Cone, Cylinder, Eye, EyeOff, FileCode, Globe, Grid3x3, Hexagon, Home, Layers, LayoutGrid, Library,
+  Box, CircleDot, Cone, Cpu, Cylinder, Eye, EyeOff, FileCode, Globe, Grid3x3, Hexagon, Home, Layers, LayoutGrid, Library,
   Camera, FileText, Radio, RadioTower, Waves, History, Move3d,
   MousePointer2, MousePointerClick, Pencil, Play, Plus, Redo2, Save, SaveAll, Settings2, Cog, SlidersHorizontal, Spline, Torus, Trash2, Triangle, Undo2, X, Zap, Keyboard,
   ChevronDown, ChevronUp, ChevronsRight, FileUp, Activity, Gauge, Layers2, CircuitBoard, ClipboardList, LocateFixed, Shapes, ScanLine, ChartNoAxesCombined, SlidersVertical,
-  ArrowUpFromLine, Combine, Circle, PenTool, Fullscreen, AudioWaveform, Radar, Package, Omega, Timer, ChartScatter, ChartLine, Grid2x2, Diamond, Anvil, CopyPlus, Clipboard,
+  ArrowUpFromLine, Combine, Circle, PenTool, Fullscreen, AudioWaveform, Radar, Package, Omega, Timer, ChartScatter, ChartLine, Grid2x2, Diamond, Anvil, CopyPlus, Clipboard, Pyramid,
   SquareDashed, RectangleHorizontal, Rotate3d, LayoutDashboard, Gem, Aperture, Bookmark, BookmarkPlus, BookmarkX,
 } from "lucide-solid";
 import { health, meshFreshness, setRunOpen } from "../runner/store";
@@ -27,6 +27,7 @@ import FeedCreationDialog from "./FeedCreationDialog";
 import BackupNotice from "./BackupNotice";
 import RunDialog from "./RunDialog";
 import { openResearch } from "../runner/researchState";
+import { activeEngineLabel, isEmerge, setActiveEngine, activeEngine, resolveRunSolver } from "./activeEngine";
 import OptimizeDialog, { openDesignerOptimize } from "./OptimizeDialog";
 const SweepDialog = lazy(() => import("./SweepDialog"));
 const openDesignerSweep = () => import("./SweepDialog").then((m) => m.openDesignerSweep());
@@ -35,10 +36,12 @@ import { PythonPanel, isPythonPanelActive, openPythonPanel } from "./PythonPanel
 import { setSidePanelCollapsed, toggleBottomDock, toggleLeftTree, toggleSidePanel } from "./layoutState";
 import RunDock from "./RunDock";
 import { meshView, setMeshView, toggleMeshView } from "./MeshView";
+import { hasEmergeFemOverlay } from "./emergeFemMesh";
 import PanelBoundary from "../components/PanelBoundary";
 import { useModal } from "../lib/dialog";
 const [simSettingsPending, setSimSettingsPending] = createSignal(true);
 const SimSettingsDialog = lazy(() => import("./SimSettingsDialog").finally(() => setSimSettingsPending(false)));
+const EmergeSimSettings = lazy(() => import("./EmergeSimSettings").finally(() => setSimSettingsPending(false)));
 import { setAppMode } from "../workspace";
 import {
   armBoolean, acceptBooleanPick, automaticOverlap, booleanPending, booleanNotice, booleanHistory, setBooleanNotice, setBooleanPending, resolveAutomaticOverlap, restoreBooleanPart,
@@ -56,7 +59,7 @@ import { cellsText } from "./meshStats";
 import { draftMeshStats } from "./draftMesh";
 import { leaveResultsFor, resultFocus } from "./resultFocus";
 import { activateMainTab, cycleMainTabs, focusActiveMainTab } from "./mainTabsState";
-import { openRibbonResult, ribbonArray, ribbonCurrents, ribbonExportReady, ribbonExportReason, ribbonFarfield, ribbonFieldPlanes, ribbonPattern3d, ribbonResult } from "./ribbonResults";
+import { openRibbonResult, ribbonArray, ribbonCurrents, ribbonEfficiency, ribbonExportReady, ribbonExportReason, ribbonFarfield, ribbonFieldPlanes, ribbonPattern, ribbonPattern3d, ribbonResult } from "./ribbonResults";
 import { ARRAY_PATTERN_NOTE, PatternQuantitySelect } from "../components/FarfieldCard";
 import { designerArray } from "./arraySession";
 import RibbonField from "./RibbonField";
@@ -114,8 +117,10 @@ function SimSettingsDialogHost() {
   if (opener instanceof HTMLElement) {
     opener.closest(".rb-group[data-collapsed]")?.querySelector<HTMLButtonElement>(".rb-group-toggle")?.focus({ preventScroll: true });
   }
-  return <PanelBoundary name={t("sim.title")} loading={<SimSettingsLoading />} onClose={() => setSimSettingsOpen(false)}>
-    <SimSettingsDialog />
+  return <PanelBoundary name={isEmerge() ? t("emergeSim.title") : t("sim.title")} loading={<SimSettingsLoading />} onClose={() => setSimSettingsOpen(false)}>
+    <Show when={isEmerge()} fallback={<SimSettingsDialog />}>
+      <EmergeSimSettings />
+    </Show>
   </PanelBoundary>;
 }
 
@@ -129,7 +134,7 @@ function SimSettingsLoading() {
   return <div class="scrim" onPointerDown={e => e.target === e.currentTarget && close()}>
     <div class="dialog dialog-sm" role="dialog" aria-modal="true" aria-labelledby="sim-settings-loading-title" ref={box} tabindex={-1}>
       <div class="dialog-head">
-        <div><h2 id="sim-settings-loading-title">{t("sim.title")}</h2><p class="muted" role="status">{t("common.loading")}</p></div>
+        <div><h2 id="sim-settings-loading-title">{isEmerge() ? t("emergeSim.title") : t("sim.title")}</h2><p class="muted" role="status">{t("common.loading")}</p></div>
         <button class="icon-btn" onClick={close} aria-label={t("common.close")}><X size={16} aria-hidden="true" /></button>
       </div>
       <div class="dialog-foot"><button class="btn btn-ghost" onClick={close}>{t("common.cancel")}</button></div>
@@ -137,9 +142,14 @@ function SimSettingsLoading() {
   </div>;
 }
 
-function RButton(props: { icon: typeof Box; label: string; title?: string; action?: string; onClick: () => void; disabled?: boolean; pressed?: boolean; primary?: boolean; issue?: "error" | "warning" | null; ariaKeyShortcuts?: string }) {
+function RButton(props: { icon: typeof Box; label: string; title?: string; action?: string; onClick: () => void; disabled?: boolean; pressed?: boolean; primary?: boolean; /** Pink experimental Run when activeEngine is EMerge. */ emergeAccent?: boolean; issue?: "error" | "warning" | null; ariaKeyShortcuts?: string }) {
   return (
-    <button class="rb-btn" data-action={props.action} classList={{ "rb-primary": props.primary, "rb-issue-error": props.issue === "error", "rb-issue-warning": props.issue === "warning" }} onClick={props.onClick} disabled={props.disabled}
+    <button class="rb-btn" data-action={props.action} classList={{
+      "rb-primary": !!props.primary && !props.emergeAccent,
+      "rb-primary-emerge": !!props.primary && !!props.emergeAccent,
+      "rb-issue-error": props.issue === "error",
+      "rb-issue-warning": props.issue === "warning",
+    }} onClick={props.onClick} disabled={props.disabled}
       aria-pressed={props.pressed === undefined ? undefined : props.pressed} aria-keyshortcuts={props.ariaKeyShortcuts} aria-label={props.label} title={props.title ?? props.label}>
       <props.icon size={16} aria-hidden="true" />
       <span>{props.label}</span>
@@ -283,6 +293,11 @@ function shapeButton(kind: ShapeKind) {
  * errors, and the run's progress and results show in the bottom dock (RunDock.tsx). */
 function runDesign() {
   if (!file()) return;
+  // EMerge chrome with no admitted health mode → Install / Research, not a misleading openEMS form.
+  if (activeEngine() === "emerge" && resolveRunSolver(health()?.emerge ?? 0) === null) {
+    openResearch(undefined, "emerge");
+    return;
+  }
   setRunDialogOpen(true);
 }
 
@@ -454,6 +469,8 @@ export function Ribbon() {
       setRibbonTab("post");
     } else if (previous && ribbonTab() === "post") setRibbonTab(geometryTab);
   }));
+  // Under EMerge, Mesh view is FEM overlay only — close it when no surface wireframe is available.
+  createEffect(() => { if (isEmerge() && meshView() && !hasEmergeFemOverlay()) setMeshView(false); });
   // camera commands act on the 3D view: it comes to the front of the main area first
   const view = (id: string) => { activateMainTab("3d"); document.querySelector(".viewport")?.dispatchEvent(new CustomEvent("fairbeam:view", { detail: id })); };
   const fit = () => { activateMainTab("3d"); document.querySelector<HTMLButtonElement>(".viewport [data-action='fit']")?.click(); };
@@ -638,8 +655,14 @@ export function Ribbon() {
         <RGroup label={t("model.layers")} icon={Layers}>
           <For each={VIEW_LAYERS}>{(item) => {
             const on = () => item.key === "mesh" ? meshView() : layers[item.key];
-            const disabled = () => item.key === "ground" && !bundle()?.half_space;
-            return <RButton icon={on() ? Eye : EyeOff} label={t(item.label)} title={disabled() ? t("ribbon.view.noGroundPlane") : t(item.hint)} pressed={on()} disabled={disabled()}
+            const meshBlocked = () => item.key === "mesh" && isEmerge() && !hasEmergeFemOverlay();
+            const disabled = () => meshBlocked() || (item.key === "ground" && !bundle()?.half_space);
+            const title = () => {
+              if (meshBlocked()) return t("ribbon.sim.meshViewEmergeNeedMesh");
+              if (item.key === "ground" && !bundle()?.half_space) return t("ribbon.view.noGroundPlane");
+              return t(item.hint);
+            };
+            return <RButton icon={on() ? Eye : EyeOff} label={t(item.label)} title={title()} pressed={on()} disabled={disabled()}
               onClick={() => item.key === "mesh" ? setMeshView(!on()) : setLayers(item.key, !on())} />;
           }}</For>
         </RGroup>
@@ -698,9 +721,18 @@ export function Ribbon() {
               issue={issueFor("mesh")}
               title={issueTitle(t("ribbon.sim.meshSettingsTitle", { cpw: valueText(draft.mesh.cells_per_wavelength), mesh: meshReadout() }), issueFor("mesh"))}
               onClick={() => openSimSettings("mesh")} />
-          <RButton icon={ChartNoAxesCombined} label={t("ribbon.sim.convergence")} title={t("ribbon.sim.convergenceTitle")}
+          <RButton icon={ChartNoAxesCombined} label={t("ribbon.sim.convergence")}
+              disabled={isEmerge()}
+              title={isEmerge() ? t("ribbon.sim.convergenceEmergeDisabled") : t("ribbon.sim.convergenceTitle")}
               onClick={() => openMeshConvergence()} />
-          <RButton icon={LayoutGrid} label={t("ribbon.sim.meshView")} pressed={meshView()} title={t(meshView() ? "ribbon.sim.meshViewOn" : "ribbon.sim.meshViewOff")} onClick={toggleMeshView} />
+          <RButton icon={LayoutGrid} label={t("ribbon.sim.meshView")} pressed={meshView()}
+              disabled={isEmerge() && !hasEmergeFemOverlay()}
+              title={isEmerge()
+                ? (hasEmergeFemOverlay()
+                  ? t(meshView() ? "ribbon.sim.meshViewOnFem" : "ribbon.sim.meshViewOffFem")
+                  : t("ribbon.sim.meshViewEmergeNeedMesh"))
+                : t(meshView() ? "ribbon.sim.meshViewOn" : "ribbon.sim.meshViewOff")}
+              onClick={toggleMeshView} />
         </RGroup>
         <RGroup label={t("ribbon.sim.ports")} icon={Zap}>
           <RButton icon={Zap} label={t("ribbon.sim.lumped")} title={t("ribbon.sim.lumpedTitle")} onClick={addPort} />
@@ -709,37 +741,55 @@ export function Ribbon() {
         </RGroup>
         <RGroup label={t("ribbon.sim.monitors")} icon={Radio}>
           <RButton icon={Radio} label={t("ribbon.sim.farField")}
-            issue={issueFor("far_field")}
-            title={issueTitle(t(draft.far_field.enabled ? "ribbon.sim.farFieldOn" : "ribbon.sim.farFieldOff", { freqs: valueText(draft.far_field.frequencies ?? []) }), issueFor("far_field"))}
+            disabled={isEmerge()}
+            issue={isEmerge() ? null : issueFor("far_field")}
+            title={isEmerge() ? t("ribbon.sim.farFieldEmergeDisabled") : issueTitle(t(draft.far_field.enabled ? "ribbon.sim.farFieldOn" : "ribbon.sim.farFieldOff", { freqs: valueText(draft.far_field.frequencies ?? []) }), issueFor("far_field"))}
             onClick={() => openSimSettings("monitors")} />
           <RButton icon={Activity} label={t("ribbon.sim.currents")}
-            issue={issueFor("monitors.currents")}
-            title={issueTitle(currentMonitors().length ? t("ribbon.sim.currentsTitle", { freqs: valueText(currentMonitors()) }) : t("ribbon.sim.currentsAdd"), issueFor("monitors.currents"))}
+            disabled={isEmerge()}
+            issue={isEmerge() ? null : issueFor("monitors.currents")}
+            title={isEmerge() ? t("ribbon.sim.currentsEmergeDisabled") : issueTitle(currentMonitors().length ? t("ribbon.sim.currentsTitle", { freqs: valueText(currentMonitors()) }) : t("ribbon.sim.currentsAdd"), issueFor("monitors.currents"))}
             onClick={() => openSimSettings("currents")} />
           <RButton icon={Gauge} label={t("ribbon.sim.efficiency")}
-            issue={issueFor("monitors.efficiency")}
-            title={issueTitle(efficiencyPoints() !== undefined ? t("ribbon.sim.efficiencyTitle", { n: efficiencyPoints() }) : t("ribbon.sim.efficiencyAdd"), issueFor("monitors.efficiency"))}
+            disabled={isEmerge()}
+            issue={isEmerge() ? null : issueFor("monitors.efficiency")}
+            title={isEmerge() ? t("ribbon.sim.efficiencyEmergeDisabled") : issueTitle(efficiencyPoints() !== undefined ? t("ribbon.sim.efficiencyTitle", { n: efficiencyPoints() }) : t("ribbon.sim.efficiencyAdd"), issueFor("monitors.efficiency"))}
             onClick={() => openSimSettings("efficiency")} />
           <RButton icon={Layers2} label={t("ribbon.fieldPlane")}
-            issue={issueFor("monitors.field_planes")}
-            title={issueTitle(fieldPlaneCount() ? t("ribbon.sim.fieldPlanesTitle", { count: fieldPlaneCount() }) : t("ribbon.sim.fieldPlaneAdd"), issueFor("monitors.field_planes"))}
+            disabled={isEmerge()}
+            issue={isEmerge() ? null : issueFor("monitors.field_planes")}
+            title={isEmerge() ? t("ribbon.sim.fieldPlaneEmergeDisabled") : issueTitle(fieldPlaneCount() ? t("ribbon.sim.fieldPlanesTitle", { count: fieldPlaneCount() }) : t("ribbon.sim.fieldPlaneAdd"), issueFor("monitors.field_planes"))}
             onClick={() => openSimSettings("fieldplanes")} />
         </RGroup>
         <RGroup label={t("ribbon.sim.solver")} icon={Settings2}>
+          <RButton icon={Cpu} label={t("ribbon.sim.engine.openems")} pressed={activeEngine() === "openems"}
+            title={t("ribbon.sim.engine.openemsTitle")} action="engine-openems" onClick={() => setActiveEngine("openems")} />
+          <RButton icon={Pyramid} label={t("ribbon.sim.engine.emerge")} pressed={activeEngine() === "emerge"}
+            title={t("ribbon.sim.engine.emergeTitle")} action="engine-emerge" onClick={() => setActiveEngine("emerge")} />
           <RButton icon={Waves} label={t("research.title")} title={t("research.description")} action="research-solvers" onClick={() => openResearch()} />
-          <RButton icon={Timer} label={t("ribbon.sim.solverLimits")}
-            issue={issueFor("simulation.end_criteria_db", "simulation.max_timesteps")}
-            title={issueTitle(t("ribbon.sim.solverLimitsTitle", { db: fmt(draft.simulation.end_criteria_db ?? -60), steps: draft.simulation.max_timesteps ? i18nFmt.int(draft.simulation.max_timesteps) : t("sim.solver.maxStepsAuto") }), issueFor("simulation.end_criteria_db", "simulation.max_timesteps"))}
-            onClick={() => openSimSettings("solver")} />
+          {/* Capability matrix: hide FDTD solver limits under EMerge (not disable-in-place). */}
+          <Show when={!isEmerge()}>
+            <RButton icon={Timer} label={t("ribbon.sim.solverLimits")}
+              issue={issueFor("simulation.end_criteria_db", "simulation.max_timesteps")}
+              title={issueTitle(t("ribbon.sim.solverLimitsTitle", { db: fmt(draft.simulation.end_criteria_db ?? -60), steps: draft.simulation.max_timesteps ? i18nFmt.int(draft.simulation.max_timesteps) : t("sim.solver.maxStepsAuto") }), issueFor("simulation.end_criteria_db", "simulation.max_timesteps"))}
+              onClick={() => openSimSettings("solver")} />
+          </Show>
         </RGroup>
         <RGroup label={t("ribbon.sim.run")} icon={Play}>
-          <RButton icon={Play} label={t("ribbon.sim.run")} primary title={`${t(errorCount() ? "ribbon.sim.runFixErrors" : "ribbon.sim.runTitle")} (${SHORTCUTS.run.key})`} onClick={runDesign} />
+          <RButton icon={Play} label={t("ribbon.sim.runEngine", { engine: activeEngineLabel() })} primary emergeAccent={isEmerge()}
+            title={`${t(errorCount() ? "ribbon.sim.runFixErrors" : "ribbon.sim.runTitle")} (${SHORTCUTS.run.key})`} onClick={runDesign} />
         </RGroup>
       </Show>
       <Show when={tab.key === "optimize"}>
         <RGroup label={t("ribbon.optimize.group")} icon={SlidersHorizontal}>
-          <RButton icon={ChartScatter} label={t("ribbon.optimize.sweep")} title={t("ribbon.optimize.sweepTitle")} onClick={() => void openDesignerSweep()} />
-          <RButton icon={SlidersHorizontal} label={t("ribbon.optimize.optimizer")} title={t("ribbon.optimize.optimizerTitle")} onClick={() => void openDesignerOptimize()} />
+          <RButton icon={ChartScatter} label={t("ribbon.optimize.sweep")}
+            disabled={isEmerge()}
+            title={isEmerge() ? t("ribbon.optimize.emergeDisabled") : t("ribbon.optimize.sweepTitle")}
+            onClick={() => void openDesignerSweep()} />
+          <RButton icon={SlidersHorizontal} label={t("ribbon.optimize.optimizer")}
+            disabled={isEmerge()}
+            title={isEmerge() ? t("ribbon.optimize.emergeDisabled") : t("ribbon.optimize.optimizerTitle")}
+            onClick={() => void openDesignerOptimize()} />
         </RGroup>
       </Show>
       <Show when={tab.key === "post"}>
@@ -747,8 +797,8 @@ export function Ribbon() {
           <RButton icon={ClipboardList} label={t("ribbon.post.summary")} title={ribbonResult() ? t("ribbon.post.summaryTitle") : t("ribbon.post.runFirst")} disabled={!ribbonResult()} onClick={() => void openRibbonResult("summary")} />
           <RButton icon={ChartLine} label={t("ribbon.post.sparams")} title={ribbonResult() ? t("ribbon.post.sparamsTitle") : t("ribbon.post.runFirst")} disabled={!ribbonResult()} onClick={() => void openRibbonResult("sparams")} />
           <RButton icon={CircleDot} label={t("ribbon.post.smith")} title={ribbonResult() ? t("ribbon.post.smithTitle") : t("ribbon.post.runFirst")} disabled={!ribbonResult()} onClick={() => void openRibbonResult("smith")} />
-          <RButton icon={Gauge} label={t("ribbon.sim.efficiency")} title={ribbonResult() ? t("ribbon.post.efficiencyTitle") : t("ribbon.post.runFirst")} disabled={!ribbonResult()} onClick={() => void openRibbonResult("efficiency")} />
-          <RButton icon={Radar} label={t("ribbon.post.pattern")} title={ribbonResult() ? t("ribbon.post.patternTitle") : t("ribbon.post.runFirst")} disabled={!ribbonResult()} onClick={() => void openRibbonResult("pattern")} />
+          <RButton icon={Gauge} label={t("ribbon.sim.efficiency")} title={ribbonEfficiency().reason} disabled={!ribbonEfficiency().ok} onClick={() => void openRibbonResult("efficiency")} />
+          <RButton icon={Radar} label={t("ribbon.post.pattern")} title={ribbonPattern().reason} disabled={!ribbonPattern().ok} onClick={() => void openRibbonResult("pattern")} />
           <RButton icon={RadioTower} label={t("dock.results.array")} title={ribbonArray().reason} disabled={!ribbonArray().ok} pressed={resultFocus()?.view === "array"} onClick={() => void openRibbonResult("array")} />
           <RButton icon={Rotate3d} label={t("ribbon.post.pattern3d")} title={ribbonPattern3d().reason} disabled={!ribbonPattern3d().ok} pressed={resultFocus()?.view === "pattern3d"} onClick={() => void openRibbonResult("pattern3d")} />
           {/* only a run with surface-current maps (#90); the tooltip gives the reason otherwise */}

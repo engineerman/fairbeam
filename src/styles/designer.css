@@ -259,6 +259,8 @@ textarea.dz-autogrow { resize: none; overflow-y: auto; min-height: 0; max-height
 .rb-btn:focus-visible { outline: 2px solid var(--al-focus); outline-offset: -2px; }
 .rb-primary { color: var(--al-action-text, var(--al-text)); background: var(--al-action); }
 .rb-primary:hover:not(:disabled) { background: var(--al-action-hover, var(--al-action)); color: var(--al-action-text, var(--al-text)); }
+.rb-primary-emerge { color: var(--al-action-emerge-text, #ffffff); background: var(--al-action-emerge); }
+.rb-primary-emerge:hover:not(:disabled) { background: var(--al-action-emerge-hover, var(--al-action-emerge)); color: var(--al-action-emerge-text, #ffffff); }
 .rb-wcs { position: relative; }
 .rb-pop {
   position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; width: 320px; display: grid; gap: var(--al-space-3);

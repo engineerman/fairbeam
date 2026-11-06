@@ -260,10 +260,10 @@ mod tests {
         let mut s = Settings::default();
         m.apply(&mut s);
         assert!(!s.prefer_gpu);
-        // missing: Fairbeam's default (on)
+        // missing prefer_gpu: Fairbeam's default (on); update checks default off on the engineerman fork
         let mut s = Settings::default();
         map(&json!({}), None, &[]).apply(&mut s);
-        assert!(s.prefer_gpu && s.check_updates_on_start);
+        assert!(s.prefer_gpu && !s.check_updates_on_start);
     }
 
     #[test]

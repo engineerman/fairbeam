@@ -35,7 +35,9 @@ Cursor loads:
 ```
 docs/agent/
   README.md                 ← this file
-  SCOPE.md                  ← A / B / C integration scope
+  MISSION.md / SCOPE.md     ← fork goal and A / B / C scope
+  BACKLOG-emerge-port-map.md ← deferred port-map work after Stage A
+  specs/                    ← approved designs (e.g. openEMS ↔ EMerge ports)
   prompts/planner.md
   prompts/implementer.md
   prompts/reviewer.md

@@ -1860,12 +1860,13 @@ class App:
                 settings = body.get("settings")
                 backend = body.get("backend")
                 analysis = settings.get("analysis") if isinstance(settings, dict) else None
-                # Driven Elmer/EMerge antenna and EMerge planar two-port bind to the workspace Design.
+                from .emerge_solver import EMERGE_DESIGN_ANALYSES
+                # Driven Elmer and EMerge Design analyses (legacy + emerge_nport) bind to the workspace.
                 if not (
                     isinstance(settings, dict)
                     and (
                         (backend == "elmer" and analysis == "driven")
-                        or (backend == "emerge" and analysis in ("driven", "planar_two_port"))
+                        or (backend == "emerge" and analysis in EMERGE_DESIGN_ANALYSES)
                     )
                 ):
                     raise ValueError("workspace source binding is supported only for driven Elmer or EMerge runs")

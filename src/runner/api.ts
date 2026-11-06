@@ -414,6 +414,22 @@ export interface ResearchResult {
   backend?: string;
   status: string;
   frequency_hz: number[];
+  nodes?: number;
+  tetrahedra?: number;
+  duration_s?: number;
+  mesh?: {
+    nodes: number;
+    tetrahedra: number;
+    surface?: {
+      schema?: string;
+      units: "mm";
+      nodes_mm: number[][];
+      edges: number[][];
+      thinned?: boolean;
+      edge_stride?: number;
+      edge_count?: number;
+    };
+  };
   s11_real?: number[];
   s11_imag?: number[];
   s21_real?: number[];

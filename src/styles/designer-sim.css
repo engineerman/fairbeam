@@ -148,6 +148,9 @@
 .ss-box .ss-face { cursor: pointer; stroke: var(--al-border-strong); stroke-width: 1; }
 .ss-box .ss-face:hover { stroke: var(--al-focus); stroke-width: 2; }
 .ss-box .ss-face.ss-on { stroke: var(--al-focus); stroke-width: 2.5; }
+/* EMerge enclosure diagram: same net as openEMS, faces not individually editable */
+.ss-box.ss-box-ro .ss-face { cursor: default; }
+.ss-box.ss-box-ro .ss-face:hover { stroke: var(--al-border-strong); stroke-width: 1; }
 .ss-box text { font-size: var(--al-text-xs); fill: var(--al-text); pointer-events: none; font-family: var(--al-font-mono); }
 .ss-box .ss-axis { stroke: var(--al-text-3); stroke-width: 1; }
 .ss-box .ss-axis-l { fill: var(--al-text-3); font-size: var(--al-text-xs); }

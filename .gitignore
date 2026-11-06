@@ -31,3 +31,8 @@ python/materials.json
 
 # local editor/agent configuration
 .claude/
+
+python/models/
+.superpowers/
+public/projects/
+docs/agent/

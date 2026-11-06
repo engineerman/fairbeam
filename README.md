@@ -4,27 +4,57 @@
 the open-source [openEMS](https://openems.de) FDTD solver, from a ribbon-based 3D designer or from
 parametric Python models.
 
-[Website](https://fairbeam.org) · [Download](https://github.com/ismailakdag/fairbeam-releases/releases/latest) ·
-[Browser demo](https://fairbeam.org/app/) · [Getting started](docs/GETTING-STARTED.md) ·
-[Documentation](docs/README.md)
+[Website](https://fairbeam.org) · [Browser demo](https://fairbeam.org/app/) ·
+[Getting started](docs/GETTING-STARTED.md) · [Documentation](docs/README.md)
 
-![A finished run in the Fairbeam designer: S-parameters with markers beside the 3D view](landing/media/designer-sparams.jpg)
+This repository is the **[engineerman](https://github.com/engineerman) fork** of Fairbeam, with
+opt-in experimental EMerge. It does not publish a separate desktop installer yet; build from source
+below. Do not use the upstream Fairbeam updater or
+[fairbeam-releases](https://github.com/ismailakdag/fairbeam-releases) binaries if you need the
+EMerge path — those builds replace the engineerman fork.
+
+## New features
+
+### Experimental EMerge FEM
+
+The engineerman fork adds an **opt-in** [EMerge](https://github.com/FennisRobert/EMerge)
+frequency-domain FEM backend beside the default openEMS FDTD path. openEMS stays the production
+solver; EMerge is experimental research only (`results_exported`, never a validated production
+certificate).
+
+- **Install EMerge** from Simulation → Experimental solvers (Windows managed venv, pinned
+  `emerge==3.0.0b12`; optional path / `FAIRBEAM_EMERGE_PYTHON` elsewhere).
+- **Session engine picker:** choose **EMerge (experimental)** to retarget Run chrome, Frequency /
+  Boundaries / Mesh settings and which Simulation actions stay enabled.
+- **One Run entry — EMerge FEM · Experimental:** driven/lumped or planar microstrip Designs with
+  **1–8 ports of one type**, full experimental N×N S-matrix (`fairbeam.emerge-result/2`).
+- **Mesh without solve**, FEM surface overlay in Mesh view, mid-plane E-field cuts, and a Design
+  port→boundary-condition preview with explicit `accept_*` gates (no silent geometry remap).
+- Fixed WR-90 waveguide fixture remains available for analytic checks.
+
+Details: [experimental solvers](docs/EXPERIMENTAL-SOLVERS.md) ·
+[EMerge experiment](docs/EMERGE-EXPERIMENT.md).
+
+![Experimental EMerge tetrahedral mesh of a four-port planar Design in Fairbeam, with ports labelled and a mid-plane field cut](landing/media/emerge-tetrahedral-mesh.png)
 
 ## Download
 
-The desktop app is free, for **macOS** (Apple silicon, signed with a Developer ID and notarized by Apple) and **Windows** x64.
-Get the latest version from
-[fairbeam-releases](https://github.com/ismailakdag/fairbeam-releases/releases/latest). The app
-installs its own runtime (Python and openEMS) for your user on first start and offers updates for you to install.
-[Getting started](docs/GETTING-STARTED.md) takes you from installing to reading the results of a
-patch antenna.
+**engineerman fork:** no fork-specific desktop release yet. Use [From source](#from-source) (or a
+local desktop build you produce yourself). Automatic updates against upstream
+`fairbeam-releases` are **disabled** in this tree so an upstream install cannot wipe the EMerge
+integration.
 
-The Windows installer is not code-signed. SmartScreen may show "Windows protected
-your PC": choose **More info › Run anyway**. The macOS app is signed with a Developer ID and notarized by Apple. The
+**Upstream Fairbeam** (openEMS only, without the engineerman fork’s EMerge path): the desktop app is free for
+**macOS** (Apple silicon, signed with a Developer ID and notarized by Apple) and **Windows** x64
+from [fairbeam-releases](https://github.com/ismailakdag/fairbeam-releases/releases/latest). That
+app installs its own runtime on first start. The Windows installer is not code-signed; SmartScreen
+may show "Windows protected your PC": choose **More info › Run anyway**. The
 [browser demo](https://fairbeam.org/app/) opens the example projects read-only, without installing
-anything.
+anything. [Getting started](docs/GETTING-STARTED.md) covers the upstream install path.
 
 ## What it does
+
+![A finished run in the Fairbeam designer: S-parameters with markers beside the 3D view](landing/media/designer-sparams.jpg)
 
 - **Designer.** Draw parametric solids and sheets, use Boolean operations, transforms and a working
   coordinate system, add ports and lumped elements, check the model, mesh it and run it, in one
@@ -139,7 +169,9 @@ also cite [openEMS](https://openems.de), which computes the fields.
   - grouped discrete ports and multiport convergence criteria.
 - **Solvers:** Fairbeam runs [openEMS](https://openems.de) and [CSXCAD](https://github.com/thliebig/CSXCAD)
   by Thorsten Liebig and contributors. The optional GPU engine is
-  [SeanMollet/openEMS](https://github.com/SeanMollet/openEMS).
+  [SeanMollet/openEMS](https://github.com/SeanMollet/openEMS). An opt-in experimental FEM path uses
+  [EMerge](https://github.com/FennisRobert/EMerge) by Robert Fennis (managed Install EMerge; not
+  bundled in the default installer).
 - **Libraries:** the viewer uses [SolidJS](https://www.solidjs.com) and
   [three.js](https://threejs.org), and the desktop shell is built with [Tauri](https://tauri.app).
 - **Details:** selected third-party components and source locations are listed in [NOTICE.md](NOTICE.md).

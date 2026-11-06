@@ -233,6 +233,12 @@ def install_app(root: Path, resources: Path, py: Path) -> str:
     elmer = resources / "python" / "fairbeam_elmer.py"
     if not elmer.is_file():
         fail(f"bundled Elmer adapter not found at {elmer}; reinstall the latest Fairbeam package")
+    emerge = resources / "python" / "fairbeam_emerge.py"
+    emerge_worker = resources / "python" / "fairbeam_emerge_worker.py"
+    if not emerge.is_file():
+        fail(f"bundled EMerge adapter not found at {emerge}; reinstall the latest Fairbeam package")
+    if not emerge_worker.is_file():
+        fail(f"bundled EMerge worker not found at {emerge_worker}; reinstall the latest Fairbeam package")
     app = root / "app"
     new = root / "app.new"
     try:
@@ -243,6 +249,8 @@ def install_app(root: Path, resources: Path, py: Path) -> str:
         _in_use(new, e)
     shutil.copytree(src, new / "fairbeam", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     shutil.copy2(elmer, new / "fairbeam_elmer.py")
+    shutil.copy2(emerge, new / "fairbeam_emerge.py")
+    shutil.copy2(emerge_worker, new / "fairbeam_emerge_worker.py")
     try:
         _retry_windows_file_operation(lambda: shutil.rmtree(app))
     except FileNotFoundError:
