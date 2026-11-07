@@ -31,6 +31,8 @@ python/materials.json
 
 # local editor/agent configuration
 .claude/
+.cursor/
+.vscode/
 
 python/models/
 .superpowers/
