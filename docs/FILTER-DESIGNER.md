@@ -8,11 +8,11 @@ another backend) and tune with Sweep / Optimizer afterward.
 
 ## Open the wizard
 
-From the **Start** screen, use the **filter-designer** product tile (label `filter-designer`).
+From the **Start** screen, use the **Filter designer** product tile.
 The note under the tile describes the flow: specify a hairpin bandpass, synthesize geometry, then
 open it as a new design.
 
-![Start menu filter-designer tile](../landing/media/filter-designer-start-tile.png)
+![Start menu Filter designer tile](../landing/media/filter-designer-start-tile.png)
 
 ## Wizard steps
 
@@ -22,9 +22,12 @@ The modal walks three steps: **Topology → Parameters → Preview**.
 
 Choose a microstrip hairpin card:
 
-- **Hairpin bandpass** — square outer fold corners (`hairpin_microstrip_bp`)
+- **Hairpin bandpass** — square outer fold corners (`hairpin_microstrip_bp`);
+  thumb `src/assets/hairpin-topology-card.png`
 - **Hairpin bandpass (mitered)** — Douville–James miters on the U outer folds
-  (`hairpin_microstrip_bp_mitered`), same electrical / stack synthesizer
+  (`hairpin_microstrip_bp_mitered`), same electrical / stack synthesizer.
+  Distinct thumb goes at `src/assets/hairpin-topology-card-mitered.png` (user-provided;
+  until that file is wired in `TopologyStep.tsx`, the card reuses the square thumb as a placeholder).
 
 Selecting a card advances to Parameters. Other planar filter families are not offered yet.
 

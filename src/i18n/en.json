@@ -1597,7 +1597,7 @@
   "home.feedback.feature": "Suggest a feature",
   "home.feedback.featureTitle": "The feature form on GitHub (opens your browser)",
   "home.feedback.label": "Send feedback:",
-  "home.filterDesign.button": "filter-designer",
+  "home.filterDesign.button": "Filter designer",
   "home.filterDesign.note": "A new design from a hairpin bandpass specification. The synthesizer builds the geometry, then opens it in the designer.",
   "home.filterDesign.title": "Synthesize a planar hairpin filter and open it as a new design",
   "home.importCst.button": "Import VBA macro…",
