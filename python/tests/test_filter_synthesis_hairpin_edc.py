@@ -35,8 +35,10 @@ def _default(design, key):
     raise KeyError(key)
 
 
-def _seed():
-    spec = HairpinMicrostripBpSpec(f0_hz=2e9, order=3, bw_hz=0.2e9, ripple_db=0.1)
+def _seed(*, fold_style: str = "square"):
+    spec = HairpinMicrostripBpSpec(
+        f0_hz=2e9, order=3, bw_hz=0.2e9, ripple_db=0.1, fold_style=fold_style
+    )
     design = synthesize_hairpin_microstrip_bp(spec).design
     electrical = {
         "f0_hz": spec.f0_hz,
@@ -46,6 +48,10 @@ def _seed():
         "response": "chebyshev",
     }
     return design, electrical
+
+
+def _seed_mitered():
+    return _seed(fold_style="mitered")
 
 
 def _s11_for_qe(qe, f0=2.0e9, n=81):
@@ -139,6 +145,21 @@ class HairpinEdcGeometryTests(unittest.TestCase):
         for key in ("q_len", "w0", "gap0", "w_feed"):
             self.assertEqual(_default(qe, key), _default(design, key))
             self.assertEqual(_default(pair, key), _default(design, key))
+        self.assertAlmostEqual(_default(pair, "sp0"), 0.8)
+        check_design(qe)
+        check_design(pair)
+
+    def test_study_designs_accept_mitered_polygon_us(self):
+        """Mitered seeds use one polygon per U; EDC must slice those, not expect 3 boxes."""
+        design, _ = _seed_mitered()
+        kinds = [p["kind"] for p in _filter_prims(design)]
+        self.assertEqual(kinds, ["box", "polygon", "polygon", "polygon", "box"])
+        qe = study_design(design, n_res=1, tap_mm=4.0, spacings_mm=[], one_port=True)
+        pair = study_design(design, n_res=2, tap_mm=4.0, spacings_mm=[0.8], one_port=False)
+        self.assertEqual([p["kind"] for p in _filter_prims(qe)], ["box", "polygon"])
+        self.assertEqual([p["kind"] for p in _filter_prims(pair)], ["box", "polygon", "polygon", "box"])
+        self.assertEqual(len(qe["ports"]), 1)
+        self.assertEqual(len(pair["ports"]), 2)
         self.assertAlmostEqual(_default(pair, "sp0"), 0.8)
         check_design(qe)
         check_design(pair)
