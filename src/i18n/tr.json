@@ -4580,7 +4580,6 @@
   "hairpinDesigner.table.title": "Geometri parametreleri",
   "hairpinDesigner.topology.hairpin_microstrip_bp": "Saç tokası bant geçiren",
   "hairpinDesigner.topology.hairpin_microstrip_bp_mitered": "Saç tokası bant geçiren (miterli)",
-  "filterDesigner.topologies.hairpin_microstrip_bp_mitered": "Saç tokası bant geçiren (miterli)",
   "feed.create": "Port veya toplu eleman oluştur",
   "feed.element": "Toplu R/L/C elemanı",
   "feed.coordinates": "İki uç noktasını açıkça girin. Oluşturana kadar hiçbir şey eklenmez. İfadeler ve tasarım parametreleri desteklenir.",

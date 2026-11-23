@@ -46,7 +46,7 @@ TOPOLOGIES: dict[str, TopologySpec] = {
     ),
     "hairpin_microstrip_bp_mitered": TopologySpec(
         id="hairpin_microstrip_bp_mitered",
-        label_key="filterDesigner.topologies.hairpin_microstrip_bp_mitered",
+        label_key="hairpinDesigner.topology.hairpin_microstrip_bp_mitered",
         filter_class="bandpass",
         medium="microstrip",
         input_schema={},
