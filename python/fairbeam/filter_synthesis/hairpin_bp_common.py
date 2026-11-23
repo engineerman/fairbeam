@@ -203,6 +203,108 @@ def hairpin_u_x_layout(
     return x_bases, x
 
 
+def _hairpin_u_boxes(
+    k: int,
+    *,
+    open_down: bool,
+    metal_z_expr: str,
+) -> list[dict[str, Any]]:
+    """Three axis-aligned boxes for one square-fold U (legacy)."""
+    x0 = f"x_base{k}"
+    w_k = f"w{k}"
+    gap_k = f"gap{k}"
+    if open_down:
+        return [
+            {
+                "kind": "box",
+                "priority": 10,
+                "start": [x0, "0", metal_z_expr],
+                "stop": [f"{x0}+{w_k}", f"q_len-{w_k}", metal_z_expr],
+            },
+            {
+                "kind": "box",
+                "priority": 10,
+                "start": [f"{x0}+{w_k}+{gap_k}", "0", metal_z_expr],
+                "stop": [f"{x0}+2*{w_k}+{gap_k}", f"q_len-{w_k}", metal_z_expr],
+            },
+            {
+                "kind": "box",
+                "priority": 10,
+                "start": [x0, f"q_len-{w_k}", metal_z_expr],
+                "stop": [f"{x0}+2*{w_k}+{gap_k}", "q_len", metal_z_expr],
+            },
+        ]
+    return [
+        {
+            "kind": "box",
+            "priority": 10,
+            "start": [x0, "0", metal_z_expr],
+            "stop": [f"{x0}+2*{w_k}+{gap_k}", w_k, metal_z_expr],
+        },
+        {
+            "kind": "box",
+            "priority": 10,
+            "start": [x0, w_k, metal_z_expr],
+            "stop": [f"{x0}+{w_k}", "q_len", metal_z_expr],
+        },
+        {
+            "kind": "box",
+            "priority": 10,
+            "start": [f"{x0}+{w_k}+{gap_k}", w_k, metal_z_expr],
+            "stop": [f"{x0}+2*{w_k}+{gap_k}", "q_len", metal_z_expr],
+        },
+    ]
+
+
+def _hairpin_u_mitered_polygon(
+    k: int,
+    *,
+    open_down: bool,
+    metal_z_expr: str,
+) -> dict[str, Any]:
+    """One z-normal polygon for a U with Douville–James outer-fold chamfers.
+
+    Uses layout params ``x_base{k}``, ``w{k}``, ``gap{k}``, ``miter{k}``, ``q_len``.
+    """
+    x0 = f"x_base{k}"
+    w_k = f"w{k}"
+    gap_k = f"gap{k}"
+    m_k = f"miter{k}"
+    if open_down:
+        points = [
+            [x0, "0"],
+            [f"{x0}+{w_k}", "0"],
+            [f"{x0}+{w_k}", f"q_len-{w_k}"],
+            [f"{x0}+{w_k}+{gap_k}", f"q_len-{w_k}"],
+            [f"{x0}+{w_k}+{gap_k}", "0"],
+            [f"{x0}+2*{w_k}+{gap_k}", "0"],
+            [f"{x0}+2*{w_k}+{gap_k}", f"q_len-{m_k}"],
+            [f"{x0}+2*{w_k}+{gap_k}-{m_k}", "q_len"],
+            [f"{x0}+{m_k}", "q_len"],
+            [x0, f"q_len-{m_k}"],
+        ]
+    else:
+        points = [
+            [x0, "q_len"],
+            [f"{x0}+{w_k}", "q_len"],
+            [f"{x0}+{w_k}", w_k],
+            [f"{x0}+{w_k}+{gap_k}", w_k],
+            [f"{x0}+{w_k}+{gap_k}", "q_len"],
+            [f"{x0}+2*{w_k}+{gap_k}", "q_len"],
+            [f"{x0}+2*{w_k}+{gap_k}", m_k],
+            [f"{x0}+2*{w_k}+{gap_k}-{m_k}", "0"],
+            [f"{x0}+{m_k}", "0"],
+            [x0, m_k],
+        ]
+    return {
+        "kind": "polygon",
+        "normal": "z",
+        "elevation": metal_z_expr,
+        "priority": 10,
+        "points": points,
+    }
+
+
 def hairpin_filter_primitives(
     sections: list[dict[str, Any]],
     *,
@@ -211,10 +313,17 @@ def hairpin_filter_primitives(
     x_end: float,
     w_feed: float,
     metal_z_expr: str,
+    fold_style: str = "square",
 ) -> list[dict[str, Any]]:
-    """Plan-view alternating hairpins with feeds at y_feed0 / y_feed1 (tap height)."""
+    """Plan-view alternating hairpins with feeds at y_feed0 / y_feed1 (tap height).
+
+    ``fold_style`` is ``square`` (three boxes per U) or ``mitered`` (one polygon per U
+    with Douville–James outer-fold chamfers; requires ``miter{k}`` params on the design).
+    """
     # Numeric x_end / w_feed / feed_len seed the caller; geometry uses param expressions.
     _ = (x_end, w_feed, feed_len)
+    if fold_style not in ("square", "mitered"):
+        raise ValueError(f"unknown fold_style: {fold_style!r}")
     out: list[dict[str, Any]] = []
     out.append(
         {
@@ -226,59 +335,12 @@ def hairpin_filter_primitives(
     )
     for k, sec in enumerate(sections):
         open_down = bool(sec.get("open_down", k % 2 == 0))
-        x0 = f"x_base{k}"
-        w_k = f"w{k}"
-        gap_k = f"gap{k}"
-        if open_down:
+        if fold_style == "mitered":
             out.append(
-                {
-                    "kind": "box",
-                    "priority": 10,
-                    "start": [x0, "0", metal_z_expr],
-                    "stop": [f"{x0}+{w_k}", f"q_len-{w_k}", metal_z_expr],
-                }
-            )
-            out.append(
-                {
-                    "kind": "box",
-                    "priority": 10,
-                    "start": [f"{x0}+{w_k}+{gap_k}", "0", metal_z_expr],
-                    "stop": [f"{x0}+2*{w_k}+{gap_k}", f"q_len-{w_k}", metal_z_expr],
-                }
-            )
-            out.append(
-                {
-                    "kind": "box",
-                    "priority": 10,
-                    "start": [x0, f"q_len-{w_k}", metal_z_expr],
-                    "stop": [f"{x0}+2*{w_k}+{gap_k}", "q_len", metal_z_expr],
-                }
+                _hairpin_u_mitered_polygon(k, open_down=open_down, metal_z_expr=metal_z_expr)
             )
         else:
-            out.append(
-                {
-                    "kind": "box",
-                    "priority": 10,
-                    "start": [x0, "0", metal_z_expr],
-                    "stop": [f"{x0}+2*{w_k}+{gap_k}", w_k, metal_z_expr],
-                }
-            )
-            out.append(
-                {
-                    "kind": "box",
-                    "priority": 10,
-                    "start": [x0, w_k, metal_z_expr],
-                    "stop": [f"{x0}+{w_k}", "q_len", metal_z_expr],
-                }
-            )
-            out.append(
-                {
-                    "kind": "box",
-                    "priority": 10,
-                    "start": [f"{x0}+{w_k}+{gap_k}", w_k, metal_z_expr],
-                    "stop": [f"{x0}+2*{w_k}+{gap_k}", "q_len", metal_z_expr],
-                }
-            )
+            out.extend(_hairpin_u_boxes(k, open_down=open_down, metal_z_expr=metal_z_expr))
     out.append(
         {
             "kind": "box",

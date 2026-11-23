@@ -19,6 +19,18 @@ def _synthesize_hairpin_microstrip_bp(body: dict[str, Any]) -> SynthesisResult:
     return synthesize_hairpin_microstrip_bp(hairpin_microstrip_bp_spec_from_body(body))
 
 
+def _synthesize_hairpin_microstrip_bp_mitered(body: dict[str, Any]) -> SynthesisResult:
+    payload = dict(body)
+    layout = dict(payload.get("layout") or {})
+    layout["fold_style"] = "mitered"
+    payload["layout"] = layout
+    if not payload.get("name"):
+        payload["name"] = "Hairpin microstrip bandpass (mitered)"
+    if not payload.get("design_id"):
+        payload["design_id"] = "filter-hairpin-microstrip-bp-mitered"
+    return synthesize_hairpin_microstrip_bp(hairpin_microstrip_bp_spec_from_body(payload))
+
+
 def _synthesize_hairpin_stripline_bp(body: dict[str, Any]) -> SynthesisResult:
     return synthesize_hairpin_stripline_bp(hairpin_stripline_bp_spec_from_body(body))
 
@@ -31,6 +43,14 @@ TOPOLOGIES: dict[str, TopologySpec] = {
         medium="microstrip",
         input_schema={},
         synthesize=_synthesize_hairpin_microstrip_bp,
+    ),
+    "hairpin_microstrip_bp_mitered": TopologySpec(
+        id="hairpin_microstrip_bp_mitered",
+        label_key="filterDesigner.topologies.hairpin_microstrip_bp_mitered",
+        filter_class="bandpass",
+        medium="microstrip",
+        input_schema={},
+        synthesize=_synthesize_hairpin_microstrip_bp_mitered,
     ),
     "hairpin_stripline_bp": TopologySpec(
         id="hairpin_stripline_bp",

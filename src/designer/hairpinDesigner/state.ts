@@ -10,9 +10,12 @@ import type { FilterSynthesisPreview, FilterSynthesisRequest, FilterSynthesisRes
 import type { Design } from "../types";
 import { createDesign, openDesign } from "../store";
 
-/** The only topology this wizard offers. */
+/** Square-fold hairpin (legacy default). */
 export const HAIRPIN_TOPOLOGY_ID = "hairpin_microstrip_bp" as const;
-export type HairpinTopologyId = typeof HAIRPIN_TOPOLOGY_ID;
+/** Douville–James mitered outer folds (engineerman/fairbeam#2). */
+export const HAIRPIN_MITERED_TOPOLOGY_ID = "hairpin_microstrip_bp_mitered" as const;
+export const HAIRPIN_TOPOLOGY_IDS = [HAIRPIN_TOPOLOGY_ID, HAIRPIN_MITERED_TOPOLOGY_ID] as const;
+export type HairpinTopologyId = (typeof HAIRPIN_TOPOLOGY_IDS)[number];
 
 export const HAIRPIN_STEP_KEYS = ["topology", "parameters", "preview"] as const;
 export type HairpinStepKey = (typeof HAIRPIN_STEP_KEYS)[number];
@@ -114,8 +117,9 @@ export function hairpinParameterIssues(form: HairpinParameterForm): HairpinField
 export function hairpinSynthesisRequest(form: HairpinParameterForm = hairpinForm()): FilterSynthesisRequest {
   const f0 = Number(form.f0.trim());
   const bw = Number(form.bw.trim());
+  const topology = isHairpinTopologySelected(hairpinTopology()) ? hairpinTopology()! : HAIRPIN_TOPOLOGY_ID;
   return {
-    topology: HAIRPIN_TOPOLOGY_ID,
+    topology,
     electrical: {
       f0_hz: f0 * 1e9,
       bw_hz: bw * 1e9,
@@ -257,10 +261,14 @@ export function patchHairpinForm(patch: Partial<HairpinParameterForm>) {
   scheduleHairpinLivePreview();
 }
 
-/** Step 1 needs the hairpin card. Step 2 needs a valid form. Step 3 uses Finish. */
+function isHairpinTopologySelected(id: string | null | undefined): id is HairpinTopologyId {
+  return id === HAIRPIN_TOPOLOGY_ID || id === HAIRPIN_MITERED_TOPOLOGY_ID;
+}
+
+/** Step 1 needs a hairpin card. Step 2 needs a valid form. Step 3 uses Finish. */
 export function hairpinCanGoNext(): boolean {
   const step = hairpinStep();
-  if (step === 1) return hairpinTopology() === HAIRPIN_TOPOLOGY_ID;
+  if (step === 1) return isHairpinTopologySelected(hairpinTopology());
   if (step === 2) return !hairpinSynthesizing() && hairpinParameterIssues(hairpinForm()).length === 0;
   return false;
 }
@@ -268,7 +276,7 @@ export function hairpinCanGoNext(): boolean {
 export async function hairpinGoNext() {
   const step = hairpinStep();
   if (step === 1) {
-    if (hairpinTopology() !== HAIRPIN_TOPOLOGY_ID) return;
+    if (!isHairpinTopologySelected(hairpinTopology())) return;
     setHairpinStep(2);
     return;
   }

@@ -4663,6 +4663,8 @@
   "hairpinDesigner.step.topology": "Topology",
   "hairpinDesigner.table.title": "Geometry parameters",
   "hairpinDesigner.topology.hairpin_microstrip_bp": "Hairpin bandpass",
+  "hairpinDesigner.topology.hairpin_microstrip_bp_mitered": "Hairpin bandpass (mitered)",
+  "filterDesigner.topologies.hairpin_microstrip_bp_mitered": "Hairpin bandpass (mitered)",
   "feed.create": "Create port or lumped element",
   "feed.element": "Lumped R/L/C element",
   "feed.coordinates": "Enter the two endpoints explicitly. Nothing is added until you create it. Expressions and design parameters are supported.",

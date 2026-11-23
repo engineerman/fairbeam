@@ -20,8 +20,13 @@ The modal walks three steps: **Topology → Parameters → Preview**.
 
 ### Topology
 
-Choose **Hairpin bandpass** (microstrip). That is the shipped topology card for this release;
-other planar filter cards are not offered yet. Selecting the card advances to Parameters.
+Choose a microstrip hairpin card:
+
+- **Hairpin bandpass** — square outer fold corners (`hairpin_microstrip_bp`)
+- **Hairpin bandpass (mitered)** — Douville–James miters on the U outer folds
+  (`hairpin_microstrip_bp_mitered`), same electrical / stack synthesizer
+
+Selecting a card advances to Parameters. Other planar filter families are not offered yet.
 
 ### Parameters
 

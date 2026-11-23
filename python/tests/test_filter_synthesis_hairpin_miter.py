@@ -68,5 +68,26 @@ class HairpinUOuterXyTests(unittest.TestCase):
             )
 
 
+class MiteredTopologySynthesisTests(unittest.TestCase):
+    def test_registry_mitered_emits_polygons_and_miter_params(self) -> None:
+        from fairbeam.filter_synthesis.registry import synthesize
+
+        result = synthesize(
+            "hairpin_microstrip_bp_mitered",
+            {
+                "electrical": {"f0_hz": 2e9, "bw_hz": 0.2e9, "order": 3, "ripple_db": 0.1},
+                "stack": {"eps_r": 4.2, "thickness_mm": 1.58, "tan_d": 0.02},
+                "layout": {"feed_len_mm": 6.0, "board_margin_mm": 8.0, "intra_gap_mm": 2.0},
+            },
+        )
+        filter_part = next(p for p in result.design["parts"] if p["name"] == "filter")
+        kinds = [prim["kind"] for prim in filter_part["primitives"]]
+        self.assertGreaterEqual(kinds.count("polygon"), 3)
+        self.assertIn("box", kinds)  # feed lines stay boxes
+        keys = {p["key"] for p in result.design["params"]}
+        self.assertIn("miter0", keys)
+        self.assertTrue(any("Douville" in c or "miter" in c.lower() for c in result.caveats))
+
+
 if __name__ == "__main__":
     unittest.main()
