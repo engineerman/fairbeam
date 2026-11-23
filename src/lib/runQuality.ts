@@ -13,6 +13,11 @@
 import type { Bundle, ProjectIndexEntry } from "../types";
 import { drivenPort, mismatchAt, radEfficiency } from "./farfieldQuantity.ts";
 
+/** EMerge experimental export (solver.engine and/or experimental.solver). Pure helper for O16. */
+export function isEmergeExperimentalBundle(b: Bundle | null | undefined): boolean {
+  return !!b && (b.experimental?.solver === "EMerge" || b.solver?.engine === "EMerge");
+}
+
 export type RunVerdict = "converged" | "not-converged" | "suspicious";
 
 export type QualityReason =
@@ -89,10 +94,13 @@ export function matchHint(b: Bundle): MatchHint | null {
   return { f: at, db: best, f0, ...(off ? { off } : {}) };
 }
 
-/** The verdict of a finished run, or null for a bundle without results (a geometry preview). */
+/** The verdict of a finished run, or null for a bundle without results (a geometry preview).
+ * EMerge experimental exports have no FDTD energy/timestep stop (O16): return null rather than
+ * inventing "not-converged" or a green "converged" certificate. */
 export function runQuality(b: Bundle): RunQuality | null {
   const res = b.results;
   if (!res || !b.run) return null;
+  if (isEmergeExperimentalBundle(b)) return null;
   const reasons: QualityReason[] = [];
   const portRuns = b.run.port_runs;
   if (portRuns?.length) {

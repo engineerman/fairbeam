@@ -60,7 +60,7 @@ try {
     await s.click("home.newProject.create"); await s.wait(".rb");
     await s.click("ribbon.tab.sim", { sel: ".rb-tab" });
     // Run chrome shows the active engine name (default openEMS), not ribbon.sim.run.
-    await s.click("ribbon.sim.runEngine", { sel: ".rb-btn", params: { engine: "openEMS" } });
+    await s.click("ribbon.sim.runEngine", { sel: "[data-action='run-design']", params: { engine: "openEMS" } });
     await s.wait(".rd-dialog");
     // Unified option needs health.emerge >= 3; dual emerge-driven / emerge-planar are gone.
     assert.equal(await page.$$eval('.rd-solver select option[value="emerge"]', rows => rows.length), 0,
@@ -79,11 +79,13 @@ try {
     await page.select(".rd-solver select", "emerge");
     await s.wait('[data-testid="emerge-run-form"]');
     assert.equal(await page.$("#rd-form"), null, "FDTD controls unmounted for EMerge");
-    // Patch template uses Discrete/lumped → finite-feed accept + driven feed fields.
-    assert.ok(await page.$('[data-testid="emerge-run-port-note"]'),
-      "finite-feed note shown as status-warn");
-    assert.ok(await page.$('[data-testid="emerge-run-accept-finite"]'),
-      "finite-feed acceptance required");
+    // Patch template uses Discrete/lumped → default LumpedPort map label (no ack checkbox).
+    assert.ok(await page.$('[data-testid="emerge-port-map-preview"]'),
+      "port mapping preview shown");
+    assert.ok(await page.$('[data-testid="emerge-port-map-label"]'),
+      "single-option LumpedPort map label for Discrete ports");
+    assert.equal(await page.$('[data-testid="emerge-run-accept-finite"]'), null,
+      "finite-feed ack checkbox removed (default map)");
     assert.ok(await page.$('[data-testid="emerge-run-padding"]'),
       "padding shown for driven fallback on lumped ports");
     assert.ok(await page.$('[data-testid="emerge-run-enclosure"]'),
@@ -93,10 +95,8 @@ try {
       await s.fill(await s.field(await s.T(`emergeExp.${key}`)), val);
     }
     await page.select('[data-testid="emerge-run-resolution"]', "fine");
-    assert.ok(await page.$eval('[data-testid="emerge-run-form"] button[type=submit]', e => e.disabled),
-      "still disabled without finite-feed acceptance");
-    await page.click('[data-testid="emerge-run-accept-finite"]');
-    assert.equal(await page.$eval('[data-testid="emerge-run-form"] button[type=submit]', e => e.disabled), false);
+    assert.equal(await page.$eval('[data-testid="emerge-run-form"] button[type=submit]', e => e.disabled), false,
+      "submit enabled with default port map");
 
     // Shielded submit: padding still sent for driven fallback; analysis is emerge_nport.
     await page.click('[data-testid="emerge-run-form"] button[type=submit]');

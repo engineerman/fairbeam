@@ -9,11 +9,32 @@ const ORDER: Phase[] = ["queued", "building", "setup", "running", "postprocessin
 const START: Record<string, number> = { queued: 0, building: 0.02, setup: 0.05, running: 0.08, postprocessing: 0.92, exporting: 0.97 };
 const SOLVER_SHARE = START.postprocessing - START.running;
 
+/** Research EMerge Design jobs share the designer Run dock with openEMS. */
+export function isEmergeResearchJob(
+  job: { kind?: string; research?: { backend?: string } | null } | null | undefined,
+): boolean {
+  return !!job && job.kind === "research" && job.research?.backend === "emerge";
+}
+
+/**
+ * Map research-only phase names onto the openEMS dock spine so the strip and bar advance.
+ * openEMS phases pass through unchanged. Unknown names fall back to queued (honest empty strip).
+ */
+export function normalizeDockPhase(phase: string | null | undefined): Phase {
+  const raw = phase ?? "queued";
+  if (raw === "simulating") return "running";
+  if (raw === "results_exported" || raw === "validating") return "exporting";
+  if ((ORDER as string[]).includes(raw)) return raw as Phase;
+  if (raw === "done") return "done" as Phase;
+  return "queued";
+}
+
 /** The solver has finished (or the run ended): what it said about the timesteps no longer applies. */
 export function pastSolver(phase: Phase | null | undefined, status: string): boolean {
   if (["done", "failed", "cancelled", "interrupted"].includes(status)) return true;
-  const i = ORDER.indexOf(phase as Phase);
-  return i > ORDER.indexOf("running") || phase === "done";
+  const dock = normalizeDockPhase(phase);
+  const i = ORDER.indexOf(dock);
+  return i > ORDER.indexOf("running") || dock === "done";
 }
 
 /** The latest timestep the run reached: the live progress line, else the solver's summary. */
@@ -36,7 +57,7 @@ export function pulseNote(info: RunInfo, progress: ProgressEvent | null | undefi
   if (!end || pastSolver(phase, status)) return null;
   if (limit && end >= limit) return { kind: "overLimit", pulse: end, limit };
   // before the solver starts there is no timestep to compare: the note belongs to the FDTD phase
-  if (phase !== "running") return null;
+  if (normalizeDockPhase(phase) !== "running") return null;
   // without a timestep reading nothing is known about the pulse: openEMS prints one only every few
   // seconds, so a short run often has none before it ends, and "0 of 1,876" would be wrong
   const ts = reachedTimestep(progress, stats);
@@ -47,10 +68,13 @@ export function pulseNote(info: RunInfo, progress: ProgressEvent | null | undefi
 /** How far the job is, 0 to 1, for the progress bar and the status bar: the phase it is in, and in the
  * solver the furthest of the energy decay towards the end criterion, the timestep towards the solver's
  * projected end, and the timestep towards the limit. Multi-port runs share the solver's part by port. */
-export function runFraction(job: { status: string; phase?: Phase | null }, progress: ProgressEvent | null | undefined, info: RunInfo = {}): number {
+export function runFraction(job: { status: string; phase?: Phase | string | null }, progress: ProgressEvent | null | undefined, info: RunInfo = {}): number {
   if (job.status === "done") return 1;
-  const phase = job.phase ?? "queued";
+  const phase = normalizeDockPhase(job.phase);
+  // Research FEM jobs have no timestep/energy fraction: hold the bar at the start of the solve share.
+  const emergeCoarse = isEmergeResearchJob(job as { kind?: string; research?: { backend?: string } });
   if (phase !== "running") return START[phase] ?? (pastSolver(phase, job.status) ? 1 : 0);
+  if (emergeCoarse) return START.running;
   const p = progress;
   const ts = p?.timestep ?? 0;
   const target = p?.eta?.target_timestep;

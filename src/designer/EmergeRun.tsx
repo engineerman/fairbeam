@@ -1,18 +1,20 @@
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { CircleAlert } from "lucide-solid";
 import { api } from "../runner/api";
 import { openResearch, researchPath } from "../runner/researchState";
 import { followInDesigner } from "../runner/designRun";
 import { refreshRuns } from "../runner/store";
-import { defaultDesignerSession, draft, file, names, prepareSavedDesign } from "./store";
+import { defaultDesignerSession, draft, errorCount, file, names, prepareSavedDesign } from "./store";
+import RunChecksAlert from "./RunChecksAlert";
 import { tryEvaluate } from "./expr";
 import { t } from "../i18n";
 import NumberField from "../components/NumberField";
 import { hasDocumentResultScope } from "../lib/nativeDocuments";
 import {
   EMERGE_DEFAULT_SETTINGS,
+  FIELD_CUT_FREQS_MAX,
   emergeAdmitResolution,
   emergeSettings,
+  fieldCutFrequenciesHzFromText,
   patchEmergeSettings,
   type EmergeEnclosure,
   type EmergeResolutionPreset,
@@ -20,10 +22,18 @@ import {
 import EmergePortMapPreview from "./EmergePortMapPreviewView";
 import {
   classifyEmergeDraft,
+  defaultMapKind,
+  draftNeedsCoaxialTemAccept,
   draftNeedsFiniteFeedAccept,
   draftNeedsLumpedTerminalAccept,
+  draftNeedsModalPortAccept,
+  draftShowsCoaxPadding,
   draftShowsPlanarEnclosure,
   draftShowsDrivenFeed,
+  mapOptionsFor,
+  previewPorts,
+  acceptIntentFromMapKind,
+  type EmergeMapKind,
 } from "./emergePortMapPreview";
 import { setEmergeMode } from "./activeEngine";
 
@@ -74,12 +84,21 @@ export default function EmergeRun(props: { close: () => void }) {
 
   const showPlanar = () => draftShowsPlanarEnclosure(draft.ports);
   const showDriven = () => draftShowsDrivenFeed(draft.ports);
+  const showCoax = () => draftShowsCoaxPadding(draft.ports);
   const needFinite = () => draftNeedsFiniteFeedAccept(draft.ports);
   const needLumped = () => draftNeedsLumpedTerminalAccept(draft.ports);
+  const needModal = () => draftNeedsModalPortAccept(draft.ports);
+  const needCoax = () => draftNeedsCoaxialTemAccept(draft.ports);
   const previewPath = () => classifyEmergeDraft(draft.ports);
 
-  const [ackFinite, setAckFinite] = createSignal(false);
-  const [ackLumped, setAckLumped] = createSignal(false);
+  const [mapKind, setMapKind] = createSignal<EmergeMapKind | null>(
+    defaultMapKind(draft.ports, classifyEmergeDraft(draft.ports)),
+  );
+  const portPreviewOk = () => previewPorts(
+    draft.ports,
+    previewPath(),
+    acceptIntentFromMapKind(mapKind()),
+  ).ok;
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal("");
   const [diagnostic, setDiagnostic] = createSignal("");
@@ -93,16 +112,25 @@ export default function EmergeRun(props: { close: () => void }) {
     // Keep Sim Settings face hint aligned with the draft port mix.
     const hint = previewPath();
     setEmergeMode(hint === "driven" ? "emerge-driven" : "emerge-planar");
+    // Default map when ports/path change; keep user pick if still admitted.
+    const next = defaultMapKind(draft.ports, hint);
+    const first = Array.isArray(draft.ports) && draft.ports.length ? draft.ports[0] : null;
+    const rawType = first?.type;
+    const type = rawType == null ? "lumped" : String(rawType);
+    const allowed = new Set(mapOptionsFor(type, hint).map((o) => o.kind));
+    setMapKind((cur) => (cur != null && allowed.has(cur) ? cur : next));
   });
 
   const invalid = () => {
     const v = values();
+    // Coax admit caps at 21 points; planar/driven Run UI still allows up to 41.
+    const pointsMax = showCoax() ? 21 : 41;
     const bandBad = BAND_KEYS.some(key => !v[key].trim() || !Number.isFinite(Number(v[key])) || Number(v[key]) <= 0)
       || Number(v.f_min_hz) >= Number(v.f_max_hz)
-      || !Number.isInteger(Number(v.points)) || Number(v.points) < 3 || Number(v.points) > 41;
+      || !Number.isInteger(Number(v.points)) || Number(v.points) < 3 || Number(v.points) > pointsMax;
     if (bandBad) return true;
-    if (needFinite() && !ackFinite()) return true;
-    if (needLumped() && !ackLumped()) return true;
+    // Supported paths default-map on open; only block when a map is still required but missing.
+    if ((needLumped() || needModal() || needFinite() || needCoax()) && mapKind() == null) return true;
     if (showPlanar()) {
       if (!v.air_height_mm.trim() || !Number.isFinite(Number(v.air_height_mm)) || Number(v.air_height_mm) <= 0) return true;
       if (enclosure() === "open") {
@@ -116,11 +144,18 @@ export default function EmergeRun(props: { close: () => void }) {
         if (!v.padding_mm.trim() || !Number.isFinite(Number(v.padding_mm)) || Number(v.padding_mm) <= 0) return true;
       }
     }
+    if (showCoax()) {
+      if (!v.padding_mm.trim() || !Number.isFinite(Number(v.padding_mm)) || Number(v.padding_mm) <= 0) return true;
+    }
+    // Empty field-cut list = auto one frequency; non-empty must parse to ≤4 positive GHz.
+    if (fieldCutFrequenciesHzFromText(emergeSettings().field_cut_frequencies_ghz) === null) return true;
+    if (!portPreviewOk()) return true;
+    if (errorCount() > 0) return true;
     return false;
   };
 
   const submit = async (e: Event) => {
-    e.preventDefault(); if (invalid() || busy() || !file()) return;
+    e.preventDefault(); if (invalid() || busy() || !file() || errorCount() > 0) return;
     setBusy(true); setError(""); setDiagnostic("");
     const request = defaultDesignerSession.asyncState.ticket();
     const initialFile = file()!;
@@ -142,27 +177,37 @@ export default function EmergeRun(props: { close: () => void }) {
       const v = values();
       const settings: Record<string, unknown> = {
         analysis: "emerge_nport",
-        approximate_metals: approxMetals(),
         resolution: emergeAdmitResolution(),
-        refine_conductor_edges: emergeSettings().refine_conductor_edges,
         f_min_hz: Number(v.f_min_hz) * 1e9,
         f_max_hz: Number(v.f_max_hz) * 1e9,
         points: Number(v.points),
       };
-      if (needFinite()) settings.accept_finite_feed = true;
-      if (needLumped()) settings.accept_lumped_terminals = true;
-      // Union of planar + driven keys so the server can classify either way.
-      if (showPlanar()) {
-        settings.enclosure = enclosure();
-        settings.air_height_mm = Number(v.air_height_mm);
-      }
-      if (showDriven()) {
-        settings.feed_width_mm = Number(v.feed_width_mm);
-        // Always send padding for driven fallback; emerge_solver strips it for shielded planar.
+      if (showCoax()) {
+        // Coax child admit allow-list is narrow; only send Stage B keys.
+        settings.accept_coaxial_tem = true;
         settings.padding_mm = Number(v.padding_mm);
-      } else if (enclosure() === "open") {
-        settings.padding_mm = Number(v.padding_mm);
+      } else {
+        settings.approximate_metals = approxMetals();
+        settings.refine_conductor_edges = emergeSettings().refine_conductor_edges;
+        if (needFinite()) settings.accept_finite_feed = true;
+        // Exclusive map: WavePort XOR LumpedPort (server: modal wins if both were set).
+        if ((needLumped() || needModal()) && mapKind() === "wave") settings.accept_modal_ports = true;
+        else if ((needLumped() || needModal()) && mapKind() === "lumped") settings.accept_lumped_terminals = true;
+        // Union of planar + driven keys so the server can classify either way.
+        if (showPlanar()) {
+          settings.enclosure = enclosure();
+          settings.air_height_mm = Number(v.air_height_mm);
+        }
+        if (showDriven()) {
+          settings.feed_width_mm = Number(v.feed_width_mm);
+          // Always send padding for driven fallback; emerge_solver strips it for shielded planar.
+          settings.padding_mm = Number(v.padding_mm);
+        } else if (enclosure() === "open") {
+          settings.padding_mm = Number(v.padding_mm);
+        }
       }
+      const cutHz = fieldCutFrequenciesHzFromText(emergeSettings().field_cut_frequencies_ghz);
+      if (cutHz) settings.field_cut_frequencies_hz = cutHz;
       const saved = target.file;
       const source = health.research_source && saved.backup_scope
         ? { model_id: saved.id, workspace_hash: saved.hash, backup_scope: saved.backup_scope } : undefined;
@@ -177,6 +222,7 @@ export default function EmergeRun(props: { close: () => void }) {
   };
 
   return <form class="rd-body" onSubmit={submit} data-testid="emerge-run-form">
+    <RunChecksAlert onNavigate={props.close} />
     <p class="note">{t("emergeExp.scope")}</p>
     <p class="note">{t("emergeExp.limitations")}</p>
     <div class="cluster"><p class="note">{t("emergeExp.setupHint")}</p>
@@ -204,7 +250,7 @@ export default function EmergeRun(props: { close: () => void }) {
             </select>
           </label>
         </Show>
-        <Show when={enclosure() === "open" || showDriven()}>
+        <Show when={enclosure() === "open" || showDriven() || showCoax()}>
           <label class="dz-field">
             <span class="dz-label">{t("emergeExp.padding_mm")}</span>
             <NumberField class="rp-input dz-input mono" data-testid="emerge-run-padding" required value={values().padding_mm}
@@ -228,33 +274,33 @@ export default function EmergeRun(props: { close: () => void }) {
             <option value="fine">{t("emergeExp.fine")}</option>
           </select>
         </label>
+        <label class="dz-field" style={{ "grid-column": "1 / -1" }}>
+          <span class="dz-label">{t("emergeExp.fieldCutFrequencies")}{" "}
+            <span class="dz-unit">{t("emergeExp.fieldCutFrequencies.hint", { max: FIELD_CUT_FREQS_MAX })}</span></span>
+          <input class="rp-input dz-input mono" type="text" spellcheck={false} autocomplete="off"
+            data-testid="emerge-run-field-cut-freqs"
+            aria-label={t("emergeExp.fieldCutFrequencies")}
+            placeholder={t("emergeExp.fieldCutFrequencies.placeholder")}
+            value={emergeSettings().field_cut_frequencies_ghz}
+            onInput={e => patchEmergeSettings({ field_cut_frequencies_ghz: e.currentTarget.value })} />
+        </label>
       </div>
+      <p class="note">{t("emergeExp.fieldCutFrequencies.note")}</p>
       <Show when={showPlanar()}>
         <p class="note">{t(enclosure() === "shielded" ? "emergeExp.enclosureShieldedHint" : "emergeExp.enclosureOpenHint")}</p>
       </Show>
       <Show when={showDriven() && !showPlanar()}>
         <p class="note">{t("emergeExp.boundary")}</p>
       </Show>
-      <label class="gs-check"><input type="checkbox" checked={approxMetals()} onChange={e => setApproxMetals(e.currentTarget.checked)} />{t("emergeExp.approximateMetals")}</label>
-      <EmergePortMapPreview path={previewPath()} />
-      <Show when={needLumped()}>
-        <p class="status-block status-warn" role="status" data-testid="emerge-run-port-note">
-          <CircleAlert size={14} aria-hidden="true" />
-          {t("emergeExp.acceptLumped")}
-        </p>
-        <label class="gs-check"><input type="checkbox" data-testid="emerge-run-accept-lumped" checked={ackLumped()}
-          onChange={e => setAckLumped(e.currentTarget.checked)} />{t("emergeExp.acceptLumpedAck")}</label>
+      <Show when={showCoax()}>
+        <p class="note">{t("emergeExp.coaxBoundary")}</p>
       </Show>
-      <Show when={needFinite()}>
-        <p class="status-block status-warn" role="status" data-testid="emerge-run-port-note">
-          <CircleAlert size={14} aria-hidden="true" />
-          {t("emergeExp.acceptFinite")}
-        </p>
-        <label class="gs-check"><input type="checkbox" data-testid="emerge-run-accept-finite" checked={ackFinite()}
-          onChange={e => setAckFinite(e.currentTarget.checked)} />{t("emergeExp.acceptFiniteAck")}</label>
+      <Show when={!showCoax()}>
+        <label class="gs-check"><input type="checkbox" checked={approxMetals()} onChange={e => setApproxMetals(e.currentTarget.checked)} />{t("emergeExp.approximateMetals")}</label>
       </Show>
+      <EmergePortMapPreview path={previewPath()} mapKind={mapKind()} onMapKind={setMapKind} />
     </fieldset>
-    <Show when={error()}><p ref={alert} class="status-block status-critical" role="alert">{error()}</p></Show>
+    <Show when={error()}><div ref={alert} class="status-block status-critical" role="alert"><p>{error()}</p></div></Show>
     <Show when={diagnostic()}><details><summary>{t("common.details")}</summary><p class="note">{diagnostic()}</p></details></Show>
     <div class="dialog-actions"><button class="btn btn-primary" type="submit" disabled={busy() || invalid()}>{busy() ? t("run.starting") : t("run.saveAndRun")}</button></div>
   </form>;

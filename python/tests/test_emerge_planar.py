@@ -36,6 +36,14 @@ def discrete_settings(**over):
     return s
 
 
+def modal_settings(**over):
+    """Planar microstrip WavePort path: accept_modal_ports without lumped terminals."""
+    s = settings(accept_modal_ports=True)
+    s.pop("accept_lumped_terminals", None)
+    s.update(over)
+    return s
+
+
 def with_discrete_ports(d):
     """Board-edge strip-to-ground plates matching the hairpin feed faces (width from Design)."""
     d["ports"] = [
@@ -120,6 +128,63 @@ def open_settings(**over):
     base = dict(enclosure="open", padding_mm=10.)
     base.update(over)
     return settings(**base)
+
+
+PORTMAP_CPW = Path(__file__).resolve().parents[1] / "models" / "portmap_cpw_line.design.json"
+
+
+def simple_cpw_line():
+    """Classic CPW twin of portmap_cpw_line (numeric mm; no bottom ground)."""
+    # Defaults: l=30, w=1.5, g=0.5, h=1.6, wb=20 → aperture y∈[-1.75,1.75] at x=±15.
+    return {
+        "schema": "fairbeam.design/1",
+        "model": {"id": "emerge-planar-cpw", "name": "Synthetic classic CPW"},
+        "params": [{"key": "sub_h", "default": 1.6, "label": "h", "unit": "mm"}],
+        "simulation": {
+            "f_min": 1.2, "f_max": 3.6,
+            "boundaries": "MUR",
+            "end_criteria_db": -40, "max_timesteps": 1000,
+        },
+        "materials": [
+            {"name": "fr4", "kind": "dielectric", "eps_r": 4.3, "tan_d": 0.0},
+            {"name": "copper", "kind": "metal", "conductivity": 58000000, "thickness": 0.035},
+        ],
+        "parts": [
+            {"name": "substrate", "label": "Substrate", "material": "fr4",
+             "primitives": [{"kind": "box", "priority": 0,
+                             "start": [-15, -10, 0], "stop": [15, 10, "sub_h"]}]},
+            {"name": "center", "label": "Center", "material": "copper",
+             "primitives": [{"kind": "box", "priority": 10,
+                             "start": [-15, -0.75, "sub_h"], "stop": [15, 0.75, "sub_h"]}]},
+            {"name": "gnd_left", "label": "Ground left", "material": "copper",
+             "primitives": [{"kind": "box", "priority": 10,
+                             "start": [-15, -10, "sub_h"], "stop": [15, -1.25, "sub_h"]}]},
+            {"name": "gnd_right", "label": "Ground right", "material": "copper",
+             "primitives": [{"kind": "box", "priority": 10,
+                             "start": [-15, 1.25, "sub_h"], "stop": [15, 10, "sub_h"]}]},
+        ],
+        "ports": [
+            {"number": 1, "type": "cpw", "conductor": "copper", "gap": 0.5,
+             "direction": "x", "excitation_direction": "y",
+             "feed_shift": 0, "measurement_shift": 1.0, "reference_ohm": 50,
+             "termination": "open", "excite": True,
+             "start": [-15, -0.75, "sub_h"], "stop": [-5, 0.75, "sub_h"]},
+            {"number": 2, "type": "cpw", "conductor": "copper", "gap": 0.5,
+             "direction": "x", "excitation_direction": "y",
+             "feed_shift": 0, "measurement_shift": 1.0, "reference_ohm": 50,
+             "termination": "open", "excite": False,
+             "start": [15, -0.75, "sub_h"], "stop": [5, 0.75, "sub_h"]},
+        ],
+        "resistors": [],
+        "mesh": {"mode": "design", "overrides": {}, "thin_metal": "sheet"},
+        "far_field": {"enabled": False},
+    }
+
+
+def load_portmap_cpw():
+    if not PORTMAP_CPW.is_file():
+        return None
+    return json.loads(PORTMAP_CPW.read_text(encoding="utf-8"))
 
 
 def part(d, name):
@@ -223,6 +288,35 @@ class AdmitTests(unittest.TestCase):
         self.assertEqual(len(case["terminals"]), 1)
         self.assertEqual(case["terminals"][0]["number"], 1)
         self.assertEqual(case["terminals"][0]["design_port_type"], "microstrip")
+
+    def test_modal_accept_admits_waveport(self):
+        case = admit(hairpin(), modal_settings())
+        self.assertEqual(case["kind"], "planar")
+        self.assertTrue(any("WavePort" in t for t in case["limitations"]))
+        self.assertTrue(any("exterior boundary" in t for t in case["limitations"]))
+        self.assertFalse(any("lumped strip-to-ground" in t for t in case["limitations"]))
+        for term in case["terminals"]:
+            self.assertEqual(term["mapped_bc"], "WavePort")
+            self.assertEqual(term["accept_used"], ["accept_modal_ports"])
+            self.assertEqual(
+                term["approximations"],
+                ["microstrip → WavePort at board-edge face; feed_shift/measurement_shift unused"])
+
+    def test_modal_and_lumped_modal_wins(self):
+        case = admit(hairpin(), settings(accept_modal_ports=True, accept_lumped_terminals=True))
+        for term in case["terminals"]:
+            self.assertEqual(term["mapped_bc"], "WavePort")
+            self.assertEqual(term["accept_used"], ["accept_modal_ports"])
+        self.assertTrue(any("WavePort" in t for t in case["limitations"]))
+
+    def test_neither_microstrip_accept_fails(self):
+        s = settings()
+        s.pop("accept_lumped_terminals")
+        with self.assertRaises(ValueError) as caught:
+            admit(hairpin(), s)
+        msg = str(caught.exception)
+        self.assertIn("accept_modal_ports", msg)
+        self.assertIn("accept_lumped_terminals", msg)
 
     def test_three_microstrip_ports_admit_on_synthetic_board(self):
         case = admit(simple_n_port_board(3), settings())
@@ -449,12 +543,14 @@ class AdmitTests(unittest.TestCase):
                 s.pop(key)
                 with self.assertRaises(ValueError):
                     admit(hairpin(), s)
-        with self.subTest(missing="accept_lumped_terminals"):
+        with self.subTest(missing="microstrip_accepts"):
             s = settings()
             s.pop("accept_lumped_terminals")
             with self.assertRaises(ValueError) as caught:
                 admit(hairpin(), s)
-            self.assertIn("accept_lumped_terminals", str(caught.exception))
+            msg = str(caught.exception)
+            self.assertIn("accept_lumped_terminals", msg)
+            self.assertIn("accept_modal_ports", msg)
 
     def test_too_large_domain_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "Domain too large"):
@@ -477,6 +573,130 @@ class AdmitTests(unittest.TestCase):
         self.assertFalse(found & {"emerge", "gmsh", "emsutil"}, found)
         self.assertNotIn("__import__", source)
         self.assertNotIn("importlib", source)
+
+    def test_classic_cpw_modal_admits_waveport_aperture(self):
+        case = admit(simple_cpw_line(), modal_settings(
+            f_min_hz=1.2e9, f_max_hz=3.6e9, air_height_mm=6.4))
+        self.assertEqual(case["kind"], "planar")
+        self.assertEqual(case["ground_mode"], "coplanar")
+        self.assertTrue(any("CPW" in t and "WavePort" in t for t in case["limitations"]))
+        self.assertTrue(any("coplanar top grounds" in t for t in case["limitations"]))
+        self.assertFalse(any("strip-to-ground" in t for t in case["limitations"]))
+        self.assertEqual(len(case["traces"]), 3)
+        self.assertEqual(len(case["terminals"]), 2)
+        for term in case["terminals"]:
+            self.assertEqual(term["design_port_type"], "cpw")
+            self.assertEqual(term["mapped_bc"], "WavePort")
+            self.assertEqual(term["accept_used"], ["accept_modal_ports"])
+            self.assertEqual(
+                term["approximations"],
+                ["cpw → WavePort at board-edge CPW aperture; feed_shift/measurement_shift unused"])
+            # strip ± 2*gap = 1.5 + 2.0 = 3.5 mm → 0.0035 m
+            self.assertAlmostEqual(term["width"], 0.0035, places=12)
+            # O17 1b: substrate 1.6 mm + 1.0*air_height 6.4 mm → 8.0 mm
+            self.assertAlmostEqual(term["height"], 0.008, places=12)
+        t1 = next(t for t in case["terminals"] if t["number"] == 1)
+        for got, want in zip(t1["lo"], (-0.015, -0.00175, 0.0)):
+            self.assertAlmostEqual(got, want, places=12)
+        for got, want in zip(t1["hi"], (-0.015, 0.00175, 0.008)):
+            self.assertAlmostEqual(got, want, places=12)
+        self.assertLessEqual(t1["hi"][2], case["air"]["hi"][2])
+        self.assertAlmostEqual(t1["hi"][2], case["air"]["hi"][2], places=12)
+        # Microstrip terminal height stays substrate-only (not CPW air extension).
+        ms = admit(hairpin(), modal_settings())
+        for term in ms["terminals"]:
+            self.assertAlmostEqual(term["height"], 0.0016, places=12)
+            self.assertAlmostEqual(term["hi"][2], 0.0016, places=12)
+
+    def test_classic_cpw_lumped_accept(self):
+        case = admit(simple_cpw_line(), settings(
+            f_min_hz=1.2e9, f_max_hz=3.6e9, air_height_mm=6.4))
+        self.assertEqual(case["ground_mode"], "coplanar")
+        self.assertTrue(any("lumped gap" in t for t in case["limitations"]))
+        for term in case["terminals"]:
+            self.assertEqual(term["mapped_bc"], "LumpedPort")
+            self.assertEqual(term["accept_used"], ["accept_lumped_terminals"])
+            self.assertEqual(
+                term["approximations"],
+                ["cpw → lumped gap terminal at board-edge face; feed_shift/measurement_shift unused"])
+
+    def test_classic_cpw_modal_wins_over_lumped(self):
+        case = admit(
+            simple_cpw_line(),
+            settings(accept_modal_ports=True, accept_lumped_terminals=True,
+                     f_min_hz=1.2e9, f_max_hz=3.6e9, air_height_mm=6.4))
+        for term in case["terminals"]:
+            self.assertEqual(term["mapped_bc"], "WavePort")
+            self.assertEqual(term["accept_used"], ["accept_modal_ports"])
+
+    def test_classic_cpw_missing_accept(self):
+        s = settings(f_min_hz=1.2e9, f_max_hz=3.6e9, air_height_mm=6.4)
+        s.pop("accept_lumped_terminals")
+        with self.assertRaises(ValueError) as caught:
+            admit(simple_cpw_line(), s)
+        msg = str(caught.exception)
+        self.assertIn("accept_modal_ports", msg)
+        self.assertIn("accept_lumped_terminals", msg)
+        self.assertIn("CPW", msg)
+
+    def test_classic_cpw_rejects(self):
+        def missing_grounds(d):
+            d["parts"] = [p for p in d["parts"] if p["name"] != "gnd_right"]
+
+        def bottom_ground(d):
+            d["materials"].append({"name": "gnd", "kind": "metal"})
+            d["parts"].append({
+                "name": "gnd", "label": "Bottom ground", "material": "gnd",
+                "primitives": [{"kind": "box", "priority": 0,
+                                "start": [-15, -10, 0], "stop": [15, 10, 0]}],
+            })
+
+        def pec_zm(d):
+            d["simulation"]["boundaries"] = ["MUR", "MUR", "MUR", "MUR", "PEC", "MUR"]
+
+        def mixed_types(d):
+            d["ports"][1]["type"] = "microstrip"
+            d["ports"][1]["excitation_direction"] = "z"
+            d["ports"][1].pop("gap", None)
+
+        def bad_excitation(d):
+            d["ports"][0]["excitation_direction"] = "z"
+
+        def zero_gap(d):
+            d["ports"][0]["gap"] = 0
+
+        cases = [
+            (missing_grounds, "coplanar ground"),
+            (bottom_ground, "grounded cpw"),
+            (pec_zm, "grounded cpw"),
+            (mixed_types, "mixed"),
+            (bad_excitation, "transverse"),
+            (zero_gap, "gap"),
+        ]
+        for mutate, text in cases:
+            with self.subTest(mutate.__name__):
+                d = simple_cpw_line()
+                mutate(d)
+                with self.assertRaises(ValueError) as caught:
+                    admit(d, modal_settings(
+                        f_min_hz=1.2e9, f_max_hz=3.6e9, air_height_mm=6.4))
+                self.assertIn(text.lower(), str(caught.exception).lower(), str(caught.exception))
+
+    def test_portmap_cpw_line_fixture_admits_when_present(self):
+        d = load_portmap_cpw()
+        if d is None:
+            self.skipTest("python/models/portmap_cpw_line.design.json not present")
+        case = admit(d, modal_settings(
+            f_min_hz=1.2e9, f_max_hz=3.6e9, air_height_mm=6.4))
+        self.assertEqual(case["ground_mode"], "coplanar")
+        self.assertEqual([t["mapped_bc"] for t in case["terminals"]], ["WavePort", "WavePort"])
+        t1 = next(t for t in case["terminals"] if t["number"] == 1)
+        self.assertAlmostEqual(t1["width"], 0.0035, places=12)
+        self.assertAlmostEqual(t1["lo"][0], -0.015, places=12)
+
+    def test_microstrip_sets_bottom_ground_mode(self):
+        case = admit(hairpin(), settings())
+        self.assertEqual(case["ground_mode"], "bottom")
 
 
 if __name__ == "__main__":

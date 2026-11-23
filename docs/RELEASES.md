@@ -190,6 +190,28 @@ editing them, or the prefill stops working.
 One entry per release, newest first. The installers are on the
 [release page](https://github.com/ismailakdag/fairbeam-releases/releases) of each version.
 
+### 0.9.1, 2026-11-23
+
+- Add the Filter designer for planar hairpin microstrip bandpass synthesis: Start
+  **filter-designer** tile, Parameters UI with order/stack-up and a live ideal S preview,
+  and a Closed form / EDC commit step. Ideal S is a theoretical J-inverter preview, not an
+  openEMS result; Finish opens a Design for later EM and Optimizer work.
+- Document the wizard in [Filter designer](FILTER-DESIGNER.md) and
+  [Filtre tasarımcısı](tr/FILTER-DESIGNER.md); refresh README New features figures and links.
+- Add the Turkish [EMerge experiment](tr/EMERGE-EXPERIMENT.md) translation and update Turkish
+  [experimental solvers](tr/EXPERIMENTAL-SOLVERS.md) for the unified EMerge path.
+- engineerman-fork source tag; no separate desktop installer published for this fork yet.
+
+### 0.9.0, 2026-11-06
+
+- Add the opt-in experimental EMerge FEM backend beside openEMS (managed Install EMerge,
+  session engine picker, unified N-port **EMerge FEM · Experimental** Run for driven or planar
+  Designs, mesh/field overlays). openEMS stays the default; results remain `results_exported`.
+- Document the path in [experimental solvers](EXPERIMENTAL-SOLVERS.md) and
+  [EMerge experiment](EMERGE-EXPERIMENT.md); disable the upstream Fairbeam updater on this fork.
+- engineerman-fork source tag (`85c63180`); no separate desktop installer published for this
+  fork yet.
+
 ### 0.8.5, 2026-10-29
 
 - Add qualified antenna/network analysis, sweep trends, band objectives, MIMO and array

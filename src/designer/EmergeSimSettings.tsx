@@ -1,7 +1,7 @@
 // EMerge Simulation Settings: Frequency, Boundaries (enclosure), and curated Mesh knobs.
 // Edits the session emergeSettings object used by Run — never openEMS draft.mesh cells/λ.
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { Box, Grid3x3, Waves, X } from "lucide-solid";
+import { Box, CircleAlert, Grid3x3, Waves, X } from "lucide-solid";
 import { FOCUSABLE, useModal } from "../lib/dialog";
 import { tabKeyTarget } from "../lib/tabKeys";
 import { setSimSettingsOpen, setSimSettingsSection, simSettingsSection } from "./simSettingsState";
@@ -16,6 +16,13 @@ import {
   type EmergeSessionSettings,
 } from "./emergeSettings";
 import { emergeMode, resolveRunSolver, type EmergeMode } from "./activeEngine";
+import {
+  acceptIntentFromMapKind,
+  classifyEmergeDraft,
+  defaultMapKind,
+  previewPorts,
+  type EmergePortMapPath,
+} from "./emergePortMapPreview";
 import { setSessionFemMesh } from "./emergeFemMesh";
 import { setMeshView } from "./MeshView";
 import { fmt, t } from "../i18n";
@@ -23,7 +30,7 @@ import NumberField from "../components/NumberField";
 import { api, isTerminal } from "../runner/api";
 import { researchPath } from "../runner/researchState";
 import { refreshRuns } from "../runner/store";
-import { defaultDesignerSession, file, prepareSavedDesign } from "./store";
+import { defaultDesignerSession, draft as designDraft, file, prepareSavedDesign } from "./store";
 import { hasDocumentResultScope } from "../lib/nativeDocuments";
 
 function meshAdmitErrorMessage(err: Error): string {
@@ -79,12 +86,32 @@ function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
-function meshSettingsFromDraft(draft: EmergeSessionSettings, mode: EmergeMode): Record<string, unknown> {
+/** Build mesh-only research settings. Prefer Design port classify over ribbon mode
+ * so all-coaxial drafts send Stage B keys (accept_coaxial_tem) instead of planar accepts. */
+function meshSettingsFromDraft(
+  draft: EmergeSessionSettings,
+  mode: EmergeMode,
+  path: EmergePortMapPath = mode === "emerge-driven" ? "driven" : "planar",
+): Record<string, unknown> {
   const resolution = emergeAdmitResolution(draft);
   const fMin = Number(draft.f_min_ghz) * 1e9;
   const fMax = Number(draft.f_max_ghz) * 1e9;
   let points = Math.round(Number(draft.points));
-  if (mode === "emerge-driven") {
+  if (path === "coax") {
+    // Same pattern as planar mesh auto-accept: Generate mesh is an explicit action.
+    points = Math.min(21, Math.max(3, points));
+    return {
+      analysis: "emerge_nport",
+      accept_coaxial_tem: true,
+      padding_mm: Number(draft.padding_mm),
+      resolution,
+      f_min_hz: fMin,
+      f_max_hz: fMax,
+      points,
+      mesh_only: true,
+    };
+  }
+  if (mode === "emerge-driven" || path === "driven") {
     points = Math.min(21, Math.max(3, points));
     return {
       analysis: "emerge_nport",
@@ -199,8 +226,16 @@ export default function EmergeSimSettings() {
   const enclosureFaces = () => emergeEnclosureFaces(draft().enclosure, emergeMode());
   const admitResolution = () => emergeAdmitResolution(draft());
 
+  const emergePortPath = () => classifyEmergeDraft(designDraft.ports);
+  const emergePortPreviewOk = () => previewPorts(
+    designDraft.ports,
+    emergePortPath(),
+    acceptIntentFromMapKind(defaultMapKind(designDraft.ports, emergePortPath())),
+  ).ok;
+
   const meshBlockedTitle = () => {
     if (!file()) return t("emergeSim.generateMeshNeedFile");
+    if (!emergePortPreviewOk()) return t("emergePortMap.reject");
     return "";
   };
   const meshDisabled = () => meshBusy() || !!meshBlockedTitle();
@@ -234,9 +269,13 @@ export default function EmergeSimSettings() {
       const target = await prepareSavedDesign(() => alive);
       if (!alive) return;
       if (!target?.isCurrent()) throw Error(t("run.err.notSaved"));
-      const geomMode = emergeMode() ?? "emerge-planar";
-      const settings = meshSettingsFromDraft(draft(), geomMode);
       const saved = target.file;
+      const geomMode = emergeMode() ?? "emerge-planar";
+      const settings = meshSettingsFromDraft(
+        draft(),
+        geomMode,
+        classifyEmergeDraft(saved.design.ports),
+      );
       const source = health.research_source && saved.backup_scope
         ? { model_id: saved.id, workspace_hash: saved.hash, backup_scope: saved.backup_scope } : undefined;
       if (hasDocumentResultScope(saved) && !source) {
@@ -325,6 +364,12 @@ export default function EmergeSimSettings() {
           <div class="ss-pane" ref={pane} onScroll={onScroll}>
             <p class="note">{t("emergeSim.experimental")}</p>
             <p class="note">{modeHint()}</p>
+            <Show when={!emergePortPreviewOk()}>
+              <div class="status-block status-critical" role="alert" data-testid="emerge-sim-port-reject">
+                <CircleAlert size={14} aria-hidden="true" />
+                <p>{t("emergePortMap.reject")}</p>
+              </div>
+            </Show>
 
             <section id="ess-freq" class="stack" aria-labelledby="ess-freq-title">
               <h3 id="ess-freq-title">{t("sim.section.freq")}</h3>
@@ -459,7 +504,12 @@ export default function EmergeSimSettings() {
                   {meshBusy() ? t("emergeSim.generateMeshBusy") : t("emergeSim.generateMesh")}
                 </button>
               </div>
-              <Show when={meshError()}><p class="note" role="alert" data-testid="emerge-sim-mesh-error">{meshError()}</p></Show>
+              <Show when={meshError()}>
+                <div class="status-block status-critical" role="alert" data-testid="emerge-sim-mesh-error">
+                  <CircleAlert size={14} aria-hidden="true" />
+                  <p>{meshError()}</p>
+                </div>
+              </Show>
               <Show when={meshCounts()}>{c => (
                 <p class="note" role="status" data-testid="emerge-sim-mesh-counts">
                   {t("emergeSim.meshCounts", {

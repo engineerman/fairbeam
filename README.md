@@ -15,6 +15,25 @@ EMerge path — those builds replace the engineerman fork.
 
 ## New features
 
+### Filter designer (hairpin bandpass)
+
+Build a planar **hairpin microstrip bandpass** from a center frequency, bandwidth, order, and
+stack-up, then open it as a new Design. From Start, use the **filter-designer** tile (or Filter
+designer on the ribbon).
+
+![Start menu filter-designer tile](landing/media/filter-designer-start-tile.png)
+
+The wizard walks topology → parameters → preview. On Parameters, electrical and stack-up inputs
+drive a live theoretical S-parameter plot (ideal J-inverter network, not an openEMS solve) and a
+microstrip stack sketch. Preview then commits **Closed Form** dimensions or an optional **EM design
+curves** (EDC) study. Finish hands the layout to the designer; further tuning uses the Optimizer —
+the wizard does not run a full-filter EM solve for the final measured S.
+
+![Filter designer Parameters step with live theoretical S and stack-up](landing/media/filter-designer-parameters.png)
+
+Details: [Filter designer](docs/FILTER-DESIGNER.md) ·
+[Filtre tasarımcısı](docs/tr/FILTER-DESIGNER.md).
+
 ### Experimental EMerge FEM
 
 The engineerman fork adds an **opt-in** [EMerge](https://github.com/FennisRobert/EMerge)
@@ -22,10 +41,15 @@ frequency-domain FEM backend beside the default openEMS FDTD path. openEMS stays
 solver; EMerge is experimental research only (`results_exported`, never a validated production
 certificate).
 
+Select **EMerge** from the Simulation ribbon engine control (the openEMS / EMerge session picker
+next to Run). That retargets Run chrome, Frequency / Boundaries / Mesh settings, and which
+Simulation actions stay enabled. Install the managed solver first if the picker is missing it.
+
+![Simulation ribbon: EMerge Run and openEMS / EMerge session engine picker](landing/media/emerge-session-engine.png)
+
 - **Install EMerge** from Simulation → Experimental solvers (Windows managed venv, pinned
   `emerge==3.0.0b12`; optional path / `FAIRBEAM_EMERGE_PYTHON` elsewhere).
-- **Session engine picker:** choose **EMerge (experimental)** to retarget Run chrome, Frequency /
-  Boundaries / Mesh settings and which Simulation actions stay enabled.
+- **Session engine picker:** choose **EMerge (experimental)** as above.
 - **One Run entry — EMerge FEM · Experimental:** driven/lumped or planar microstrip Designs with
   **1–8 ports of one type**, full experimental N×N S-matrix (`fairbeam.emerge-result/2`).
 - **Mesh without solve**, FEM surface overlay in Mesh view, mid-plane E-field cuts, and a Design
@@ -33,7 +57,8 @@ certificate).
 - Fixed WR-90 waveguide fixture remains available for analytic checks.
 
 Details: [experimental solvers](docs/EXPERIMENTAL-SOLVERS.md) ·
-[EMerge experiment](docs/EMERGE-EXPERIMENT.md).
+[EMerge experiment](docs/EMERGE-EXPERIMENT.md) ·
+[EMerge deneyi](docs/tr/EMERGE-EXPERIMENT.md).
 
 ![Experimental EMerge tetrahedral mesh of a four-port planar Design in Fairbeam, with ports labelled and a mid-plane field cut](landing/media/emerge-tetrahedral-mesh.png)
 

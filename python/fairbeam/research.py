@@ -263,7 +263,8 @@ def validate_result(value, backend):
                 raise ValueError("emerge N-port native_phasor_convention must be exp(+i omega t)")
             kind = value.get("geometry_kind")
             if kind not in fairbeam_emerge.GEOMETRY_KINDS:
-                raise ValueError("emerge N-port geometry_kind must be driven_lumped or planar_microstrip")
+                raise ValueError(
+                    "emerge N-port geometry_kind must be driven_lumped, planar_microstrip, or coaxial_tem")
             s_block = value.get("s")
             if not isinstance(s_block, dict):
                 raise ValueError("emerge N-port s must be an object")
@@ -383,7 +384,15 @@ def execute(snapshot, outdir, checksum):
         if digest(name) != expected:
             raise ValueError("selected research executable changed before launch")
     backend = backend_name(spec["backend"])
-    print('fairbeam-research: {"type":"phase","phase":"simulating"}', flush=True)
+
+    def emit_phase(phase: str) -> None:
+        print(f'fairbeam-research: {json.dumps({"type": "phase", "phase": phase})}', flush=True)
+
+    # EMerge Design dock: setup → simulating (FEM; mesh+solve are one worker today) → exporting.
+    # Keep simulating/results_exported so ResearchDialog labels stay valid.
+    if backend == "emerge":
+        emit_phase("setup")
+    emit_phase("simulating")
     if backend == "elmer":
         import fairbeam_elmer
         if spec.get("design") is not None:
@@ -397,8 +406,12 @@ def execute(snapshot, outdir, checksum):
     elif backend == "emerge":
         import fairbeam_emerge
         if spec.get("design") is not None:
-            if spec["normalized"].get("kind") == "planar":
+            kind = spec["normalized"].get("kind")
+            if kind == "planar":
                 result = fairbeam_emerge.run_planar(
+                    outdir, spec["normalized"], root=spec["path"], experimental=True)
+            elif kind == "coax":
+                result = fairbeam_emerge.run_coax(
                     outdir, spec["normalized"], root=spec["path"], experimental=True)
             else:
                 result = fairbeam_emerge.run_design(
@@ -416,6 +429,8 @@ def execute(snapshot, outdir, checksum):
         result = periodic_cell.run(spec["normalized"], outdir, executable=spec["path"])
     value = validate_result({**result, "backend": backend, "research_schema": "fairbeam-research-result-1"}, backend)
     value["input_sha256"] = hashlib.sha256(raw).hexdigest()
+    if backend == "emerge":
+        emit_phase("exporting")
     if value.get('schema') == 'fairbeam.elmer-driven-result/1':
         from .elmer_bundle import result_bundle
         bundle_bytes = encode(result_bundle(spec['design'], value))
@@ -430,7 +445,7 @@ def execute(snapshot, outdir, checksum):
     tmp = target.with_suffix(".json.tmp")
     tmp.write_bytes(encode(value))
     os.replace(tmp, target)
-    print('fairbeam-research: {"type":"phase","phase":"results_exported"}', flush=True)
+    emit_phase("results_exported")
     if not completed_result(value):
         raise ValueError("research result did not pass its backend validation gates")
 

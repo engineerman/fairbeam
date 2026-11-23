@@ -24,7 +24,33 @@ def patch_bundle():
     return json.loads((PROJECTS / "patch-antenna.json").read_text("utf-8"))
 
 
+def emerge_timing_only_bundle(*, mark_engine=True, mark_experimental=True):
+    """EMerge export shape: wall-clock on ``run``, no FDTD ``converged`` / port_runs (O16)."""
+    b = {
+        "solver": {"engine": "EMerge" if mark_engine else "openEMS"},
+        "run": {"solver_time_s": 8.1, "wall_time_s": 8.1},
+        "results": {
+            "frequency": [1e9, 2e9],
+            # |S11| = -20 dB: coupled enough that FDTD "suspicious" must not steal the O16 case
+            "ports": {"1": {"s11_re": [0.1, 0.1], "s11_im": [0.0, 0.0]}},
+            "farfield": [],
+        },
+    }
+    if mark_experimental:
+        b["experimental"] = {"solver": "EMerge", "precision_converged": False}
+    return b
+
+
 class RunQualityRules(unittest.TestCase):
+    def test_emerge_timing_only_run_has_no_fdtd_not_converged(self):
+        # O16: missing run.converged must not mean timestep-limit for experimental EMerge.
+        self.assertIsNone(run_quality(emerge_timing_only_bundle()))
+        self.assertIsNone(run_quality(emerge_timing_only_bundle(mark_engine=False, mark_experimental=True)))
+        self.assertIsNone(run_quality(emerge_timing_only_bundle(mark_engine=True, mark_experimental=False)))
+        # openEMS (no EMerge marks) with the same timing-only run stays not-converged
+        openems = emerge_timing_only_bundle(mark_engine=False, mark_experimental=False)
+        self.assertEqual(run_quality(openems), "not-converged")
+
     def test_the_same_cases_as_check_run_quality(self):
         base = patch_bundle()
         self.assertEqual(run_quality(base), "converged")

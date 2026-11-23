@@ -204,6 +204,16 @@ fx.cases.forEach((c, i) => {
   check(own.length === 1 && own[0].fix.label === "Give tan δ at f0", "merge", "a live fix wins over the server's");
 }
 
+{
+  const manualMeshI = fx.cases.findIndex((c) => c.name === "manual mesh expression lines");
+  const design = structuredClone(py.cases[manualMeshI].design);
+  design.ports = [...(design.ports ?? []), { type: "lumped", number: 1, direction: "z", start: [0.1, 0, 0], stop: [0.1, 0, 1], R: 50 }];
+  check(designChecks(design).some((c) => c.code === "expr" && /manual .* mesh line/.test(c.message)),
+    "emerge port-grid gate", "off-grid lumped port on manual mesh is an expr error by default");
+  check(!designChecks(design, { skipOpenEmsManualPortGrid: true }).some((c) => /manual .* mesh line/.test(c.message)),
+    "emerge port-grid gate", "skipOpenEmsManualPortGrid drops the manual port-grid expr");
+}
+
 // ---- 2c. one end-criterion policy, numeric parameter limits and the mesh cell count (#88)
 {
   // read the constants from the source, as for EXPLANATIONS (importing fairbeam needs openEMS)
@@ -757,10 +767,12 @@ for (const prim of [tube, ball, side, cone, ring]) {
   check(checkAction({ code: "no-port" }, 2) === null, w, "ports exist but none is excited: switch one on, not another port");
   check(checkAction({ code: "port-floating" }, 1) === "add-port", w, "a floating feed: add a port");
   check(checkAction({ code: "port-in-metal" }, 1) === null && checkAction({ code: "expr" }, 0) === null, w, "other checks have no extra action");
-  for (const file of ["src/designer/DesignPane.tsx", "src/designer/RunDialog.tsx"]) {
+  for (const file of ["src/designer/DesignPane.tsx", "src/designer/RunChecksAlert.tsx"]) {
     const text = readFileSync(join(root, file), "utf8");
     check(/checkAction\(c, draft\.ports\?\.length \?\? 0\)/.test(text) && /t\("contextMenu\.addPort"\)/.test(text), w, `${file}: the button, worded as the menu item`);
   }
+  const runDialog = readFileSync(join(root, "src/designer/RunDialog.tsx"), "utf8");
+  check(/<RunChecksAlert\b/.test(runDialog), w, "src/designer/RunDialog.tsx: the openEMS error block is the shared alert");
   const en = JSON.parse(readFileSync(join(root, "src/i18n/en.json"), "utf8"));
   check(en["contextMenu.addPort"] === "Add a discrete port…", w, "the label");
   // the server's fix for a floating end, worded as asked, comes with the same words in en.json and Turkish

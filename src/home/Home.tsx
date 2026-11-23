@@ -4,6 +4,7 @@
 // The footer links to the public issue tracker (FeedbackLink).
 import { createEffect, createMemo, createSignal, For, on, onMount, Show } from "solid-js";
 import { Box, CircuitBoard, CopyPlus, FilePlus2, FileCode, FileUp, FolderOpen, LoaderCircle, MessageSquare, PenTool, Pencil, Play, Plus, Search, Star, Trash2 } from "lucide-solid";
+import HairpinFilterIcon from "./HairpinFilterIcon";
 import { ApiError } from "../runner/api";
 import { models, openRunPanel, openExampleCopy, probeServer, refreshModels, serverState } from "../runner/store";
 import { isDesktopShell } from "../lib/telemetry";
@@ -20,6 +21,7 @@ import { DEMO } from "../env";
 import FeedbackLink from "../components/FeedbackLink";
 import { setCstImportOpen } from "../lib/cstImport";
 import { setPcbImportOpen } from "../lib/pcbImport";
+import { openHairpinDesigner } from "../designer/hairpinDesigner/state";
 import { designFileHint, designIdError, freeDesignId } from "../lib/designId";
 import { TEMPLATE_GROUPS, type TemplateKey } from "../designer/templates";
 import { openPythonModelAsDesign } from "../designer/pythonModel";
@@ -280,7 +282,17 @@ export default function Home() {
                     <PenTool size={14} aria-hidden="true" /> {busy() ? t("home.newProject.creating") : t("home.newProject.create")}
                   </button>
                 </form>
-                <div class="home-import">
+                <div class="home-filter-design-row">
+                  <button class="btn btn-ghost home-filter-design" type="button" id="home-filter-design" onClick={() => openHairpinDesigner()}
+                    title={t("home.filterDesign.title")}>
+                    <span class="home-filter-design-mark" aria-hidden="true">
+                      <HairpinFilterIcon size={168} />
+                    </span>
+                    <span class="home-filter-design-label">{t("home.filterDesign.button")}</span>
+                  </button>
+                  <span class="muted">{t("home.filterDesign.note")}</span>
+                </div>
+                <div class="home-import home-import-next">
                   <Show when={isDesktopShell()}>
                     <button class="btn btn-ghost" type="button" onClick={() => void openNativeDocument()} disabled={!online()}>
                       <FolderOpen size={14} aria-hidden="true" /> {t("document.open")}

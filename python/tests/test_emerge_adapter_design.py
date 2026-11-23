@@ -251,6 +251,56 @@ class DesignWorkerContract(unittest.TestCase):
         self.assertEqual(chosen, 2.5e9)
         self.assertEqual(how, "min_abs_s11")
 
+    def test_resolve_efield_cut_freqs_auto_unchanged(self):
+        freqs = [2e9, 2.5e9, 3e9]
+        s11 = [0.4, 0.05, 0.3]
+        pairs = self.worker.resolve_efield_cut_freqs(freqs, s11=s11)
+        self.assertEqual(pairs, [(2.5e9, "min_abs_s11")])
+        s21 = [0.1, 0.9, 0.2]
+        pairs21 = self.worker.resolve_efield_cut_freqs(freqs, s21=s21)
+        self.assertEqual(pairs21, [(2.5e9, "max_abs_s21")])
+        center = self.worker.resolve_efield_cut_freqs(freqs)
+        self.assertEqual(center, [(2.5e9, "band_center")])
+
+    def test_resolve_efield_cut_freqs_empty_requested_is_auto(self):
+        freqs = [1e9, 2e9, 3e9]
+        self.assertEqual(
+            self.worker.resolve_efield_cut_freqs(freqs, requested_hz=[], s11=[0.2, 0.05, 0.3]),
+            [(2e9, "min_abs_s11")])
+        self.assertEqual(
+            self.worker.resolve_efield_cut_freqs(freqs, requested_hz=None, s11=[0.2, 0.05, 0.3]),
+            [(2e9, "min_abs_s11")])
+
+    def test_resolve_efield_cut_freqs_user_snap_dedupe_cap(self):
+        freqs = [1e9, 2e9, 3e9, 4e9, 5e9]
+        # Snap in order: 1.1→1, 2.2→2, 2.3→2 (skip), 9→5, 3.1→3 → four unique, stop.
+        # Then ascending: 1, 2, 3, 5 (4.2 never considered).
+        pairs = self.worker.resolve_efield_cut_freqs(
+            freqs, requested_hz=[1.1e9, 2.2e9, 2.3e9, 9e9, 3.1e9, 4.2e9])
+        self.assertEqual(
+            pairs,
+            [(1e9, "user"), (2e9, "user"), (3e9, "user"), (5e9, "user")])
+        self.assertEqual(len(pairs), self.worker.FIELD_CUT_FREQS_MAX)
+
+    def test_build_design_raw_writes_field_cuts_and_legacy_field_cut(self):
+        case = sample_case()
+        cut_a = {
+            "schema": fem.FIELD_CUT_SCHEMA,
+            "quantity": "E", "component": "abs", "normal": "z", "axis": 2,
+            "position_m": 0.0008, "freq_hz": 2.0e9, "freq_choice": "user", "port": 1,
+            "u_m": [-0.01, 0.01], "v_m": [-0.01, 0.01], "nu": 2, "nv": 2,
+            "ex_re": [[1.0, 0.0], [0.0, 0.0]], "ex_im": [[0.0, 0.0], [0.0, 0.0]],
+            "ey_re": [[0.0, 0.0], [0.0, 0.0]], "ey_im": [[0.0, 0.0], [0.0, 0.0]],
+            "ez_re": [[0.0, 0.0], [0.0, 0.0]], "ez_im": [[0.0, 0.0], [0.0, 0.0]],
+        }
+        cut_b = {**cut_a, "freq_hz": 3.0e9}
+        raw = self.worker.build_design_raw(
+            case, "3.0.0b12", case["frequencies_hz"], [0.1j] * 3,
+            {"nodes": 1, "tetrahedra": 1}, 0.5, field_cuts=[cut_a, cut_b])
+        self.assertEqual(len(raw["field_cuts"]), 2)
+        self.assertIs(raw["field_cut"], raw["field_cuts"][0])
+        self.assertEqual(raw["field_cuts"][1]["freq_hz"], 3.0e9)
+
     def test_assess_passes_field_cut(self):
         case = sample_case()
         raw = synthetic_raw(case)
@@ -266,6 +316,26 @@ class DesignWorkerContract(unittest.TestCase):
         result = fem.assess_design(raw, case)
         self.assertEqual(result["field_cut"]["freq_hz"], 2.5e9)
         self.assertEqual(result["field_cut"]["freq_choice"], "min_abs_s11")
+
+    def test_assess_passes_field_cuts_list_and_user_choice(self):
+        case = sample_case()
+        raw = synthetic_raw(case)
+        base = {
+            "schema": fem.FIELD_CUT_SCHEMA,
+            "quantity": "E", "component": "abs", "normal": "z", "axis": 2,
+            "position_m": 0.0008, "freq_choice": "user", "port": 1,
+            "u_m": [-0.01, 0.01], "v_m": [-0.01, 0.01], "nu": 2, "nv": 2,
+            "ex_re": [[1.0, 0.0], [0.0, 0.0]], "ex_im": [[0.0, 0.0], [0.0, 0.0]],
+            "ey_re": [[0.0, 0.0], [0.0, 0.0]], "ey_im": [[0.0, 0.0], [0.0, 0.0]],
+            "ez_re": [[0.0, 0.0], [0.0, 0.0]], "ez_im": [[0.0, 0.0], [0.0, 0.0]],
+        }
+        raw["field_cuts"] = [{**base, "freq_hz": 2.0e9}, {**base, "freq_hz": 3.0e9}]
+        raw["field_cut"] = raw["field_cuts"][0]
+        result = fem.assess_design(raw, case)
+        self.assertEqual(len(result["field_cuts"]), 2)
+        self.assertEqual(result["field_cuts"][1]["freq_hz"], 3.0e9)
+        self.assertEqual(result["field_cuts"][0]["freq_choice"], "user")
+        self.assertEqual(result["field_cut"]["freq_hz"], 2.0e9)
 
     def test_build_mesh_raw_and_assess(self):
         case = sample_case()

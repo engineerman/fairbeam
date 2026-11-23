@@ -3,7 +3,8 @@ import { api } from "../runner/api";
 import { openResearch, researchPath } from "../runner/researchState";
 import { followInDesigner } from "../runner/designRun";
 import { refreshRuns } from "../runner/store";
-import { defaultDesignerSession, draft, file, names, prepareSavedDesign } from "./store";
+import { defaultDesignerSession, draft, errorCount, file, names, prepareSavedDesign } from "./store";
+import RunChecksAlert from "./RunChecksAlert";
 import { tryEvaluate } from "./expr";
 import { t } from "../i18n";
 import NumberField from "../components/NumberField";
@@ -28,9 +29,10 @@ export default function ElmerAntennaRun(props: { close: () => void }) {
     || Number(values().f_min_hz)>=Number(values().f_max_hz)
     || Number(values().farfield_hz)<Number(values().f_min_hz) || Number(values().farfield_hz)>Number(values().f_max_hz)
     || !Number.isInteger(Number(values().points)) || Number(values().points)<3 || Number(values().points)>21
-    || !Number.isInteger(Number(values().dielectric_cells)) || Number(values().dielectric_cells)<2 || Number(values().dielectric_cells)>10;
+    || !Number.isInteger(Number(values().dielectric_cells)) || Number(values().dielectric_cells)<2 || Number(values().dielectric_cells)>10
+    || errorCount() > 0;
   const submit=async(e:Event)=>{
-    e.preventDefault(); if(invalid() || busy() || !file())return;
+    e.preventDefault(); if(invalid() || busy() || !file() || errorCount() > 0)return;
     setBusy(true);setError("");setDiagnostic("");
     const request = defaultDesignerSession.asyncState.ticket();
     const initialFile = file()!;
@@ -61,6 +63,7 @@ export default function ElmerAntennaRun(props: { close: () => void }) {
     }catch(e){if(alive)setError((e as Error).message);}finally{if(alive)setBusy(false);}
   };
   return <form class="rd-body" onSubmit={submit} data-testid="elmer-antenna-form">
+    <RunChecksAlert onNavigate={props.close} />
     <p class="note">{t("elmerAntenna.scope")}</p>
     <p class="note">{t("elmerAntenna.pec")}</p>
     <div class="cluster"><p class="note">{t("elmerAntenna.setupHint")}</p>

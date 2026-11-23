@@ -97,6 +97,48 @@
 }
 .rb-shell .rb-result-note[data-room="none"] { display: none; }
 
+/* Run: one primary ribbon tile (Play + engine) + narrow chevron on the right */
+.rb-run-split {
+  display: inline-flex; flex-direction: row; align-items: stretch; flex: none;
+  /* Fixed width so openEMS vs EMerge does not reflow the Simulation ribbon. */
+  width: 74px; min-width: 74px; max-width: 74px;
+  border: 1px solid transparent; border-radius: var(--al-radius); font-size: 11px;
+}
+.rb-run-split.rb-primary { color: var(--al-action-text, var(--al-text)); background: var(--al-action); }
+.rb-run-split.rb-primary-emerge { color: var(--al-action-emerge-text, #ffffff); background: var(--al-action-emerge); }
+.rb-run-split:hover .rb-run-split-main,
+.rb-run-split:hover .rb-run-split-chevron { background: color-mix(in srgb, currentColor 6%, transparent); }
+.rb-run-split.rb-primary:hover { background: var(--al-action-hover, var(--al-action)); }
+.rb-run-split.rb-primary-emerge:hover { background: var(--al-action-emerge-hover, var(--al-action-emerge)); }
+.rb-run-split-main {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  flex: 1 1 0; min-width: 0; padding: var(--al-space-1); border: 0; background: transparent; color: inherit;
+  cursor: pointer; font-size: inherit; overflow: hidden;
+}
+.rb-run-split-main > span {
+  display: block; width: 100%; line-height: 14px; text-align: center;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rb-run-split-chevron {
+  display: flex; align-items: center; justify-content: center; align-self: stretch; flex: none;
+  width: 16px; min-width: 16px; padding: 0; margin: 0; border: 0;
+  border-left: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  background: transparent; color: inherit; cursor: pointer; border-radius: 0;
+}
+.rb-run-split-chevron:focus-visible,
+.rb-run-split-main:focus-visible { outline: 2px solid var(--al-focus); outline-offset: -2px; }
+/* Not the WCS 320px panel — one engine row only. */
+.rb-shell .rb-run-split.rb-wcs > .rb-run-engine-pop {
+  width: max-content; min-width: 0; max-height: none; overflow: visible;
+  gap: 0; padding: var(--al-space-1); right: 0; left: auto;
+}
+.rb-run-engine-pick { min-width: 54px; flex-direction: row; gap: var(--al-space-1); padding: var(--al-space-2); }
+.rb-shell .rb-group[data-size="icons"] .rb-run-split { width: 38px; min-width: 38px; max-width: 38px; }
+.rb-shell .rb-group[data-size="icons"] .rb-run-split-main { min-width: 24px; padding: 5px 2px; }
+.rb-shell .rb-group[data-size="icons"] .rb-run-split-main > span {
+  position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+
 .shortcut-list { display: grid; gap: var(--al-space-1); margin: 0; }
 .shortcut-list > div { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: var(--al-space-3); padding: var(--al-space-1) 0; border-bottom: 1px solid var(--al-border); }
 .shortcut-list dt { font-weight: 600; }

@@ -1,4 +1,4 @@
-"""EMerge worker for the WR-90 fixture, admitted Designs, and planar N-port cases.
+"""EMerge worker for the WR-90 fixture, admitted Designs, planar N-port, and coax cases.
 
 Runs INSIDE the external EMerge environment (``fairbeam_emerge.py`` starts it as a separate
 process with that environment's interpreter). This is the only Fairbeam file that imports EMerge;
@@ -23,6 +23,8 @@ NATIVE_PHASOR = "exp(+i omega t)"
 FREQUENCY_RTOL = 1e-9
 # Matches fairbeam.emerge_limits.N_MAX (worker must not import fairbeam).
 N_MAX = 8
+# Free-space wave impedance (Ω); analytic coax Z0 = η0/(2π√εr) · ln(r_o/r_i).
+ETA0 = 376.730313668
 THREAD_VARIABLES = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMBA_NUM_THREADS",
                     "VECLIB_NUM_THREADS", "NUMEXPR_NUM_THREADS")
 # AbsorbingBoundary: constructor default is order=2 / abctype="B"
@@ -73,7 +75,77 @@ def load_case(path):
         return _load_design_case(case)
     if case.get("kind") == "planar":
         return _load_planar_case(case)
+    if case.get("kind") == "coax":
+        return _load_coax_case(case)
     return _load_fixture_case(case)
+
+
+def coax_z0(r_i, r_o, er):
+    """Analytic TEM coax reference impedance (Ω) for constant εr fill."""
+    if not (_number(r_i) and _number(r_o) and _number(er)):
+        raise ValueError("coax Z0 needs finite r_i, r_o, er")
+    if not 0 < r_i < r_o or er <= 0:
+        raise ValueError("coax Z0 needs 0 < r_i < r_o and er > 0")
+    return (ETA0 / (2.0 * math.pi * math.sqrt(float(er)))) * math.log(float(r_o) / float(r_i))
+
+
+def coax_placement(port):
+    """Pure placement for one coax port (no EMerge). Used by solve and unit tests.
+
+    Cylinder CS origin is ``start``; local +Z points toward ``stop``. CoaxPort face is the
+    dielectric annulus at ``start`` (Cylinder ``front``).
+    """
+    if not isinstance(port, dict):
+        raise ValueError("coax port must be an object")
+    number = port.get("number")
+    if type(number) is not int or number < 1:
+        raise ValueError("coax port number must be a positive integer")
+    start = _point3(port.get("start"), f"port {number} start")
+    stop = _point3(port.get("stop"), f"port {number} stop")
+    axis = port.get("direction_axis")
+    if axis not in (0, 1, 2) or type(axis) is not int:
+        raise ValueError(f"port {number} direction_axis must be 0, 1 or 2")
+    delta = [stop[k] - start[k] for k in range(3)]
+    if any(abs(delta[k]) > 1e-12 for k in range(3) if k != axis) or delta[axis] == 0:
+        raise ValueError(f"port {number} must be axis-aligned with nonzero length")
+    height = abs(delta[axis])
+    sign = 1.0 if delta[axis] > 0 else -1.0
+    axis_vec = [0.0, 0.0, 0.0]
+    axis_vec[axis] = sign
+    for key in ("r_i", "r_o", "r_os", "er", "mu_r", "tan_d"):
+        if not _number(port.get(key)):
+            raise ValueError(f"port {number}.{key} must be a finite number")
+    r_i, r_o, r_os = float(port["r_i"]), float(port["r_o"]), float(port["r_os"])
+    er, mu_r, tan_d = float(port["er"]), float(port["mu_r"]), float(port["tan_d"])
+    if not 0 < r_i < r_o < r_os:
+        raise ValueError(f"port {number} radii must satisfy 0 < r_i < r_o < r_os")
+    if er <= 0 or mu_r <= 0 or tan_d < 0:
+        raise ValueError(f"port {number} dielectric must have er, mu_r > 0 and tan_d ≥ 0")
+    if port.get("mapped_bc") != "CoaxPort":
+        raise ValueError(f"port {number} mapped_bc must be CoaxPort")
+    return {
+        "number": number,
+        "origin": start,
+        "axis": axis_vec,
+        "height": height,
+        "r_i": r_i,
+        "r_o": r_o,
+        "r_os": r_os,
+        "er": er,
+        "mu_r": mu_r,
+        "tan_d": tan_d,
+        "rad_in_out": (r_i, r_o),
+        "z0": coax_z0(r_i, r_o, er),
+    }
+
+
+def coax_port_bc_args(placement):
+    """Keyword args for ``sim.mw.bc.CoaxPort`` except ``face`` and ``cs`` (need EMerge objects)."""
+    return {
+        "port_number": placement["number"],
+        "rad_in_out": placement["rad_in_out"],
+        "er": placement["er"],
+    }
 
 
 def _load_fixture_case(case):
@@ -272,6 +344,42 @@ def _load_planar_case(case):
     return case
 
 
+def _load_coax_case(case):
+    if case.get("phasor_convention_out") != NATIVE_PHASOR:
+        raise ValueError("phasor_convention_out must be exp(+i omega t)")
+    if not _number(case.get("resolution")) or not 0 < case["resolution"] <= 0.5:
+        raise ValueError("resolution must be a wavelength fraction in (0, 0.5]")
+    frequencies = case.get("frequencies_hz")
+    if (not isinstance(frequencies, list) or len(frequencies) < 3
+            or not all(map(_number, frequencies)) or any(f <= 0 for f in frequencies)
+            or frequencies != sorted(frequencies)):
+        raise ValueError("frequencies_hz must be ascending positive finite numbers (at least 3)")
+    ports = case.get("ports")
+    if not isinstance(ports, list) or not (1 <= len(ports) <= N_MAX):
+        raise ValueError(f"coax case needs 1 to {N_MAX} ports")
+    numbers = []
+    for port in ports:
+        placement = coax_placement(port)  # structural + radius checks
+        numbers.append(placement["number"])
+        if not all(key in port for key in PORT_MAP_KEYS):
+            raise ValueError(f"port {placement['number']} needs Stage B port-map provenance")
+    if set(numbers) != set(range(1, len(ports) + 1)):
+        raise ValueError(f"coax ports must be contiguous numbers 1…{len(ports)}")
+    air = case.get("air")
+    if not isinstance(air, dict):
+        raise ValueError("air must be an object")
+    air_lo, air_hi = _point3(air.get("lo"), "air.lo"), _point3(air.get("hi"), "air.hi")
+    if any(air_hi[k] <= air_lo[k] for k in range(3)):
+        raise ValueError("air must have positive volume")
+    if not isinstance(case.get("limitations"), list):
+        raise ValueError("limitations must be a list")
+    if "pec_approximations" in case and not isinstance(case["pec_approximations"], list):
+        raise ValueError("pec_approximations must be a list when present")
+    if "pec_approximations" not in case:
+        case = {**case, "pec_approximations": []}
+    return case
+
+
 def match_frequencies(expected, computed):
     """Check EMerge's frequency axis against the case values (relative 1e-9); return the case values."""
     computed = [float(f) for f in computed]
@@ -387,8 +495,8 @@ def _mesh_raw_block(mesh):
 def build_mesh_raw(case, emerge_version, mesh, elapsed_seconds):
     """Assemble mesh-only ``raw.json`` (no frequency sweep / S-parameters)."""
     kind = case.get("kind", "fixture")
-    if kind not in ("fixture", "design", "planar"):
-        raise ValueError("mesh-only case kind must be fixture, design or planar")
+    if kind not in ("fixture", "design", "planar", "coax"):
+        raise ValueError("mesh-only case kind must be fixture, design, planar or coax")
     return {"mesh_only": True, "kind": kind, "emerge_version": str(emerge_version),
             "elapsed_seconds": float(elapsed_seconds),
             "mesh": _mesh_raw_block(mesh),
@@ -424,6 +532,8 @@ def build_raw(case, emerge_version, frequencies, s11, s21, mesh, elapsed_seconds
 FIELD_CUT_SCHEMA = "fairbeam.emerge-field-cut/1"
 # Cap samples along the longer in-plane edge (Fairbeam field_planes MAX_SAMPLES is 200).
 FIELD_CUT_MAX_EDGE = 100
+# Same spirit as openEMS FIELD_PLANE_FREQS_MAX: post-sample maps, not a second FEM solve.
+FIELD_CUT_FREQS_MAX = 4
 
 
 def _pick_efield_cut_freq(frequencies, *, s11=None, s21=None):
@@ -442,8 +552,41 @@ def _pick_efield_cut_freq(frequencies, *, s11=None, s21=None):
     return freqs[len(freqs) // 2], "band_center"
 
 
+def resolve_efield_cut_freqs(frequencies, *, requested_hz=None, s11=None, s21=None):
+    """Frequencies to post-sample for E cuts: auto one, or snap/dedupe/cap user list.
+
+    Returns ``[(freq_hz, freq_choice), …]`` with length 1…``FIELD_CUT_FREQS_MAX``.
+    Empty or absent ``requested_hz`` keeps the single auto pick. User requests snap to the
+    nearest solved frequency, keep first-seen uniques up to the cap, then sort ascending.
+    """
+    freqs = [float(f) for f in frequencies]
+    if not freqs:
+        raise ValueError("frequencies required for E-field cut")
+    if requested_hz is None:
+        return [_pick_efield_cut_freq(freqs, s11=s11, s21=s21)]
+    if not isinstance(requested_hz, (list, tuple)):
+        raise ValueError("field_cut_frequencies_hz must be a list")
+    if len(requested_hz) == 0:
+        return [_pick_efield_cut_freq(freqs, s11=s11, s21=s21)]
+    unique = []
+    seen = set()
+    for raw in requested_hz:
+        req = float(raw)
+        if not math.isfinite(req) or req <= 0:
+            raise ValueError("field_cut_frequencies_hz entries must be positive finite Hz")
+        nearest = min(freqs, key=lambda f: abs(f - req))
+        if nearest in seen:
+            continue
+        seen.add(nearest)
+        unique.append(nearest)
+        if len(unique) >= FIELD_CUT_FREQS_MAX:
+            break
+    unique.sort()
+    return [(f, "user") for f in unique]
+
+
 def _field_cut_s_kwargs(s_params, n_ports):
-    """S-series kwargs for ``try_export_efield_cut``.
+    """S-series kwargs for ``try_export_efield_cuts``.
 
     Prefer ``S(2,1)`` when ``n_ports >= 2`` (max-|S21| pick); otherwise ``S(1,1)`` (min-|S11|).
     Heuristic for a representative cut frequency only — not a physics claim.
@@ -534,17 +677,44 @@ def export_efield_cut(data, *, z_m, freq_hz, freq_choice, max_edge_samples=FIELD
     }
 
 
-def try_export_efield_cut(data, case, frequencies, *, s11=None, s21=None):
-    """Best-effort cut export; on failure returns ``(None, note)`` so S-results still ship."""
+def try_export_efield_cuts(data, case, frequencies, *, s11=None, s21=None):
+    """Best-effort multi cut export; on failure returns ``(None, note)`` so S-results still ship.
+
+    Reads optional ``case["field_cut_frequencies_hz"]`` (empty/absent → one auto frequency).
+    """
     try:
-        freq_hz, choice = _pick_efield_cut_freq(frequencies, s11=s11, s21=s21)
-        cut = export_efield_cut(data, z_m=_efield_cut_z_m(case), freq_hz=freq_hz, freq_choice=choice)
-        return cut, None
+        pairs = resolve_efield_cut_freqs(
+            frequencies, requested_hz=case.get("field_cut_frequencies_hz"), s11=s11, s21=s21)
+        z_m = _efield_cut_z_m(case)
+        cuts = [
+            export_efield_cut(data, z_m=z_m, freq_hz=freq_hz, freq_choice=choice)
+            for freq_hz, choice in pairs
+        ]
+        return cuts, None
     except Exception as exc:  # noqa: BLE001 — experimental path must not fail the solve
         return None, f"E-field cut export skipped: {exc}"
 
 
-def build_design_raw(case, emerge_version, frequencies, s11, mesh, elapsed_seconds, field_cut=None):
+def try_export_efield_cut(data, case, frequencies, *, s11=None, s21=None):
+    """Best-effort single cut (first of ``try_export_efield_cuts``); kept for callers/tests."""
+    cuts, note = try_export_efield_cuts(data, case, frequencies, s11=s11, s21=s21)
+    if not cuts:
+        return None, note
+    return cuts[0], note
+
+
+def _raw_attach_field_cuts(raw, *, field_cuts=None, field_cut=None):
+    """Write ``field_cuts`` list and legacy ``field_cut`` (= first) onto raw."""
+    cuts = list(field_cuts) if field_cuts else ([field_cut] if field_cut is not None else [])
+    if not cuts:
+        return raw
+    raw["field_cuts"] = cuts
+    raw["field_cut"] = cuts[0]
+    return raw
+
+
+def build_design_raw(case, emerge_version, frequencies, s11, mesh, elapsed_seconds,
+                     field_cut=None, field_cuts=None):
     """Assemble design ``raw.json`` content. S11 is EMerge's, unmodified."""
     expected = case["frequencies_hz"]
     frequencies = match_frequencies(expected, frequencies)
@@ -565,12 +735,12 @@ def build_design_raw(case, emerge_version, frequencies, s11, mesh, elapsed_secon
            "pec_approximations": list(case["pec_approximations"])}
     if mesh:
         raw["mesh"] = _mesh_raw_block(mesh)
-    if field_cut is not None:
-        raw["field_cut"] = field_cut
+    _raw_attach_field_cuts(raw, field_cuts=field_cuts, field_cut=field_cut)
     return _attach_port_map(raw, [_port_map_entry(case.get("port"))])
 
 
-def build_planar_raw(case, emerge_version, frequencies, s_params, mesh, elapsed_seconds, field_cut=None):
+def build_planar_raw(case, emerge_version, frequencies, s_params, mesh, elapsed_seconds,
+                     field_cut=None, field_cuts=None):
     """Assemble planar ``raw.json`` content. S-parameters are EMerge's, unmodified.
 
     ``s_params`` maps ``"i,j"`` keys to complex sequences (response at i driven at j) for all
@@ -611,9 +781,50 @@ def build_planar_raw(case, emerge_version, frequencies, s_params, mesh, elapsed_
            "pec_approximations": list(case["pec_approximations"])}
     if mesh:
         raw["mesh"] = _mesh_raw_block(mesh)
-    if field_cut is not None:
-        raw["field_cut"] = field_cut
+    _raw_attach_field_cuts(raw, field_cuts=field_cuts, field_cut=field_cut)
     return _attach_port_map(raw, [_port_map_entry(terminal) for terminal in terminals])
+
+
+def build_coax_raw(case, emerge_version, frequencies, s_params, mesh, elapsed_seconds,
+                   field_cut=None, field_cuts=None):
+    """Assemble coax ``raw.json``. S-parameters are EMerge's; Z0 is analytic TEM.
+
+    ``s_params`` maps ``"i,j"`` keys to complex sequences for all ``i,j in 1…n``.
+    """
+    expected = case["frequencies_hz"]
+    frequencies = match_frequencies(expected, frequencies)
+    count = len(frequencies)
+    ports = sorted(case["ports"], key=lambda p: p["number"])
+    n = len(ports)
+    if n < 1 or n > N_MAX:
+        raise ValueError(f"coax raw needs 1 to {N_MAX} ports")
+    placements = [coax_placement(port) for port in ports]
+    s_out = {}
+    for i in range(1, n + 1):
+        for j in range(1, n + 1):
+            key = f"{i},{j}"
+            if key not in s_params:
+                raise ValueError(f"missing S-parameter series {key}")
+            series = _series(s_params[key], f"S{key}", count)
+            s_out[key] = {"re": [v.real for v in series], "im": [v.imag for v in series]}
+    pec = list(case.get("pec_approximations") or [])
+    raw = {"kind": "coax", "emerge_version": str(emerge_version), "frequency_hz": frequencies,
+           "s": s_out, "z_ref": [p["z0"] for p in placements],
+           "phasor_convention": NATIVE_PHASOR,
+           "native_phasor_convention": NATIVE_PHASOR,
+           "elapsed_seconds": float(elapsed_seconds),
+           "solver_setup": {"resolution": case["resolution"],
+                            "resolution_name": case.get("resolution_name"),
+                            "abc_order": ABC_ORDER, "abc_type": ABC_TYPE,
+                            "sparam_cap_single": False, "sparam_cap_column": False,
+                            "sparam_enforce_reciprocity": False,
+                            **(case.get("_sweep_setup") or {"nthreads": _nthreads(case)})},
+           "limitations": list(case["limitations"]),
+           "pec_approximations": pec}
+    if mesh:
+        raw["mesh"] = _mesh_raw_block(mesh)
+    _raw_attach_field_cuts(raw, field_cuts=field_cuts, field_cut=field_cut)
+    return _attach_port_map(raw, [_port_map_entry(port) for port in ports])
 
 
 def _nthreads(case):
@@ -789,12 +1000,57 @@ def solve_design(case):
     s_params = _extract_s_matrix(grid, len(port_plates))
     # Driven result schema still ships S11 until unified emerge-result/2 (B3 Task 3).
     s11 = s_params["1,1"]
-    field_cut, cut_note = try_export_efield_cut(
+    field_cuts, cut_note = try_export_efield_cuts(
         data, case, frequencies.tolist(), **_field_cut_s_kwargs(s_params, len(port_plates)))
     if cut_note:
         case = {**case, "limitations": list(case["limitations"]) + [cut_note]}
     return build_design_raw(case, em.__version__, frequencies.tolist(), s11, mesh,
-                            time.monotonic() - started, field_cut=field_cut)
+                            time.monotonic() - started, field_cuts=field_cuts)
+
+
+def _cpw_strip_and_ground_metals(metals, traces):
+    """Classify classic-CPW top metals: narrowest in-plane span is the center strip.
+
+    EMerge needs ``WavePort.set_terminals`` when the port face has more than two PEC
+    islands (strip + two grounds + shield walls); without it Z0 stays the default 50 Ω
+    and the log shows \"Skipping characteristic impedance calculation\".
+    """
+    if len(metals) != len(traces) or len(metals) < 2:
+        raise ValueError("classic CPW WavePort terminals need at least two top metals")
+    spans = []
+    for trace in traces:
+        xs = [float(p[0]) for p in trace["xy"]]
+        ys = [float(p[1]) for p in trace["xy"]]
+        spans.append(min(max(xs) - min(xs), max(ys) - min(ys)))
+    strip_i = min(range(len(spans)), key=lambda i: spans[i])
+    strip = metals[strip_i][0]
+    grounds = [metals[i][0] for i in range(len(metals)) if i != strip_i]
+    return strip, grounds
+
+
+def apply_planar_terminal_bc(sim, em, plate, port, *, strip_metal=None, ground_metals=None):
+    """Attach the EMerge BC for one planar terminal from ``mapped_bc``.
+
+    ``WavePort`` failures propagate; there is no silent fall back to ``LumpedPort``.
+    For classic CPW, pass ``strip_metal`` / ``ground_metals`` so PV Z0 can run.
+    """
+    number = port["number"]
+    mapped = port.get("mapped_bc")
+    if mapped == "WavePort":
+        # Stage C Shared facts / Task 1 trial: number_of_modes=1, impedance_definition PV.
+        bc = sim.mw.bc.WavePort(
+            plate, number, number_of_modes=1, impedance_definition="PV")
+        # O17 Z path: multi-island CPW faces need explicit +/- for voltage integration.
+        if strip_metal is not None and ground_metals:
+            bc.set_terminals(positive=strip_metal, negative=ground_metals[0])
+        return bc
+    if mapped == "LumpedPort":
+        sim.mw.bc.LumpedPort(
+            plate, number, width=port["width"], height=port["height"],
+            direction=em.ZAX, Z0=port["z0"])
+        return
+    raise ValueError(
+        f"terminal {number} mapped_bc must be WavePort or LumpedPort, got {mapped!r}")
 
 
 def solve_planar(case):
@@ -802,10 +1058,13 @@ def solve_planar(case):
 
     Physics mirror the Level B2 Task 1 spike (originally measured on EMerge 2.8.9; pin is now 3.0.0b12): substrate ``Box``, zero-thickness
     ``XYPolygon.geo()`` traces with ``ThinConductor`` when σ is present (else PEC), ``PEC`` on the
-    substrate bottom, optional second-order ABC on the four sides and top when
-    ``enclosure == "open"``, ``1…N_MAX`` ``LumpedPort`` strip-to-ground terminals (+z), and
-    optional ``mesher.set_boundary_size`` on each trace when ``metal_edge_m`` is set
-    (Fairbeam default 0.4 mm, growth 3).
+    substrate bottom for bottom-ground planar (microstrip; default when ``ground_mode`` is
+    absent or ``"bottom"``), no substrate-bottom PEC for classic CPW
+    (``ground_mode == "coplanar"``) so the solver does not invent a backside ground,
+    optional second-order ABC on the four sides and top when ``enclosure == "open"``,
+    ``1…N_MAX`` terminals as ``LumpedPort`` or ``WavePort`` per terminal ``mapped_bc``
+    (+z lumped direction), and optional ``mesher.set_boundary_size`` on each trace when
+    ``metal_edge_m`` is set (Fairbeam default 0.4 mm, growth 3).
     """
     nthreads = _nthreads(case)
     _prepare_env(nthreads)
@@ -845,15 +1104,20 @@ def solve_planar(case):
     sim.mw.set_frequency(list(case["frequencies_hz"]))
     sim.commit_geometry()
 
-    sim.mw.bc.PEC(diel.bottom)
+    # Classic CPW: coplanar top grounds only — do not invent a backside PEC floor.
+    if case.get("ground_mode") != "coplanar":
+        sim.mw.bc.PEC(diel.bottom)
     if case["enclosure"] == "open":
         for face in ("left", "right", "front", "back", "top"):
             sim.mw.bc.AbsorbingBoundary(air.face(face), order=ABC_ORDER, abctype=ABC_TYPE)
     for metal, sigma, thickness_m in metals:
         _apply_metal_bc(sim, em, metal, sigma, thickness_m)
+    strip_metal = ground_metals = None
+    if case.get("ground_mode") == "coplanar":
+        strip_metal, ground_metals = _cpw_strip_and_ground_metals(metals, case["traces"])
     for port, plate in terminals:
-        sim.mw.bc.LumpedPort(plate, port["number"], width=port["width"], height=port["height"],
-                             direction=em.ZAX, Z0=port["z0"])
+        apply_planar_terminal_bc(
+            sim, em, plate, port, strip_metal=strip_metal, ground_metals=ground_metals)
     edge = case.get("metal_edge_m")
     if edge is not None:
         for metal, _sigma, _thick in metals:
@@ -870,20 +1134,107 @@ def solve_planar(case):
     frequencies = np.asarray(data.scalar.axis("freq"), dtype=float).reshape(-1)
     n_ports = len(terminals)
     s_params = _extract_s_matrix(grid, n_ports)
-    field_cut, cut_note = try_export_efield_cut(
+    field_cuts, cut_note = try_export_efield_cuts(
         data, case, frequencies.tolist(), **_field_cut_s_kwargs(s_params, n_ports))
     if cut_note:
         case = {**case, "limitations": list(case["limitations"]) + [cut_note]}
     return build_planar_raw(case, em.__version__, frequencies.tolist(), s_params, mesh,
-                            time.monotonic() - started, field_cut=field_cut)
+                            time.monotonic() - started, field_cuts=field_cuts)
+
+
+def solve_coax(case):
+    """Build and solve an admitted coax N-port case with EMerge ``CoaxPort``.
+
+    Geometry (per port, metres): PEC inner ``Cylinder(r_i)``, dielectric
+    ``CoaxCylinder(r_o, r_i)``, PEC shield ``CoaxCylinder(r_os, r_o)``, padded air box with
+    second-order ABC. Port BC: ``CoaxPort(dielectric.front, n, (r_i, r_o), cs, er=…)`` with CS
+    origin at Design ``start`` and +Z toward ``stop``
+    (``physics/microwave/bcs/port_bcs.py`` CoaxPort; ``geo/shapes.py`` Cylinder / CoaxCylinder).
+    """
+    nthreads = _nthreads(case)
+    _prepare_env(nthreads)
+    import numpy as np
+    import emerge as em
+
+    started = time.monotonic()
+    sim = em.Simulation("fairbeam_emerge_coax", loglevel="INFO", save_file=False, write_log=False)
+    sim.settings.mw_cap_sp_single = False
+    sim.settings.mw_cap_sp_col = False
+    sim.settings.mw_recip_sp = False
+
+    air = _box(em, case["air"]["lo"], case["air"]["hi"]).background()
+    metals = []
+    dielectrics = []
+    port_bcs = []
+    for port in sorted(case["ports"], key=lambda p: p["number"]):
+        place = coax_placement(port)
+        origin = tuple(place["origin"])
+        axis = em.Axis(np.array(place["axis"], dtype=float))
+        cs = axis.construct_cs(origin)
+        inner = em.geo.Cylinder(place["r_i"], place["height"], cs, name=f"coax_inner_{place['number']}")
+        inner.set_material(em.lib.PEC)
+        metals.append(inner)
+        diel = em.geo.CoaxCylinder(
+            place["r_o"], place["r_i"], place["height"], cs,
+            name=f"coax_diel_{place['number']}")
+        diel.set_material(em.Material(place["er"], place["mu_r"], place["tan_d"]))
+        dielectrics.append((place, diel, cs))
+        shield = em.geo.CoaxCylinder(
+            place["r_os"], place["r_o"], place["height"], cs,
+            name=f"coax_shield_{place['number']}")
+        shield.set_material(em.lib.PEC)
+        metals.append(shield)
+        port_bcs.append((place, diel, cs))
+
+    sim.set_resolution(case["resolution"])
+    sim.mw.set_frequency(list(case["frequencies_hz"]))
+    sim.commit_geometry()
+
+    for face in ("left", "right", "front", "back", "bottom", "top"):
+        sim.mw.bc.AbsorbingBoundary(air.face(face), order=ABC_ORDER, abctype=ABC_TYPE)
+    # Inner / shield volumes already carry ``em.lib.PEC`` material; PEC BC needs faces (dim 2).
+    for metal in metals:
+        sim.mw.bc.PEC(metal.boundary())
+    for place, diel, cs in port_bcs:
+        try:
+            face = diel.front
+        except Exception as exc:  # noqa: BLE001 — soft fail with clear port id
+            raise ValueError(
+                f"EMerge could not select CoaxPort face for port {place['number']}: {exc}"
+            ) from exc
+        args = coax_port_bc_args(place)
+        sim.mw.bc.CoaxPort(face, args["port_number"], args["rad_in_out"], cs, er=args["er"])
+
+    sim.generate_mesh()
+    mesh = mesh_counts(sim)
+    if case.get("mesh_only"):
+        return build_mesh_raw(case, em.__version__, mesh, time.monotonic() - started)
+    data, sweep = _run_frequency_sweep(sim, case)
+    case = {**case, "_sweep_setup": sweep}
+
+    grid = data.scalar.grid
+    frequencies = np.asarray(data.scalar.axis("freq"), dtype=float).reshape(-1)
+    n_ports = len(port_bcs)
+    try:
+        s_params = _extract_s_matrix(grid, n_ports)
+    except Exception as exc:  # noqa: BLE001 — honest soft fail, no silent remap
+        raise ValueError(f"EMerge could not extract the {n_ports}-port S-matrix: {exc}") from exc
+    field_cuts, cut_note = try_export_efield_cuts(
+        data, case, frequencies.tolist(), **_field_cut_s_kwargs(s_params, n_ports))
+    if cut_note:
+        case = {**case, "limitations": list(case["limitations"]) + [cut_note]}
+    return build_coax_raw(case, em.__version__, frequencies.tolist(), s_params, mesh,
+                          time.monotonic() - started, field_cuts=field_cuts)
 
 
 def solve(case):
-    """Dispatch to the fixture, design or planar solver."""
+    """Dispatch to the fixture, design, planar or coax solver."""
     if case.get("kind") == "design":
         return solve_design(case)
     if case.get("kind") == "planar":
         return solve_planar(case)
+    if case.get("kind") == "coax":
+        return solve_coax(case)
     return solve_fixture(case)
 
 

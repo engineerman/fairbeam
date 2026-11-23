@@ -17,7 +17,9 @@ import { nameMap, namesIn, paramKeyError, paramValues, RESERVED, tryEvaluate } f
 import { parameterUses, pathOwner, renameParameter } from "./paramRefs";
 import { openParametersTab, setParameterRanges } from "./dockState";
 import { appMode, setAppMode } from "../workspace";
-import { designChecks, mergeChecks, type Check, type CheckFix } from "./checks";
+import { designChecks, isOpenEmsManualPortGridIssue, mergeChecks, type Check, type CheckFix } from "./checks";
+import { isEmerge } from "./activeEngine";
+import { emergeAdmitChecks } from "./emergePortMapPreview";
 import { checkMessage, parameterErrorTitle } from "./checkText";
 import { validColor, validOpacity } from "./colors";
 import { designMaterial, type LibraryMaterial } from "./materials";
@@ -101,10 +103,22 @@ createRoot(() => createEffect(() => {
 export const names = createRoot(() => createMemo(() => (loaded() ? paramValues(draft.params ?? []) : { names: nameMap(), errors: nameMap<string>() })));
 
 /** The cheap checks, recomputed on every edit (they read the whole draft). */
-const liveChecks = createRoot(() => createMemo(() => (loaded() ? designChecks(draft) : [])));
+const liveChecks = createRoot(() => createMemo(() => (loaded()
+  ? designChecks(draft, { skipOpenEmsManualPortGrid: isEmerge() }) : [])));
 
-/** Everything the Checks list shows: live checks plus the server-only ones, errors first. */
-export const checks = createRoot(() => createMemo(() => mergeChecks(liveChecks(), serverChecks())));
+/** EMerge port-map admission while EMerge is the active engine (blocks Run like other errors). */
+const emergeAdmitLiveChecks = createRoot(() => createMemo(() =>
+  (loaded() && isEmerge() ? emergeAdmitChecks(draft.ports) : [])));
+
+function emergeFdtdPortGridFiltered(checks: Check[]): Check[] {
+  if (!isEmerge()) return checks;
+  return checks.filter((c) => !isOpenEmsManualPortGridIssue(c.path, c.message, c.code));
+}
+
+/** Everything the Checks list shows: live checks plus the server-only ones, errors first.
+ *  EMerge port admission is a live check (its code is CHEAP), so it stays on the live side of mergeChecks. */
+export const checks = createRoot(() => createMemo(() =>
+  emergeFdtdPortGridFiltered(mergeChecks([...liveChecks(), ...emergeAdmitLiveChecks()], serverChecks()))));
 
 export interface Issue { severity: "error" | "warning" | "info"; message: string }
 
@@ -114,7 +128,11 @@ export const issues = createRoot(() => createMemo(() => {
   for (const c of checks()) {
     if (!out[c.path] || (c.severity === "error" && out[c.path].severity !== "error")) out[c.path] = { severity: c.severity, message: checkMessage(c) };
   }
-  for (const [path, message] of Object.entries(serverErrors())) if (!out[path] || out[path].severity !== "error") out[path] = { severity: "error", message };
+  const hideFdtdPortGrid = isEmerge();
+  for (const [path, message] of Object.entries(serverErrors())) {
+    if (hideFdtdPortGrid && isOpenEmsManualPortGridIssue(path, message)) continue;
+    if (!out[path] || out[path].severity !== "error") out[path] = { severity: "error", message };
+  }
   return out;
 }));
 
@@ -242,9 +260,16 @@ export function schedulePreview(delay = 250) {
     }
     const r = await runDesignPreview(JSON.parse(snapshot()) as Design);
     if (!r || !asyncState.isPreviewCurrent(ticket) || appMode() !== "design") return;
+    const hideFdtdPortGrid = isEmerge();
+    const fields = hideFdtdPortGrid
+      ? Object.fromEntries(Object.entries(r.fields).filter(([path, message]) =>
+        !isOpenEmsManualPortGridIssue(path, message)))
+      : r.fields;
+    const server = r.unavailable ? [previewUnavailableCheck(r.unavailable)] : r.checks;
+    const checksOut = hideFdtdPortGrid ? emergeFdtdPortGridFiltered(server) : server;
     batch(() => {
-      setServerErrors(r.fields);
-      setServerChecks(r.unavailable ? [previewUnavailableCheck(r.unavailable)] : r.checks);
+      setServerErrors(fields);
+      setServerChecks(checksOut);
       setContactPreview(r.contacts ? { ticket, contacts: r.contacts } : null);
     });
     setChecksTicket(r.unavailable ? null : ticket);

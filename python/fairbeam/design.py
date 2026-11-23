@@ -2880,6 +2880,11 @@ def build(d: dict, values: dict):
     sim = Simulation(f_min, f_max, boundaries=[b] * 6 if isinstance(b, str) else list(b),
                      end_criteria_db=float(s.get("end_criteria_db", -60)),
                      max_timesteps=60000 if s.get("max_timesteps") in (None, "auto") else int(s["max_timesteps"]))
+    cycles = s.get("pulse_cycles")
+    if isinstance(cycles, (int, float)) and not isinstance(cycles, bool):
+        if not cycles > 0:
+            raise DesignError("pulse_cycles must be > 0", "simulation.pulse_cycles")
+        sim.set_pulse_duration(float(cycles) / ((f_min + f_max) / 2))
 
     lo, hi = np.full(3, np.inf), np.full(3, -np.inf)
 

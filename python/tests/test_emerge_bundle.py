@@ -13,7 +13,7 @@ from fairbeam.emerge_bundle import (
 )
 from fairbeam.emerge_field_cut import FIELD_CUT_NOTE, to_field_plane
 from test_emerge_design import three_lumped_ports
-from test_emerge_planar import one_microstrip_port
+from test_emerge_planar import one_microstrip_port, simple_cpw_line
 
 NATIVE = "exp(+i omega t)"
 HAIRPIN = Path(__file__).resolve().parent / "fixtures" / "emerge_hairpin.design.json"
@@ -212,6 +212,28 @@ class EmergeNportBundle(unittest.TestCase):
         raw = base64.b64decode(plane["phasor"]["data"])
         self.assertEqual(len(raw), 2 * 3 * 3 * 2)
         self.assertTrue(bundle["experimental"]["field_cut"]["has_phasor"])
+        self.assertEqual(len(bundle["experimental"]["field_cuts"]), 1)
+        self.assertIn(FIELD_CUT_NOTE, bundle["experimental"]["limitations"])
+
+    def test_field_cuts_list_maps_to_multiple_field_planes(self):
+        design = json.loads(HAIRPIN.read_text(encoding="utf-8"))
+        cut_a = synthetic_field_cut(freq_hz=1.0e9, freq_choice="max_abs_s21")
+        cut_b = synthetic_field_cut(freq_hz=2.5e9, freq_choice="user")
+        bundle = nport_result_bundle(
+            design, synthetic_nport_result(
+                2, geometry_kind="planar_microstrip",
+                field_cuts=[cut_a, cut_b], field_cut=cut_a))
+        planes = bundle["field_planes"]
+        self.assertEqual(len(planes), 2)
+        self.assertEqual(planes[0]["f"], 1.0e9)
+        self.assertEqual(planes[1]["f"], 2.5e9)
+        self.assertEqual(planes[0]["experimental"]["freq_choice"], "max_abs_s21")
+        self.assertEqual(planes[1]["experimental"]["freq_choice"], "user")
+        summaries = bundle["experimental"]["field_cuts"]
+        self.assertEqual(len(summaries), 2)
+        self.assertEqual(summaries[1]["freq_hz"], 2.5e9)
+        self.assertEqual(summaries[1]["freq_choice"], "user")
+        self.assertEqual(bundle["experimental"]["field_cut"], summaries[0])
         self.assertIn(FIELD_CUT_NOTE, bundle["experimental"]["limitations"])
 
     def test_pack_driven_n1_and_n3(self):
@@ -271,6 +293,26 @@ class EmergeNportBundle(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsupported EMerge result schema"):
             export_emerge_bundle(design, {**result, "schema": "fairbeam.emerge-planar-result/1"})
 
+    def test_classic_cpw_export_skips_openems_planar_mesh_gate(self):
+        """openEMS preview of portmap-class CPW fails FDTD gap cells; FEM export must not."""
+        design = simple_cpw_line()
+        result = synthetic_nport_result(
+            2, geometry_kind="planar_microstrip",
+            settings=planar_settings(
+                accept_modal_ports=True, accept_lumped_terminals=False,
+                approximate_metals=True),
+            port_map=[
+                {"design_port_type": "cpw", "mapped_bc": "WavePort",
+                 "approximations": ["cpw → WavePort"], "accept_used": ["accept_modal_ports"]},
+                {"design_port_type": "cpw", "mapped_bc": "WavePort",
+                 "approximations": ["cpw → WavePort"], "accept_used": ["accept_modal_ports"]},
+            ],
+        )
+        bundle = export_emerge_bundle(design, result)
+        self.assertEqual(bundle["results"]["sparams"]["ports"], [1, 2])
+        self.assertEqual(bundle["experimental"]["geometry_kind"], "planar_microstrip")
+        self.assertEqual(bundle["mesh"]["tetrahedra"], 400)
+
 
 class EmergeFieldCut(unittest.TestCase):
     def test_to_field_plane_rejects_bad_schema(self):
@@ -280,6 +322,15 @@ class EmergeFieldCut(unittest.TestCase):
     def test_to_field_plane_preserves_complex_samples(self):
         plane = to_field_plane(synthetic_field_cut())
         self.assertAlmostEqual(plane["magnitude"][1][0], 2.06, places=2)
+
+    def test_to_field_plane_accepts_user_freq_choice(self):
+        plane = to_field_plane(synthetic_field_cut(freq_choice="user", freq_hz=1.5e9))
+        self.assertEqual(plane["experimental"]["freq_choice"], "user")
+        self.assertEqual(plane["f"], 1.5e9)
+
+    def test_to_field_plane_rejects_unknown_freq_choice(self):
+        with self.assertRaisesRegex(ValueError, "freq_choice"):
+            to_field_plane(synthetic_field_cut(freq_choice="nearest_solved"))
 
 
 if __name__ == "__main__":

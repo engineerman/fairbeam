@@ -1,16 +1,22 @@
-"""Stage A emerge_port_map.resolve outcomes — no emerge / numpy / admit wiring."""
+"""Stage A–C emerge_port_map.resolve outcomes — no emerge / numpy / admit wiring."""
 import ast
 import unittest
 from pathlib import Path
 
 from fairbeam.emerge_port_map import (
+    APPROX_COAX_TEM,
     APPROX_DRIVEN_LUMPED,
     APPROX_FIXTURE_WG,
+    APPROX_PLANAR_CPW,
+    APPROX_PLANAR_CPW_MODAL,
     APPROX_PLANAR_LUMPED,
     APPROX_PLANAR_MICROSTRIP,
+    APPROX_PLANAR_MICROSTRIP_MODAL,
     FIXTURE_WAVEGUIDE_SENTINEL,
+    MAPPED_COAX,
     MAPPED_LUMPED,
     MAPPED_RECT_WG,
+    MAPPED_WAVE,
     resolve,
 )
 
@@ -23,6 +29,12 @@ def driven_settings(**over):
 
 def planar_settings(**over):
     s = dict(accept_lumped_terminals=True)
+    s.update(over)
+    return s
+
+
+def coax_settings(**over):
+    s = dict(accept_coaxial_tem=True)
     s.update(over)
     return s
 
@@ -45,6 +57,18 @@ def waveguide(**over):
     return p
 
 
+def coaxial(**over):
+    p = dict(type="coaxial", number=1, mode="TEM", direction="z")
+    p.update(over)
+    return p
+
+
+def cpw(**over):
+    p = dict(type="cpw", number=1, direction="x", excitation_direction="y", gap="0.5")
+    p.update(over)
+    return p
+
+
 class ResolveOk(unittest.TestCase):
     def test_driven_lumped_with_accept(self):
         r = resolve(lumped(), path="driven", settings=driven_settings())
@@ -59,12 +83,36 @@ class ResolveOk(unittest.TestCase):
         self.assertTrue(r["ok"])
         self.assertEqual(r["mapped_bc"], MAPPED_LUMPED)
 
-    def test_planar_microstrip_with_accept(self):
+    def test_planar_microstrip_with_lumped_accept(self):
         r = resolve(microstrip(), path="planar", settings=planar_settings())
         self.assertTrue(r["ok"])
         self.assertEqual(r["mapped_bc"], MAPPED_LUMPED)
         self.assertEqual(r["accept_used"], ["accept_lumped_terminals"])
         self.assertEqual(r["approximations"], [APPROX_PLANAR_MICROSTRIP])
+        self.assertIsNone(r["error"])
+
+    def test_planar_microstrip_with_modal_accept(self):
+        r = resolve(
+            microstrip(),
+            path="planar",
+            settings=dict(accept_modal_ports=True),
+        )
+        self.assertTrue(r["ok"])
+        self.assertEqual(r["mapped_bc"], MAPPED_WAVE)
+        self.assertEqual(r["accept_used"], ["accept_modal_ports"])
+        self.assertEqual(r["approximations"], [APPROX_PLANAR_MICROSTRIP_MODAL])
+        self.assertIsNone(r["error"])
+
+    def test_planar_microstrip_modal_wins_over_lumped(self):
+        r = resolve(
+            microstrip(),
+            path="planar",
+            settings=dict(accept_modal_ports=True, accept_lumped_terminals=True),
+        )
+        self.assertTrue(r["ok"])
+        self.assertEqual(r["mapped_bc"], MAPPED_WAVE)
+        self.assertEqual(r["accept_used"], ["accept_modal_ports"])
+        self.assertEqual(r["approximations"], [APPROX_PLANAR_MICROSTRIP_MODAL])
         self.assertIsNone(r["error"])
 
     def test_planar_lumped_with_accept(self):
@@ -88,6 +136,42 @@ class ResolveOk(unittest.TestCase):
         self.assertTrue(r["ok"])
         self.assertEqual(r["mapped_bc"], MAPPED_RECT_WG)
 
+    def test_coax_with_accept(self):
+        r = resolve(coaxial(), path="coax", settings=coax_settings())
+        self.assertTrue(r["ok"])
+        self.assertEqual(r["mapped_bc"], MAPPED_COAX)
+        self.assertEqual(r["accept_used"], ["accept_coaxial_tem"])
+        self.assertEqual(r["approximations"], [APPROX_COAX_TEM])
+        self.assertIsNone(r["error"])
+
+    def test_planar_cpw_with_lumped_accept(self):
+        r = resolve(cpw(), path="planar", settings=planar_settings())
+        self.assertTrue(r["ok"])
+        self.assertEqual(r["mapped_bc"], MAPPED_LUMPED)
+        self.assertEqual(r["accept_used"], ["accept_lumped_terminals"])
+        self.assertEqual(r["approximations"], [APPROX_PLANAR_CPW])
+        self.assertIsNone(r["error"])
+
+    def test_planar_cpw_with_modal_accept(self):
+        r = resolve(cpw(), path="planar", settings=dict(accept_modal_ports=True))
+        self.assertTrue(r["ok"])
+        self.assertEqual(r["mapped_bc"], MAPPED_WAVE)
+        self.assertEqual(r["accept_used"], ["accept_modal_ports"])
+        self.assertEqual(r["approximations"], [APPROX_PLANAR_CPW_MODAL])
+        self.assertIsNone(r["error"])
+
+    def test_planar_cpw_modal_wins_over_lumped(self):
+        r = resolve(
+            cpw(),
+            path="planar",
+            settings=dict(accept_modal_ports=True, accept_lumped_terminals=True),
+        )
+        self.assertTrue(r["ok"])
+        self.assertEqual(r["mapped_bc"], MAPPED_WAVE)
+        self.assertEqual(r["accept_used"], ["accept_modal_ports"])
+        self.assertEqual(r["approximations"], [APPROX_PLANAR_CPW_MODAL])
+        self.assertIsNone(r["error"])
+
 
 class ResolveReject(unittest.TestCase):
     def test_driven_missing_accept(self):
@@ -97,24 +181,70 @@ class ResolveReject(unittest.TestCase):
         self.assertIn("finite-feed", r["error"])
 
     def test_planar_missing_accept(self):
-        r = resolve(microstrip(), path="planar", settings=planar_settings(accept_lumped_terminals=False))
+        r = resolve(microstrip(), path="planar", settings={})
         self.assertFalse(r["ok"])
+        self.assertIsNone(r["mapped_bc"])
+        self.assertIn("accept_modal_ports", r["error"])
         self.assertIn("accept_lumped_terminals", r["error"])
 
-    def test_cpw(self):
+    def test_planar_both_accepts_false(self):
+        r = resolve(
+            microstrip(),
+            path="planar",
+            settings=dict(accept_modal_ports=False, accept_lumped_terminals=False),
+        )
+        self.assertFalse(r["ok"])
+        self.assertIn("accept_modal_ports", r["error"])
+        self.assertIn("accept_lumped_terminals", r["error"])
+
+    def test_planar_cpw_missing_accept(self):
+        r = resolve(cpw(), path="planar", settings={})
+        self.assertFalse(r["ok"])
+        self.assertIsNone(r["mapped_bc"])
+        self.assertIn("accept_modal_ports", r["error"])
+        self.assertIn("accept_lumped_terminals", r["error"])
+        self.assertIn("CPW", r["error"])
+
+    def test_cpw_rejected_off_planar(self):
+        r = resolve(cpw(), path="driven", settings=driven_settings())
+        self.assertFalse(r["ok"])
+        self.assertIn("CPW", r["error"])
+
+        r = resolve(cpw(), path="fixture", settings={})
+        self.assertFalse(r["ok"])
+        self.assertIn("waveguide", r["error"].lower())
+
+        r = resolve(cpw(), path="coax", settings=coax_settings())
+        self.assertFalse(r["ok"])
+        self.assertIn("cpw", r["error"].lower())
+
+    def test_coaxial(self):
         for path, settings in (
             ("driven", driven_settings()),
             ("planar", planar_settings()),
             ("fixture", {}),
         ):
-            r = resolve({"type": "cpw", "number": 1}, path=path, settings=settings)
+            r = resolve(coaxial(), path=path, settings=settings)
             self.assertFalse(r["ok"], path)
-            self.assertIn("CPW", r["error"])
+            self.assertIn("coaxial", r["error"].lower())
 
-    def test_coaxial(self):
-        r = resolve({"type": "coaxial", "number": 1}, path="driven", settings=driven_settings())
+    def test_coax_missing_accept(self):
+        for settings in ({}, coax_settings(accept_coaxial_tem=False)):
+            r = resolve(coaxial(), path="coax", settings=settings)
+            self.assertFalse(r["ok"])
+            self.assertIn("accept_coaxial_tem", r["error"])
+
+    def test_coax_rejects_lumped(self):
+        r = resolve(lumped(), path="coax", settings=coax_settings())
         self.assertFalse(r["ok"])
-        self.assertIn("coaxial", r["error"].lower())
+
+    def test_coax_port_group(self):
+        port = coaxial(group={"connection": "parallel", "members": [
+            {"start": [0, 0, 0], "stop": [0, 0, 1], "direction": "z", "polarity": "+"},
+        ]})
+        r = resolve(port, path="coax", settings=coax_settings())
+        self.assertFalse(r["ok"])
+        self.assertIn("group", r["error"].lower())
 
     def test_port_group(self):
         port = lumped(group={"connection": "parallel", "members": [

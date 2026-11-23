@@ -13,13 +13,14 @@ repair Fairbeam; reinstalling the EMerge environment alone does not repair the m
 **Level A** runs one fixed, lossless, air-filled WR-90 rectangular waveguide with two waveguide
 ports (no user Design). **Level B3** is the Design Run path: one option
 **EMerge FEM · Experimental** (`analysis: "emerge_nport"`, health `emerge` ≥ 3) admits **1…8**
-ports of one type under today’s bounded geometry recipes — driven/lumped (Level B class) or
-planar microstrip/Discrete (Level B2 class) — and exports a full experimental N×N S-matrix
+ports of one type under today’s bounded geometry recipes — driven/lumped (Level B class),
+planar microstrip/Discrete/classic CPW (Level B2 class), or all-coaxial TEM (port-map Stage B,
+`geometry_kind: "coaxial_tem"`) — and exports a full experimental N×N S-matrix
 (`fairbeam.emerge-result/2`). Geometry remains bounded (no multilayer, vias, curves, or silent
-coercion). The `design` and `planar` CLI subcommands still target those recipes. Historical
-Level B / B2 sections below keep the earlier one-port / two-port measurements and qualification
-notes. All Design paths are opt-in experimental; results are `results_exported`, never
-`results_validated`.
+coercion). The `design` and `planar` CLI subcommands still target the driven/planar recipes.
+Historical Level B / B2 sections below keep the earlier one-port / two-port measurements and
+qualification notes. All Design paths are opt-in experimental; results are `results_exported`,
+never `results_validated`.
 
 ## Port mapping (Stage A)
 
@@ -27,17 +28,102 @@ Experimental openEMS-shaped Design ports are mapped to EMerge boundary condition
 `fairbeam.emerge_port_map` (`resolve`). Policy source:
 [docs/agent/specs/2026-11-05-emerge-openems-port-mapping-design.md](agent/specs/2026-11-05-emerge-openems-port-mapping-design.md).
 Stage A consolidates Level B lumped → `LumpedPort`, Level B2 microstrip → lumped
-strip-to-ground `LumpedPort`, and Level A fixture `RectangularWaveguide` maps into that matrix
-without Design waveguide admit, coax, or modal planar ports. Admission still rejects unsupported
+strip-to-ground `LumpedPort` (default planar accept), and Level A fixture `RectangularWaveguide`
+maps into that matrix without Design waveguide admit. Admission still rejects unsupported
 types; approximate maps keep the existing `accept_*` gates. Provenance
 (`design_port_type`, `mapped_bc`, `approximations`, `accept_used`) is recorded on the case and on
 experimental results / bundles. On the planar path, homogeneous Discrete/`lumped` ports also map to
 `LumpedPort` behind `accept_finite_feed` (same board-edge plate geometry as microstrip terminals;
 all ports must share one type—mixed Discrete and microstrip is rejected). The unified Run dialog
-preview and accept checkboxes follow the classified path and draft port types. Deferred follow-ons
-(Stage B coax, Design waveguide, Stage C modal):
-[docs/agent/BACKLOG-emerge-port-map.md](agent/BACKLOG-emerge-port-map.md). Level B3 superseded the
-backlog item that auto-suggested antenna vs planar Run options.
+preview and accept checkboxes follow the classified path and draft port types. Stage B coax and
+Stage C optional microstrip / classic-CPW `WavePort` are documented below. Deferred follow-ons
+(Design waveguide, grounded CPW, richer geometry):
+[docs/agent/BACKLOG-emerge-port-map.md](agent/BACKLOG-emerge-port-map.md).
+Level B3 superseded the backlog item that auto-suggested antenna vs planar Run options.
+
+## Port mapping (Stage B — coaxial → CoaxPort)
+
+When every Design port is `coaxial`, the unified Run classifier admits
+`geometry_kind: "coaxial_tem"` (worker `kind: "coax"`). `emerge_port_map.resolve` on path
+`"coax"` maps each port to analytic EMerge `CoaxPort` TEM only when
+`accept_coaxial_tem: true`. The Run dialog shows that accept checkbox and a port-map preview
+line (`Port N · coaxial → CoaxPort`).
+
+**Limits (honest):**
+- Axis-aligned centerline (`direction` x|y|z); `0 < r_i < r_o` with Design shield outer `r_os`
+  as already checked for openEMS coax.
+- Constant εr fill (air or nondispersive dielectric). Dispersive fill, invalid radii, missing
+  accept, mixed port types, Design waveguide, TM/non-TEM coax modes, and port groups are
+  rejected — never silently remapped.
+- Geometry MVP synthesises inner PEC cylinder, outer shield tube, dielectric, and a padded
+  domain from the ports; Design `parts` are not admitted on this path.
+- Homogeneous **1…8** coaxial ports; full experimental N×N S via the same result schema
+  (`fairbeam.emerge-result/2`). Status stays `results_exported` only.
+- No openEMS S-parameter agreement claim; no invented native S-numbers in this section.
+
+Coax mesh quality follow-up: [docs/agent/BACKLOG-emerge-port-map.md](agent/BACKLOG-emerge-port-map.md) (Finer coax mesh & excitation).
+
+## Port mapping (Stage C — microstrip → WavePort)
+
+When every Design port is `microstrip`, the planar path may map each port to EMerge `WavePort`
+at the same board-edge plate used for lumped terminals, only when
+`accept_modal_ports: true`. The Run dialog shows a separate modal accept checkbox beside the
+existing lumped-terminal accept. At least one of the two accepts is required. If both are set,
+**modal wins** (`mapped_bc: "WavePort"`, `accept_used: ["accept_modal_ports"]`). Preview lines
+follow the same rule. WavePort setup failure is a hard error — there is no silent fall back to
+`LumpedPort`. Prefer `WavePort`; do not ship `ModalPort` without a documented trial and human
+go-ahead.
+
+**Limits (honest):**
+- Homogeneous all-`microstrip` ports. Classic CPW uses the same accept flags on a separate
+  geometry class (below).
+- Feed/measurement shifts remain unused (same plate class as the lumped map).
+- Default accept path when only lumped is checked stays strip-to-ground `LumpedPort`.
+- No openEMS S-parameter agreement claim; no invented Stage C S-numbers here.
+- Measured 2026-11-06 on managed EMerge **3.0.0b12** (Windows Install EMerge): hairpin fixture
+  admitted with `accept_modal_ports` only, `mesh_only`, shielded coarse, `approximate_metals`
+  — worker attached `WavePort` to both terminal faces and exported
+  `fairbeam.emerge-mesh-result/1` (**19435** nodes / **111428** tets, mesh wall **~3.0 s**).
+  That run did not sweep S-parameters.
+
+## Port mapping (Stage C — classic CPW → WavePort)
+
+When every Design port is `cpw`, the planar path admits **classic CPW** only: one dielectric
+substrate box, metal sheets on the substrate **top** (center strip plus ≥2 coplanar ground
+sheets), and no substrate-bottom ground / PEC-z− sheet. Grounded CPW (bottom ground present) is
+**rejected** with a clear error. Ports map to EMerge `WavePort` when `accept_modal_ports: true`,
+or to a board-edge gap-style `LumpedPort` plate (`ground_mode: "coplanar"`) when only
+`accept_lumped_terminals: true`. At least one accept is required; if both are set, **modal wins**.
+The terminal face is the locked CPW aperture: board-edge plate, transverse span = center-strip
+width widened by `2*gap` each side, vertical span = substrate thickness plus
+`CPW_AIR_APERTURE_FRACTION` of `air_height_mm` above the metal plane (clamped to the air box;
+currently **1.0**). Microstrip / Discrete terminals stay substrate-tall. WavePort setup failure
+is a hard error — no silent fall back to `LumpedPort`. Classic CPW WavePorts call
+`set_terminals(strip, ground)` so EMerge can compute PV Z0 when the face has more than two PEC
+islands. The solver process does **not** attach PEC on the substrate bottom for classic CPW
+(that would invent a backside ground). Prefer `WavePort`; do not ship `ModalPort` without a
+documented trial and human go-ahead.
+
+**Limits (honest):**
+- Homogeneous all-`cpw` only; mixed microstrip/lumped/coax stays rejected.
+- GCPW / bottom-ground CPW not admitted yet.
+- Lumped CPW uses the same coplanar aperture plate (gap-style), not microstrip strip-to-ground;
+  worker still drives `LumpedPort` with `direction=ZAX` (poor on coplanar — see measured note).
+- Feed/measurement shifts unused; no openEMS S-parameter agreement claim.
+- **O17 BLOCKED (2026-11-07):** air aperture + open enclosure + `set_terminals` do not yield a
+  plausible broadband through-line on `portmap_cpw_line`. Human rejected WavePort S (band-low
+  still highly reflective). ModalPort not started. Microstrip planar sanity (hairpin / portmap
+  line) remains healthy on the same code — CPW-specific, not a general planar break.
+- Measured 2026-11-07 on managed EMerge **3.0.0b12** (Windows Install EMerge), local
+  `portmap_cpw_line`, shielded coarse unless noted:
+  - Early admit (substrate-only face): `mesh_only` **5453** nodes / **27377** tets (~1.0 s);
+    3-pt S exported (~8.1 s) before physics review.
+  - After air aperture (full air column): human job `20261107-013032-d9b825` — \|S11\| min≈0.17
+    @~3.09 GHz / max≈0.90; \|S21\| max≈0.93 @~3.09 GHz but **~0.43 (−7.4 dB) @1.2 GHz** (FAIL
+    vs through-line expectation). Open pad-10 run similar shape, slightly better mid-band.
+  - With `set_terminals`: PV Z0 ~70–74 Ω logged; S unchanged vs aperture-only.
+  - Lumped-only accept: \|S21\| ≲ 0.003 (~−50…−64 dB) — worse than WavePort.
+  - No openEMS S-agreement claim.
 
 ## Run
 
@@ -123,9 +209,10 @@ separate research files; Design runs also write a shared Results bundle (S11 / Z
 In the app, open **Run**, choose **EMerge FEM · Experimental** (shown when health `emerge` ≥ 3),
 set the band and resolution, accept the approximates required by the draft ports, and submit.
 `backend` is `"emerge"` and `analysis` is `"emerge_nport"`. The server classifies the Design into
-`geometry_kind` `driven_lumped` or `planar_microstrip` (or rejects with the failed class checks).
-Port count may be **1…8** (`N_MAX`); ports must be contiguous `1…N` and all the same allowed type
-for that class. Shared Results get a complete N×N experimental `sparams` matrix
+`geometry_kind` `driven_lumped`, `planar_microstrip`, or `coaxial_tem` (or rejects with the
+failed class checks). Port count may be **1…8** (`N_MAX`); ports must be contiguous `1…N` and
+all the same allowed type for that class. All-coaxial drafts also require `accept_coaxial_tem`
+(see Stage B above). Shared Results get a complete N×N experimental `sparams` matrix
 (`fairbeam.emerge-result/2`). openEMS remains available in the same dialog. The historical Level B
 and B2 subsections below document the geometry recipes and recorded native numbers; they are not
 separate Run brands anymore.
@@ -182,16 +269,19 @@ stay experimental exports.
 ## Level B2: planar microstrip (hairpin class)
 
 Admission (`emerge_planar.admit`) accepts **1…8** ports numbered contiguously `1…N`, either all
-`microstrip` (propagation in `x`/`y`, excitation `z`, real positive `reference_ohm`) or all
-Discrete/`lumped`, one dielectric substrate box, ground as a metal z-flat box at the substrate
+`microstrip` (propagation in `x`/`y`, excitation `z`, real positive `reference_ohm`), all classic
+`cpw` (coplanar top grounds; see Stage C CPW above), or all Discrete/`lumped`. Microstrip and
+Discrete require one dielectric substrate box, ground as a metal z-flat box at the substrate
 bottom or domain-floor PEC, and metal traces that are z-normal `polygon`s (or z-flat boxes) on the
 substrate top. It rejects mixed port types, other port types, `N > 8`, resistors, lumped elements,
-transforms, cuts, voids, multilayer/via/CPW geometry, metal at other elevations, and unknown
-settings. Trace metals with positive `conductivity` use EMerge `ThinConductor` (σ and sheet
+transforms, cuts, voids, multilayer/via geometry, grounded CPW, metal at other elevations, and
+unknown settings. Trace metals with positive `conductivity` use EMerge `ThinConductor` (σ and sheet
 thickness); empty conductivity stays PEC. Optional `approximate_metals` forces PEC traces for that
-run. The substrate-bottom ground remains PEC. Each microstrip port becomes a lumped
-strip-to-ground terminal at the board-edge face only when the user sets
-`accept_lumped_terminals: true`; each Discrete port uses the same board-edge plate under
+run. For microstrip/Discrete the substrate-bottom ground remains PEC; classic CPW skips that floor
+PEC. Each microstrip port becomes a lumped strip-to-ground terminal at the board-edge face when
+the user sets `accept_lumped_terminals: true`, or an EMerge `WavePort` on that same face when
+`accept_modal_ports: true` (Stage C; modal wins if both accepts are set). Classic CPW uses the
+same accept pair with a coplanar aperture plate. Each Discrete port uses the board-edge plate under
 `accept_finite_feed: true`. `feed_shift`, `measurement_shift` and `termination` are unused for that
 run. The saved Design and openEMS materials stay unchanged.
 
@@ -255,6 +345,35 @@ peak-frequency shift is also **0**, with open ~0.12 dB lower insertion loss at t
 stay experimental exports (`results_exported` only). Port model (lumped strip-to-ground at the
 board edge) and enclosure choice are expected to move magnitudes relative to a microstrip modal
 port with feed/measurement planes.
+
+## Field planes (multi-frequency post-sample)
+
+After a successful EMerge Design solve, the worker samples E-field cutplanes with
+`MWField.cutplane` (no second FEM). Default: one auto frequency (`max_abs_s21`, else
+`min_abs_s11`, else band center). Optional Run setting `field_cut_frequencies_hz` (≤ **4**
+positive Hz) snaps each request to the nearest solved sweep frequency, dedupes, and exports
+ascending maps into `field_cuts` / shared Results `field_planes`. Empty list = auto one.
+Play is phase animation on the selected harmonic map, not an FDTD time movie.
+
+Measured 2026-11-07 on managed EMerge **3.0.0b12** (Windows), classic-CPW port-map line case
+(shielded coarse, 1.2–3.6 GHz × 15 points, `accept_lumped_terminals`), CLI `planar
+--experimental` after restarting `fairbeam serve`:
+
+| Run | Requested Hz | `field_planes` | Worker wall |
+| --- | --- | --- | --- |
+| Auto (no list) | — | 1 @ 3.6 GHz (`max_abs_s21`) | **27.4 s** |
+| User list | 2.4 / 3.5 / 3.0 GHz | 3 @ 2.4 / ≈2.914 / ≈3.429 GHz (`user`) | **27.2 s** |
+
+Extra maps did not multiply solve time (same mesh+sweep class); cost is post-sample + larger
+JSON. Evidence dirs: `.sim/o4-smoke/auto/run`, `.sim/o4-smoke/multi/run`.
+
+## Results UI honesty (convergence)
+
+EMerge exports always keep `precision_converged: false` (no mesh-convergence certificate). The
+shared Results header does **not** reuse openEMS FDTD “Not converged” (timestep / field-energy
+stop): a finished experimental export shows **Mesh not certified** instead. Run-quality
+timestep-limit badges are skipped for EMerge bundles. Research still uses `emergeExp.qa`
+(“Mesh, feed and boundary convergence have not been established for this run.”).
 
 ## License and distribution
 

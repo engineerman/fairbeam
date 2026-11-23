@@ -27,7 +27,7 @@ import FeedCreationDialog from "./FeedCreationDialog";
 import BackupNotice from "./BackupNotice";
 import RunDialog from "./RunDialog";
 import { openResearch } from "../runner/researchState";
-import { activeEngineLabel, isEmerge, setActiveEngine, activeEngine, resolveRunSolver } from "./activeEngine";
+import { activeEngineLabel, isEmerge, setActiveEngine, activeEngine, resolveRunSolver, type ActiveEngine } from "./activeEngine";
 import OptimizeDialog, { openDesignerOptimize } from "./OptimizeDialog";
 const SweepDialog = lazy(() => import("./SweepDialog"));
 const openDesignerSweep = () => import("./SweepDialog").then((m) => m.openDesignerSweep());
@@ -37,6 +37,7 @@ import { setSidePanelCollapsed, toggleBottomDock, toggleLeftTree, toggleSidePane
 import RunDock from "./RunDock";
 import { meshView, setMeshView, toggleMeshView } from "./MeshView";
 import { hasEmergeFemOverlay } from "./emergeFemMesh";
+import { emergeAdmitResolution, emergeSettings } from "./emergeSettings";
 import PanelBoundary from "../components/PanelBoundary";
 import { useModal } from "../lib/dialog";
 const [simSettingsPending, setSimSettingsPending] = createSignal(true);
@@ -160,7 +161,8 @@ function RButton(props: { icon: typeof Box; label: string; title?: string; actio
 /** A ribbon group. When the ribbon runs out of room (see fitRibbon) its buttons first lose their
  *  labels (data-size="icons"; the label stays as tooltip and accessible name) and, only when that
  *  is not enough, the group folds into one drop-down button (data-collapsed). */
-function RGroup(props: { label: string; icon: typeof Box; class?: string; children: JSX.Element; /** tooltip of the group name (an abbreviation explained) */ hint?: string }) {
+function RGroup(props: { label: string; icon: typeof Box; class?: string; children: JSX.Element; /** tooltip of the group name (an abbreviation explained) */ hint?: string;
+  /** Keep the folded group chrome (fitRibbon) so layout does not jump when fewer commands apply (e.g. EMerge Solver). */ pinCollapsed?: boolean }) {
   const [open, setOpen] = createSignal(false);
   let host!: HTMLDivElement;
   let toggle!: HTMLButtonElement;
@@ -170,7 +172,8 @@ function RGroup(props: { label: string; icon: typeof Box; class?: string; childr
     onCleanup(() => document.removeEventListener("pointerdown", outside));
   });
   return (
-    <div ref={host} class={`rb-group ${props.class ?? ""}`} role="group" aria-label={props.label} data-open={open() ? "" : undefined}
+    <div ref={host} class={`rb-group ${props.class ?? ""}`} role="group" aria-label={props.label}
+      data-pin-collapsed={props.pinCollapsed ? "" : undefined} data-open={open() ? "" : undefined}
       onFocusOut={(e) => { const next = e.relatedTarget as Node | null; if (open() && (!next || !host.contains(next))) setOpen(false); }}
       onKeyDown={(e) => { if (e.key === "Escape" && open() && !e.defaultPrevented) { e.stopPropagation(); setOpen(false); toggle.focus(); } }}>
       <button ref={toggle} type="button" class="rb-btn rb-group-toggle" aria-expanded={open()} title={props.hint ?? props.label} onClick={() => setOpen(!open())}>
@@ -215,6 +218,9 @@ function fitRibbon(shell: HTMLElement) {
   // cut to a few letters (its text is also the tooltip of the disabled result buttons).
   const notes = [...toolbar.querySelectorAll<HTMLElement>(":scope > .rb-result-note")];
   const done = () => {
+    for (const g of groups) {
+      if (g.dataset.pinCollapsed !== undefined) g.dataset.collapsed = "";
+    }
     shell.dataset.fit = fits() ? "row" : "scroll";
     for (const g of groups) {
       if (g.dataset.collapsed !== undefined) g.dataset.align = g.offsetLeft + 300 > room ? "end" : "start";
@@ -433,6 +439,74 @@ function BooleanMenuButton() {
   );
 }
 
+/** Same Run ribbon control as before (Play + engine name), with a narrow chevron to swap engine in two clicks. */
+function RunEngineSplitButton(props: { onRun: () => void; runTitle: string }) {
+  const [menuOpen, setMenuOpenRaw] = createSignal(false);
+  const setMenuOpen = (open: boolean) => setMenuOpenRaw(open);
+  let root!: HTMLDivElement;
+  let menuBtn!: HTMLButtonElement;
+  let menu: HTMLDivElement | undefined;
+  const close = (restoreFocus = false) => { setMenuOpen(false); if (restoreFocus) menuBtn?.focus(); };
+  onMount(() => {
+    const outside = (e: PointerEvent) => { if (menuOpen() && !root.contains(e.target as Node)) close(); };
+    const reposition = () => { if (menuOpen()) close(); };
+    document.addEventListener("pointerdown", outside);
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    onCleanup(() => {
+      document.removeEventListener("pointerdown", outside);
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    });
+  });
+  createEffect(() => {
+    if (!menuOpen()) return;
+    queueMicrotask(() => {
+      if (!menuOpen()) return;
+      const target = menu?.querySelector<HTMLButtonElement>("button[role=menuitem]");
+      (target ?? menu)?.focus();
+    });
+  });
+  const primary = () => (isEmerge() ? "rb-primary-emerge" : "rb-primary");
+  const otherEngine = (): ActiveEngine => (activeEngine() === "emerge" ? "openems" : "emerge");
+  const otherEngineTitle = () => (otherEngine() === "emerge" ? t("ribbon.sim.engine.emergeTitle") : t("ribbon.sim.engine.openemsTitle"));
+  const otherEngineLabel = () => (otherEngine() === "emerge" ? t("ribbon.sim.engine.emerge") : t("ribbon.sim.engine.openems"));
+  const pickOther = () => { setActiveEngine(otherEngine()); close(true); };
+  const runLabel = () => t("ribbon.sim.runEngine", { engine: activeEngineLabel() });
+  return (
+    <div class="rb-run-split rb-wcs" classList={{ [primary()]: true }} ref={root}>
+      <button type="button" class="rb-run-split-main" data-action="run-design"
+        title={props.runTitle} aria-keyshortcuts={SHORTCUTS.run.key} aria-label={runLabel()}
+        onClick={props.onRun}>
+        <Play size={16} aria-hidden="true" />
+        <span>{runLabel()}</span>
+      </button>
+      <button ref={menuBtn} type="button" class="rb-run-split-chevron"
+        aria-haspopup="menu" aria-expanded={menuOpen()} aria-controls="rb-run-engine-menu"
+        title={t("ribbon.sim.engineMenu")} aria-label={t("ribbon.sim.engineMenu")}
+        onClick={() => setMenuOpen(!menuOpen())}>
+        <ChevronDown size={11} aria-hidden="true" />
+      </button>
+      <Show when={menuOpen()}>
+        <div id="rb-run-engine-menu" ref={menu} class="rb-pop rb-run-engine-pop" role="menu" tabIndex={-1} aria-label={t("ribbon.sim.engineMenu")}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(true); return; }
+            if (e.key === "Tab") { close(); return; }
+            if (e.key === "Enter" || e.key === " ") { const item = menu?.querySelector<HTMLButtonElement>("button[role=menuitem]"); if (item && document.activeElement === item) { e.preventDefault(); pickOther(); } }
+          }}>
+          <button type="button" class="rb-btn rb-run-engine-pick" role="menuitem" title={otherEngineTitle()}
+            onClick={pickOther}>
+            <Show when={otherEngine() === "emerge"} fallback={<Cpu size={16} aria-hidden="true" />}>
+              <Pyramid size={16} aria-hidden="true" />
+            </Show>
+            <span>{otherEngineLabel()}</span>
+          </button>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
 function ToolsGroup() {
   return (
         <RGroup label={t("ribbon.tools.group")} icon={Shapes}>
@@ -521,7 +595,7 @@ export function Ribbon() {
     void document.fonts?.ready.then(refit);
     onCleanup(() => { observer.disconnect(); content.disconnect(); ribbonHeight.disconnect(); workspace?.style.removeProperty("--dw-ribbon-h"); cancelAnimationFrame(fitFrame); window.removeEventListener("fairbeam:reset-layout", resetRibbon); });
   });
-  createEffect(on([ribbonTab, ribbonMinimized, simSettingsOpen, saving], () => { if (shell) { fitRibbon(shell); refit(); } }));
+  createEffect(on([ribbonTab, ribbonMinimized, simSettingsOpen, saving, activeEngine], () => { if (shell) { fitRibbon(shell); refit(); } }));
   // the Simulation ribbon's mesh readout: after a failed preview it names the numbers as the last
   // successful preview's (or unknown), never as the mesh of the current draft
   const stats = () => meshFreshness() === "unknown" ? null : draftMeshStats();
@@ -547,6 +621,13 @@ export function Ribbon() {
     return values.slice(0, 6).join(", ") || t("ribbon.sim.unset");
   };
   const valueText = (v: unknown) => Array.isArray(v) ? v.map(String).join(", ") : String(v ?? t("ribbon.sim.default"));
+  /** Session FEM mesh resolution readout (ribbon layout parity with openEMS Cells / λ). */
+  const emergeMeshRibbonReadout = () => {
+    const adm = emergeAdmitResolution(emergeSettings());
+    if (adm === "coarse") return t("emergeSim.coarse");
+    if (adm === "fine") return t("emergeSim.fine");
+    return t("ribbon.sim.emergeResolutionCustom", { value: String(adm) });
+  };
   const issueTitle = (title: string, issue: "error" | "warning" | null) => issue ? t(issue === "error" ? "ribbon.issue.error" : "ribbon.issue.warning", { title }) : title;
   const issueFor = (...paths: string[]): "error" | "warning" | null => paths.some((p) => issueUnder(p) === "error") ? "error" : paths.some((p) => issueUnder(p) === "warning") ? "warning" : null;
   const onTabKeyDown: JSX.EventHandlerUnion<HTMLDivElement, KeyboardEvent> = (e) => {
@@ -696,30 +777,37 @@ export function Ribbon() {
             onClick={() => openSimSettings("bounds")} />
         </RGroup>
         <RGroup label={t("ribbon.sim.mesh")} icon={ScanLine}>
-          {/* the Classic mesh's density as a field; the other modes say what the mesh is, so the
-              block is never empty (in the folded group's drop-down too) */}
+          {/* Same inline block width for openEMS and EMerge so fitRibbon density does not jump on engine switch. */}
           <div class="rb-mesh-fields rb-extra">
             <Show when={!simSettingsOpen()}>
-              <Switch>
-                <Match when={draft.mesh.mode === "auto" || !draft.mesh.mode}>
-                  <RibbonField label={t("ribbon.sim.cellsPerWavelength")} value={draft.mesh.cells_per_wavelength ?? 20} path="mesh.cells_per_wavelength" onChange={(v) => edit((d) => { d.mesh.cells_per_wavelength = v; }, "cpw")} />
-                </Match>
-                <Match when={draft.mesh.mode === "manual"}>
-                  <span class="rb-info rb-mesh-line" title={t("sim.mesh.manualNote")}>{t("ribbon.sim.meshManualLines", {
-                    x: draft.mesh.lines?.x?.length ?? 0, y: draft.mesh.lines?.y?.length ?? 0, z: draft.mesh.lines?.z?.length ?? 0,
-                  })}</span>
-                </Match>
-                <Match when={draft.mesh.mode === "design"}>
-                  <span class="rb-info rb-mesh-line">{draft.mesh.overrides?.cells_per_wavelength !== undefined && draft.mesh.overrides?.cells_per_wavelength !== null
-                    ? t("ribbon.sim.meshAutoCpw", { cpw: valueText(draft.mesh.overrides.cells_per_wavelength) })
-                    : t("sim.mesh.mode.design")}</span>
-                </Match>
-              </Switch>
+              <Show when={isEmerge()} fallback={
+                <Switch>
+                  <Match when={draft.mesh.mode === "auto" || !draft.mesh.mode}>
+                    <RibbonField label={t("ribbon.sim.cellsPerWavelength")} value={draft.mesh.cells_per_wavelength ?? 20} path="mesh.cells_per_wavelength" onChange={(v) => edit((d) => { d.mesh.cells_per_wavelength = v; }, "cpw")} />
+                  </Match>
+                  <Match when={draft.mesh.mode === "manual"}>
+                    <span class="rb-info rb-mesh-line" title={t("sim.mesh.manualNote")}>{t("ribbon.sim.meshManualLines", {
+                      x: draft.mesh.lines?.x?.length ?? 0, y: draft.mesh.lines?.y?.length ?? 0, z: draft.mesh.lines?.z?.length ?? 0,
+                    })}</span>
+                  </Match>
+                  <Match when={draft.mesh.mode === "design"}>
+                    <span class="rb-info rb-mesh-line">{draft.mesh.overrides?.cells_per_wavelength !== undefined && draft.mesh.overrides?.cells_per_wavelength !== null
+                      ? t("ribbon.sim.meshAutoCpw", { cpw: valueText(draft.mesh.overrides.cells_per_wavelength) })
+                      : t("sim.mesh.mode.design")}</span>
+                  </Match>
+                </Switch>
+              }>
+                <span class="rb-info rb-mesh-line mono" title={t("ribbon.sim.meshSettingsEmerge")}>
+                  {t("ribbon.sim.emergeResolutionRibbon", { value: emergeMeshRibbonReadout() })}
+                </span>
+              </Show>
             </Show>
           </div>
           <RButton icon={SlidersVertical} label={t("ribbon.sim.meshSettings")}
-              issue={issueFor("mesh")}
-              title={issueTitle(t("ribbon.sim.meshSettingsTitle", { cpw: valueText(draft.mesh.cells_per_wavelength), mesh: meshReadout() }), issueFor("mesh"))}
+              issue={isEmerge() ? null : issueFor("mesh")}
+              title={isEmerge()
+                ? t("ribbon.sim.meshSettingsEmerge")
+                : issueTitle(t("ribbon.sim.meshSettingsTitle", { cpw: valueText(draft.mesh.cells_per_wavelength), mesh: meshReadout() }), issueFor("mesh"))}
               onClick={() => openSimSettings("mesh")} />
           <RButton icon={ChartNoAxesCombined} label={t("ribbon.sim.convergence")}
               disabled={isEmerge()}
@@ -761,11 +849,8 @@ export function Ribbon() {
             title={isEmerge() ? t("ribbon.sim.fieldPlaneEmergeDisabled") : issueTitle(fieldPlaneCount() ? t("ribbon.sim.fieldPlanesTitle", { count: fieldPlaneCount() }) : t("ribbon.sim.fieldPlaneAdd"), issueFor("monitors.field_planes"))}
             onClick={() => openSimSettings("fieldplanes")} />
         </RGroup>
-        <RGroup label={t("ribbon.sim.solver")} icon={Settings2}>
-          <RButton icon={Cpu} label={t("ribbon.sim.engine.openems")} pressed={activeEngine() === "openems"}
-            title={t("ribbon.sim.engine.openemsTitle")} action="engine-openems" onClick={() => setActiveEngine("openems")} />
-          <RButton icon={Pyramid} label={t("ribbon.sim.engine.emerge")} pressed={activeEngine() === "emerge"}
-            title={t("ribbon.sim.engine.emergeTitle")} action="engine-emerge" onClick={() => setActiveEngine("emerge")} />
+        <RGroup label={t("ribbon.sim.solver")} icon={Settings2} class="rb-solver-group" pinCollapsed={isEmerge()}
+          hint={isEmerge() ? t("ribbon.sim.solverEmergeFolded") : undefined}>
           <RButton icon={Waves} label={t("research.title")} title={t("research.description")} action="research-solvers" onClick={() => openResearch()} />
           {/* Capability matrix: hide FDTD solver limits under EMerge (not disable-in-place). */}
           <Show when={!isEmerge()}>
@@ -776,8 +861,8 @@ export function Ribbon() {
           </Show>
         </RGroup>
         <RGroup label={t("ribbon.sim.run")} icon={Play}>
-          <RButton icon={Play} label={t("ribbon.sim.runEngine", { engine: activeEngineLabel() })} primary emergeAccent={isEmerge()}
-            title={`${t(errorCount() ? "ribbon.sim.runFixErrors" : "ribbon.sim.runTitle")} (${SHORTCUTS.run.key})`} onClick={runDesign} />
+          <RunEngineSplitButton onRun={runDesign}
+            runTitle={`${t(errorCount() ? "ribbon.sim.runFixErrors" : "ribbon.sim.runTitle")} (${SHORTCUTS.run.key})`} />
         </RGroup>
       </Show>
       <Show when={tab.key === "optimize"}>

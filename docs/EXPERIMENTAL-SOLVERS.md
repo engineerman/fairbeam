@@ -1,6 +1,6 @@
 # Experimental solvers
 
-openEMS is the default solver. **Elmer FEM — Experimental eigenmodes**, **Elmer FEM · Experimental antenna**, the fixed **EMerge** WR-90 waveguide fixture, and **EMerge FEM · Experimental** (unified N-port Design path: driven/lumped or planar microstrip recipes, up to 8 ports) are opt-in research paths with narrower geometry and result support. Installing a backend or completing a run does not establish numerical accuracy for your design.
+openEMS is the default solver. **Elmer FEM — Experimental eigenmodes**, **Elmer FEM · Experimental antenna**, the fixed **EMerge** WR-90 waveguide fixture, and **EMerge FEM · Experimental** (unified N-port Design path: driven/lumped, planar microstrip, or all-coaxial TEM recipes, up to 8 ports) are opt-in research paths with narrower geometry and result support. Installing a backend or completing a run does not establish numerical accuracy for your design.
 
 ## Active engine (Simulation ribbon)
 
@@ -8,7 +8,7 @@ In the desktop designer, **Simulation › Solver** lets you pick **openEMS** or 
 
 Elmer and the fixed EMerge waveguide fixture stay under **Experimental solvers** / the Run dialog’s longer option list — they are not a third chrome accent in this picker. **Optimize** (Sweep / Optimizer) stays disabled while EMerge is active; that path is deferred. Mesh view under EMerge draws the experimental FEM **exterior surface** wireframe after Generate mesh (or an EMerge result that exported surface edges). It never shows the openEMS FDTD grid as if it were the tetrahedral mesh.
 
-See the agent plan [`docs/agent/plans/2026-11-04-emerge-solver-scoped-ui.md`](agent/plans/2026-11-04-emerge-solver-scoped-ui.md) for the capability matrix and remaining follow-ups.
+Remaining EMerge follow-ups: [docs/agent/BACKLOG-emerge-port-map.md](agent/BACKLOG-emerge-port-map.md).
 
 ## Setup in the desktop app
 
@@ -33,13 +33,17 @@ See [the EMerge experiment](EMERGE-EXPERIMENT.md) for the fixture definition, ac
 ## EMerge FEM · Experimental (unified N-port)
 
 When the run server reports health `emerge` ≥ 3, **Run** offers **EMerge FEM · Experimental** after
-the Elmer options. One entry covers both Design recipes: driven/lumped (axis-aligned dielectric
-boxes and metal sheets) and planar microstrip/Discrete (single-layer board with bottom ground and
-z-normal copper on the top). Port count may be **1…8** of one homogeneous type; mixed types,
-multilayer, vias, CPW, curves and unsupported geometry are rejected. Approximate maps keep the
-existing `accept_*` gates. Enclosure / air / padding appear when the Design classifies as planar.
-No far field and no gain certificate; status is `results_exported`. Shared Results show the
-complete N×N experimental S matrix next to (never instead of) openEMS.
+the Elmer options. One entry covers Design recipes: driven/lumped (axis-aligned dielectric
+boxes and metal sheets), planar microstrip/Discrete (single-layer board with bottom ground and
+z-normal copper on the top), classic CPW (coplanar top grounds; `WavePort` / lumped gap plate
+behind `accept_modal_ports` / `accept_lumped_terminals`), and all-coaxial TEM (analytic
+`CoaxPort`, constant εr fill, explicit `accept_coaxial_tem`). Port count may be **1…8** of one
+homogeneous type; mixed types, multilayer, vias, grounded CPW, curves and unsupported geometry
+are rejected. Approximate maps keep the existing `accept_*` gates. Enclosure / air / padding
+appear when the Design classifies as planar; coax drafts show the coaxial accept disclosure
+instead. No far field and no gain certificate; status is `results_exported`. Shared Results show
+the complete N×N experimental S matrix next to (never instead of) openEMS. Stage B/C limits live
+in [EMerge experiment](EMERGE-EXPERIMENT.md).
 
 Resolutions are wavelength fractions at `f_max`: `coarse` = 0.25, `fine` = 0.15. Points 3–41.
 Driven-class worker timeout is 1800 s with a volume proxy; planar-class timeout is 3600 s with a

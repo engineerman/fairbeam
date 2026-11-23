@@ -5,6 +5,7 @@ import type { Design } from "../designer/types";
 import type { Check as DesignCheck } from "../designer/checks";
 import type { ConvergenceStudy } from "../designer/convergence";
 import type { TemplateKey } from "../designer/templates";
+import type { FilterSynthesisRequest, FilterSynthesisResponse } from "../designer/hairpinDesigner/synthesisTypes.ts";
 import { t } from "../i18n/index.ts";
 import { serverMessage } from "../lib/serverMessages";
 
@@ -675,9 +676,34 @@ export const api = {
   saveUserMaterials: (materials: unknown[]) => call<{ materials: unknown[]; skipped: string[]; file: string }>("PUT", "/materials/user", { materials }),
   previewDesign: (design: Design, params: Record<string, ParamValue>, signal?: AbortSignal) =>
     call<PreviewResult>("POST", "/preview", { design, params }, signal),
+  /** Filter designer: planar synthesis + theoretical two-port preview (POST /api/filter-synthesis). */
+  synthesizeFilter: (body: FilterSynthesisRequest, signal?: AbortSignal) =>
+    call<FilterSynthesisResponse>("POST", "/filter-synthesis", body, signal),
+  /** Hairpin preview: start, poll, or cancel one openEMS EDC study (POST /api/hairpin-edc). */
+  hairpinEdc: (body: { action: "start"; design: Design; electrical?: FilterSynthesisRequest["electrical"] } | { action: "poll" | "cancel"; study_id: string }, signal?: AbortSignal) =>
+    call<HairpinEdcStudy>("POST", "/hairpin-edc", body, signal),
   logUrl: (id: string) => `/api/runs/${encodeURIComponent(id)}/log`,
   eventsUrl: (id: string) => `/api/runs/${encodeURIComponent(id)}/events`,
 };
+
+export interface HairpinEdcStudy {
+  id: string;
+  status: "running" | "done" | "cancelled" | "failed";
+  completed: number;
+  total: number;
+  solver: "openEMS";
+  error?: string | null;
+  /** Current sample while running. Null once the study leaves `running`. */
+  phase?: "qe" | "k" | "assemble" | null;
+  /** The openEMS sample at `completed`: waiting for the queue, or solving. */
+  sample_status?: "queued" | "running" | null;
+  /** 0..1 within the sample that is solving. Held at the highest energy seen for that sample. */
+  sample_fraction?: number;
+  /** 0..1 for the whole study: finished samples plus the held fraction of the current one. */
+  run_fraction?: number;
+  /** Present only when the study finished and replaced tap and spacing. */
+  design?: Design;
+}
 
 export const TERMINAL: JobStatus[] = ["done", "failed", "cancelled", "interrupted"];
 export const isTerminal = (s: JobStatus) => TERMINAL.includes(s);

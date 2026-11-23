@@ -41,7 +41,15 @@ assert.doesNotMatch(designerStore, /quickBundle\([^)]*, bundle\(\)\)/, "the brow
 console.log("run numbers: estimates and mesh readouts from the draft passed");
 
 // ---- the live run views (runner/liveRun.ts)
-const { pulseNote, runFraction, pastSolver, decayEstablished } = await import("../src/runner/liveRun.ts");
+const { pulseNote, runFraction, pastSolver, decayEstablished, normalizeDockPhase, isEmergeResearchJob } = await import("../src/runner/liveRun.ts");
+assert.equal(normalizeDockPhase("simulating"), "running", "research simulating maps to the FEM/FDTD solve step");
+assert.equal(normalizeDockPhase("results_exported"), "exporting", "research export maps to exporting");
+assert.equal(normalizeDockPhase("setup"), "setup");
+assert.equal(isEmergeResearchJob({ kind: "research", research: { backend: "emerge" } }), true);
+assert.equal(isEmergeResearchJob({ kind: "run" }), false);
+assert.equal(runFraction({ status: "running", phase: "simulating", kind: "research", research: { backend: "emerge" } }, null, {}), 0.08,
+  "EMerge simulating holds the bar at the start of the solve share (no fake FDTD %)");
+assert.equal(runFraction({ status: "running", phase: "results_exported", kind: "research", research: { backend: "emerge" } }, null, {}), 0.97);
 const info = { pulse_steps: 1876, max_timesteps: 30000 };
 // a fast GPU run: the solver summary (6,600 timesteps) arrives with "calculating results", no progress line
 assert.equal(pulseNote(info, null, { timesteps: 6600 }, "postprocessing", "running"), null, "no excitation note once the solver finished");

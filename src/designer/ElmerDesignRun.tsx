@@ -2,7 +2,8 @@ import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { api } from "../runner/api";
 import { openResearch, researchPath } from "../runner/researchState";
 import { refreshRuns } from "../runner/store";
-import { draft, file, names, prepareSavedDesign } from "./store";
+import { draft, errorCount, file, names, prepareSavedDesign } from "./store";
+import RunChecksAlert from "./RunChecksAlert";
 import { elmerEnclosure } from "./elmerDomain";
 import { t } from "../i18n";
 import NumberField from "../components/NumberField";
@@ -24,10 +25,11 @@ export default function ElmerDesignRun(props: { close: () => void; useOpenEMS: (
   const invalid = () => hasPorts() || !ack() || domain().some(v => !v.trim() || !Number.isFinite(Number(v)))
     || [0, 1, 2].some(i => Number(domain()[i]) >= Number(domain()[i + 3]))
     || !Number.isFinite(Number(cell())) || Number(cell()) <= 0
-    || !Number.isFinite(Number(target())) || Number(target()) < .001 || Number(target()) > 1000;
+    || !Number.isFinite(Number(target())) || Number(target()) < .001 || Number(target()) > 1000
+    || errorCount() > 0;
   const submit = async (event: Event) => {
     event.preventDefault();
-    if (busy() || invalid() || !file()) return;
+    if (busy() || invalid() || !file() || errorCount() > 0) return;
     setBusy(true); setError("");
     try {
       const savedTarget = await prepareSavedDesign(() => alive);
@@ -42,6 +44,7 @@ export default function ElmerDesignRun(props: { close: () => void; useOpenEMS: (
     finally { if (alive) setBusy(false); }
   };
   return <form class="rd-body" onSubmit={submit} data-testid="elmer-design-form">
+    <RunChecksAlert onNavigate={props.close} />
     <p class="note">{t("elmerDesign.scope")}</p>
     <Show when={hasPorts()}><div class="status-block status-warn" role="status">
       <p>{t("elmerDesign.portsUnavailable")}</p>

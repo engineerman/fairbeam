@@ -5,6 +5,9 @@ import { indexQuality, runQuality } from "../src/lib/runQuality.ts";
 import { SLOW_FRACTION, SLOW_SECONDS, slowHint, watchSpeed } from "../src/designer/slowRun.ts";
 import { renderPixelRatio } from "../src/scene/renderBudget.ts";
 
+const isEmergeExperimental = (b) =>
+  b?.experimental?.solver === "EMerge" || b?.solver?.engine === "EMerge";
+
 const dir = new URL("../public/projects/", import.meta.url);
 const files = readdirSync(dir).filter((f) => f.endsWith(".json") && f !== "index.json");
 const verdicts = {};
@@ -13,8 +16,10 @@ for (const f of files) {
   const q = runQuality(b);
   if (!q) continue;
   verdicts[f] = q.verdict;
-  // the bundled examples all reached their end criterion
-  assert.notEqual(q.verdict, "not-converged", `${f}: bundled examples converged`);
+  // openEMS bundled examples reached their end criterion; EMerge has no FDTD energy stop (O16)
+  if (!isEmergeExperimental(b)) {
+    assert.notEqual(q.verdict, "not-converged", `${f}: bundled examples converged`);
+  }
 }
 assert.ok(Object.keys(verdicts).length >= 10, "the example bundles were read");
 
@@ -78,6 +83,28 @@ assert.equal(runQuality(both).verdict, "not-converged", "not converged outranks 
 const preview = clone(); delete preview.results;
 assert.equal(runQuality(preview), null, "a geometry preview has no verdict");
 
+// ---- O16: EMerge timing-only run must not inherit FDTD timestep-limit "not-converged"
+{
+  const emergeTiming = (opts = {}) => ({
+    solver: { engine: opts.engine ?? "EMerge" },
+    ...(opts.experimental === false ? {} : { experimental: { solver: "EMerge", precision_converged: false } }),
+    run: { solver_time_s: 8.1, wall_time_s: 8.1 },
+    results: {
+      frequency: [1e9, 2e9],
+      ports: { 1: { s11_re: [0.1, 0.1], s11_im: [0.0, 0.0] } },
+      farfield: [],
+    },
+  });
+  assert.equal(runQuality(emergeTiming()), null, "EMerge engine+experimental: no FDTD quality verdict");
+  assert.equal(runQuality(emergeTiming({ engine: "openEMS" })), null, "experimental.solver EMerge alone");
+  assert.equal(runQuality(emergeTiming({ experimental: false })), null, "solver.engine EMerge alone");
+  assert.equal(
+    runQuality(emergeTiming({ engine: "openEMS", experimental: false }))?.verdict,
+    "not-converged",
+    "openEMS timing-only run stays not-converged",
+  );
+}
+
 // ---- the project index carries the verdict (python/fairbeam/cli.py run_quality), so a run is badged unread
 {
   assert.deepEqual(indexQuality({ quality: "not-converged" }), { verdict: "not-converged", reasons: [] });
@@ -90,7 +117,9 @@ assert.equal(runQuality(preview), null, "a geometry preview has no verdict");
   const listed = JSON.parse(readFileSync(new URL("index.json", dir), "utf8")).projects;
   for (const e of listed) {
     if (e.quality === undefined) continue;
-    const b = JSON.parse(readFileSync(new URL(e.file, dir), "utf8"));
+    const fp = new URL(e.file, dir);
+    try { readFileSync(fp); } catch { continue; } // local index may list cleaned-up files
+    const b = JSON.parse(readFileSync(fp, "utf8"));
     assert.equal(e.quality, runQuality(b)?.verdict, `${e.file}: the index verdict follows the bundle`);
   }
   const results = readFileSync(new URL("../src/designer/runResults.ts", import.meta.url), "utf8");

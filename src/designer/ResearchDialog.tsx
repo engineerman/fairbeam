@@ -32,7 +32,15 @@ const jobName = (job: Job) => {
   return name(job.research?.backend ?? "periodic");
 };
 const db = (re: number, im: number) => 20 * Math.log10(Math.max(1e-15, Math.hypot(re, im)));
-const PHASE_LABELS: Record<string, string> = { building: "research.phase.building", simulating: "research.phase.simulating", results_exported: "research.phase.exported", validating: "research.phase.validating" };
+const PHASE_LABELS: Record<string, string> = {
+  building: "research.phase.building",
+  setup: "research.phase.setup",
+  simulating: "research.phase.simulating",
+  running: "research.phase.simulating",
+  exporting: "research.phase.exported",
+  results_exported: "research.phase.exported",
+  validating: "research.phase.validating",
+};
 
 function PeriodicResults(props: { result: ResearchResult }) {
   const series = createMemo<Series[]>(() => ["11", "21"].map((port, i) => {

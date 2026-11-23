@@ -13,7 +13,7 @@ import copy
 import math
 
 from .design import _given, check_design, design_params, resolve_names, resolve_parts, evaluate
-from .emerge_limits import N_MAX
+from .emerge_limits import N_MAX, field_cut_frequencies_hz_from_settings
 from .emerge_port_map import resolve
 from .model import resolve_params
 
@@ -25,7 +25,7 @@ RESOLUTIONS = {"coarse": 0.25, "fine": 0.15}  # wavelength fractions at f_max (f
 MAX_RESOURCE_CELLS = 200000  # tetrahedron-count proxy (frozen Task 5)
 _REQUIRED = ("analysis", "accept_finite_feed", "feed_width_mm", "padding_mm", "resolution",
              "f_min_hz", "f_max_hz", "points")
-_ALLOWED = frozenset(_REQUIRED) | {"approximate_metals"}
+_ALLOWED = frozenset(_REQUIRED) | {"approximate_metals", "field_cut_frequencies_hz"}
 _PORT_KEYS = {"type", "number", "R", "start", "stop", "direction", "excite", "priority", "name", "label"}
 _METAL_KEYS = frozenset({"name", "kind", "label", "color", "opacity", "library", "description",
                          "conductivity", "thickness"})
@@ -99,6 +99,7 @@ def _settings(settings):
         raise ValueError("Initial driven sweep supports 3 to 21 frequency points")
     if type(settings.get("approximate_metals", False)) is not bool:
         raise ValueError("approximate_metals must be boolean")
+    field_cut_frequencies_hz_from_settings(settings)  # validate early; attach in admit
     return feed_width, padding
 
 
@@ -299,7 +300,7 @@ def admit(design, settings):
             "approximations": list(mapped["approximations"]),
             "accept_used": list(mapped["accept_used"]),
         })
-    return {
+    case = {
         "kind": "design",
         "boxes": [{"lo": _mm(q[0]), "hi": _mm(q[1]), "eps_r": q[2], "mu_r": q[3], "tan_d": q[4]} for q in boxes],
         "sheets": sheet_dicts,
@@ -314,3 +315,7 @@ def admit(design, settings):
         "limitations": limitations,
         "pec_approximations": pec_approximations,
     }
+    field_cut_hz = field_cut_frequencies_hz_from_settings(settings)
+    if field_cut_hz is not None:
+        case["field_cut_frequencies_hz"] = field_cut_hz
+    return case

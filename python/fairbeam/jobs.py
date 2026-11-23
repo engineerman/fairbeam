@@ -1206,7 +1206,12 @@ class JobManager:
             if line.startswith("fairbeam-research: "):
                 try:
                     event = json.loads(line[len("fairbeam-research: "):])
-                    if event.get("type") == "phase" and event.get("phase") in ("building", "simulating", "results_exported", "validating"):
+                    # openEMS-spine IDs (setup/running/exporting) for EMerge Design dock;
+                    # legacy research IDs (simulating/results_exported/validating) for ResearchDialog.
+                    if event.get("type") == "phase" and event.get("phase") in (
+                        "building", "setup", "simulating", "running", "exporting",
+                        "results_exported", "validating",
+                    ):
                         job.phase = event["phase"]
                         job.publish(event)
                         job.save()

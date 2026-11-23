@@ -112,6 +112,100 @@ def microstrip_width(z0: float, eps_r: float, h: float) -> float:
     return float(np.sqrt(lo * hi))
 
 
+def microstrip_coupled_impedances(w: float, gap: float, eps_r: float, h: float, t: float | None = None) -> dict:
+    """Even/odd characteristic impedances of edge-coupled microstrip (Kirschning–Jansen style).
+
+    ``w`` is each strip width, ``gap`` the spacing between strip edges (same length unit as ``h``).
+    Zero metal thickness uses a vanishing ``t`` in the closed form. Returns ``z_even``, ``z_odd``,
+    ``eps_even``, and ``eps_odd``.
+    """
+    if w <= 0 or gap < 0 or h <= 0 or eps_r < 1:
+        raise ValueError("positive w, h, eps_r and non-negative gap required")
+    metal_t = h * 1e-9 if t is None else float(t)
+    u = w / h
+    g = gap / h
+    e0 = np.sqrt(w / (w + 12 * h))
+    e1 = (eps_r + 1) / 2
+    e2 = (eps_r - 1) / 2
+    er_eff_lin = e1 + e2 * (e0 + 0.04 * (1.0 - u) ** 2 if u < 1 else e0)
+    a0 = 0.7287 * (er_eff_lin - e1) * (1 - np.exp(-0.179 * u))
+    b0 = (0.747 * eps_r) / (0.15 + eps_r)
+    c0 = b0 - (b0 - 0.207) * np.exp(-0.414 * u)
+    d0 = 0.694 * np.exp(-0.562 * u) + 0.593
+    y0 = (metal_t / (w * np.pi + 1.1 * metal_t * np.pi)) ** 2
+    y1 = np.sqrt((metal_t / h) ** 2 + y0)
+    y2 = (er_eff_lin + 1) / (2 * er_eff_lin)
+    weff = w + (metal_t / np.pi) * np.log((4 * np.e) / y1) * y2
+    hdweff = h / weff
+    zt0 = ETA0 / (2 * np.pi * np.sqrt(2) * np.sqrt(er_eff_lin + 1))
+    zt1 = (14 * er_eff_lin + 8) / (11 * er_eff_lin)
+    zt2 = np.sqrt(16 * hdweff**2 * zt1**2 + y1 * np.pi**2)
+    z0surf = zt0 * np.log(1 + 4 * hdweff * (4 * hdweff * zt1 + zt2))
+    g10 = g**10
+    q1 = 0.8695 * u**0.194
+    q2 = 1 + 0.7519 * g + 1.89 * g**2.31
+    q3 = 0.1975 + (16.6 + (8.4 / max(g, 1e-12)) ** 6) ** -0.387 + (1.0 / 241) * np.log(g10 / (1 + (g / 3.4) ** 10))
+    q4 = (2 * q1) / (q2 * (np.exp(-g) * u**q3 + (2 - np.exp(-g)) * u**-q3))
+    q5 = 1.794 + 1.14 * np.log(1 + (0.638 / (g + 0.517 * g**2.43)))
+    q6 = 0.2305 + (1.0 / 281.3) * np.log(g10 / (1 + (g / 5.8) ** 10)) + (1.0 / 5.1) * np.log(1 + 0.598 * g**1.154)
+    q7 = (10 + 190 * g**2) / (1 + 82.3 * g**3)
+    q8 = np.exp(-6.5 - 0.95 * np.log(max(g, 1e-12)) - (g / 0.15) ** 5)
+    q9 = np.log(q7) * (q8 + 1.0 / 16.5)
+    q10 = (1.0 / q2) * (q2 * q4 - q5 * np.exp(np.log(u) * q6 * u**-q9))
+    er_eff_o = (0.5 * (eps_r + 1) + a0 - er_eff_lin) * np.exp(-c0 * g**d0) + er_eff_lin
+    z_odd = (z0surf * np.sqrt(er_eff_lin / er_eff_o)) / (1 - (z0surf / ETA0) * q10 * np.sqrt(er_eff_lin))
+    v = (u * (20 + g**2)) / (10 + g**2) + g * np.exp(-g)
+    ae_v = (
+        1
+        + (np.log((v**4 + (v / 52) ** 2) / (v**4 + 0.432)) / 49)
+        + (np.log(1 + (v / 18.1) ** 3) / 18.7)
+    )
+    be_er = 0.564 * ((eps_r - 0.9) / (eps_r + 3)) ** 0.053
+    er_eff_e = 0.5 * (eps_r + 1) + 0.5 * (eps_r - 1) * (10 / v) ** (-ae_v * be_er)
+    z_even = (z0surf * np.sqrt(er_eff_lin / er_eff_e)) / (1 - (z0surf / ETA0) * q4 * np.sqrt(er_eff_lin))
+    return {
+        "z_even": float(z_even),
+        "z_odd": float(z_odd),
+        "eps_even": float(er_eff_e),
+        "eps_odd": float(er_eff_o),
+    }
+
+
+def microstrip_coupled_from_modal(z_even: float, z_odd: float, eps_r: float, h: float) -> tuple[float, float]:
+    """Strip width and edge gap for target even/odd impedances (grid search + local refine)."""
+    if z_even <= 0 or z_odd <= 0:
+        raise ValueError("positive modal impedances required")
+
+    def err(w: float, gap: float) -> float:
+        got = microstrip_coupled_impedances(w, gap, eps_r, h)
+        return (got["z_even"] - z_even) ** 2 + (got["z_odd"] - z_odd) ** 2
+
+    best_w, best_gap, best_err = h, h * 0.1, np.inf
+    for ui in np.linspace(0.05, 6.0, 48):
+        w = ui * h
+        for gi in np.linspace(0.005, 4.0, 48):
+            gap = gi * h
+            e = err(w, gap)
+            if e < best_err:
+                best_w, best_gap, best_err = w, gap, e
+    if not np.isfinite(best_err):
+        raise ValueError("no coupled-microstrip geometry found")
+
+    for scale in (0.85, 1.0, 1.15):
+        w0, g0 = best_w * scale, best_gap * scale
+        for dw in (-0.08, -0.04, 0, 0.04, 0.08):
+            for dg in (-0.08, -0.04, 0, 0.04, 0.08):
+                w = max(w0 * (1 + dw), 0.02 * h)
+                gap = max(g0 * (1 + dg), 0.005 * h)
+                e = err(w, gap)
+                if e < best_err:
+                    best_w, best_gap, best_err = w, gap, e
+    rtol = max(0.08, 0.02 * (z_even + z_odd) / 100)
+    if best_err > (rtol * z_even) ** 2 + (rtol * z_odd) ** 2:
+        raise ValueError("coupled-microstrip targets not reachable with quasi-static map")
+    return float(best_w), float(best_gap)
+
+
 def patch_delta_l(eps_eff: float, h: float, w: float) -> float:
     """Hammerstad fringing extension of one radiating edge (same length unit as ``h``)."""
     u = w / h

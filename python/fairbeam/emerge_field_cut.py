@@ -13,8 +13,11 @@ import numpy as np
 from .field_planes import entry, phasor_payload
 
 FIELD_CUT_SCHEMA = "fairbeam.emerge-field-cut/1"
+FREQ_CHOICES = frozenset({"max_abs_s21", "min_abs_s11", "band_center", "user"})
+# Honest for one or many maps: each plane is harmonic; Play is phase, not FDTD time movie.
 FIELD_CUT_NOTE = (
-    "E-field cut is one frequency (harmonic); Play animates phase, not a full-band FDTD time movie."
+    "Each E-field cut is one frequency (harmonic); Play animates phase on the selected map, "
+    "not a full-band FDTD time movie."
 )
 
 
@@ -59,7 +62,7 @@ def validate_field_cut(cut):
         if (not isinstance(span, list) or len(span) != 2
                 or not all(map(_number, span)) or span[1] <= span[0]):
             raise ValueError(f"field_cut.{key} must be [lo, hi] with hi > lo")
-    if cut.get("freq_choice") not in ("max_abs_s21", "min_abs_s11", "band_center"):
+    if cut.get("freq_choice") not in FREQ_CHOICES:
         raise ValueError("field_cut.freq_choice is unknown")
     port = cut.get("port", 1)
     if type(port) is not int or port < 1:

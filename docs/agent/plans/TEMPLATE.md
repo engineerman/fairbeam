@@ -1,6 +1,6 @@
 # EMerge … Implementation Plan
 
-> **For agentic workers:** Use `.cursor/skills/emerge-agent-workflow`. Implement task-by-task with checkbox tracking. Planner = capable model; implementer = cheap/mid.
+> **For agentic workers:** Use `.cursor/skills/emerge-agent-workflow`. Implement task-by-task with checkbox tracking. Planner = capable model; implementer = cheap/mid. Tick each task after agent self-verify; human Your-test only at plan end (`.cursor/rules/human-acceptance-gate.mdc`).
 
 **Goal:** One sentence.
 
@@ -38,6 +38,6 @@
 
 - [ ] …
 - [ ] Run: `…`
-- [ ] Commit: `…`
+- [ ] Commit this task’s files on the topic branch (`Co-Authored-By:`). Example subject: `…`
 
-**Done when:** …
+**Done when:** … (agent has committed; do not leave Task N uncommitted)

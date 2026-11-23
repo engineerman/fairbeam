@@ -110,7 +110,8 @@ class Simulation:
             expr = dgauss_expression(self.f_max)
             self.fdtd.SetCustomExcite(expr, self.f_max, self.f_max)
             self.excitation = {"type": "gaussian-derivative", "f_min": self.f_min, "f_max": self.f_max,
-                               "expression": expr, "dc_free": True}
+                               "expression": expr, "dc_free": True,
+                               "duration_s": dgauss_duration_s(self.f_max)}
         else:
             f0, fc = (self.f_min + self.f_max) / 2, (self.f_max - self.f_min) / 2
             self.fdtd.SetGaussExcite(f0, fc)
@@ -164,6 +165,20 @@ class Simulation:
         #: correct a waveguide port's incident / reflected / accepted power for the mesh-dependent
         #: deficit of openEMS' mode-matching probes at the guide walls (fairbeam.wgport, #12)
         self.wg_probe_correction = True
+
+    def set_pulse_duration(self, duration_s: float) -> None:
+        """Replace the Gaussian-derivative pulse with one ``duration_s`` long.
+
+        The simulation band (``f_min``, ``f_max``) stays. openEMS prints a custom excitation as
+        ``max_timesteps`` long; ``duration_s`` is the pulse itself.
+        """
+        from .excitation import dgauss_expression_for_duration, dgauss_f_max_for_duration
+
+        f_eq = dgauss_f_max_for_duration(duration_s)
+        expr = dgauss_expression_for_duration(duration_s)
+        self.fdtd.SetCustomExcite(expr, f_eq, f_eq)
+        self.excitation = {"type": "gaussian-derivative", "f_min": self.f_min, "f_max": self.f_max,
+                           "expression": expr, "dc_free": True, "duration_s": float(duration_s)}
 
     # ------------------------------------------------------------------ structure helpers
 
@@ -752,7 +767,8 @@ class Simulation:
         if stats.get("timestep_s") and self.excitation["type"] == "gaussian-derivative":
             # openEMS reports a custom excitation as max-timesteps long; the pulse itself is shorter.
             # A run cannot converge before it has ended (lib/run.ts names this cause).
-            stats["excitation_timesteps"] = int(round(dgauss_duration_s(self.f_max) / stats["timestep_s"]))
+            duration = self.excitation.get("duration_s") or dgauss_duration_s(self.f_max)
+            stats["excitation_timesteps"] = int(round(duration / stats["timestep_s"]))
         used = "gpu" if "enabled GPU engine" in text else "cpu"
         stats.update({"wall_time_s": round(time.time() - t0, 2), "threads": threads,
                       "engine": used, "engine_requested": engine,

@@ -494,6 +494,25 @@ class MeshChecks(unittest.TestCase):
         warning = [c for c in lint(wide, None, big) if c["code"] == "mesh-cells"][0]["message"]
         self.assertIn("; lower f max (cells of 0.0177 mm at 240 GHz)", warning)
 
+    def test_coax_mesh_too_coarse_with_preview_bundle(self):
+        d = blank_design("coax", "Coax")
+        d["materials"].append({"name": "PEC", "kind": "metal"})
+        d["ports"] = [{
+            "type": "coaxial", "number": 1, "direction": "z",
+            "start": [0, 0, 0], "stop": [0, 0, 10],
+            "r_i": 1, "r_o": 2, "r_os": 3,
+            "conductor": "PEC", "dielectric": None,
+            "feed_shift": 0, "measurement_shift": 5, "termination": "open", "excite": True,
+        }]
+        bundle = {"mesh": {
+            "x": [-20.0, -2.0, 2.0, 20.0],
+            "y": [-20.0, -2.0, 2.0, 20.0],
+            "z": [-20.0, 0.0, 2.0, 5.0, 8.0, 10.0, 20.0],
+        }}
+        hits = [c for c in lint(d, None, bundle) if c["code"] == "coax-port" and "too coarse" in c["message"]]
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["path"], "ports[0]")
+
     def test_feature_between_mesh_lines(self):
         d = blank_design("t", "T")
         # a 1 µm rod (a plate that thin would be built as a sheet, see ThinMetal below)

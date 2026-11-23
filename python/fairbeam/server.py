@@ -37,6 +37,10 @@ Endpoints (all JSON unless noted)::
     GET  /api/models/{id}/history   last 20 saved versions; .../history/{version} one of them
     POST /api/preview               {design, params?} -> the bundle of an unsaved design and its checks (a design body may be
                                     up to 32 MiB, as for a save; the other routes take 1 MiB)
+    POST /api/filter-synthesis      {topology, electrical?, stack?, layout?, name?, preview_only?} -> theoretical preview and
+                                    optionally a full design ({design} omitted when preview_only is true)
+    POST /api/hairpin-edc           {action: start|poll|cancel, design?, electrical?, study_id?} -> one openEMS
+                                    hairpin EDC study (queue samples one at a time; cancel publishes no design)
     POST /api/designs               {id, name?, from? | template? | python?: {source_model, model?} | cst?: {source, filename?} | pcb?: {files, options?}}
                                     create python/models/<id>.design.json; {design, name?, id?}: a design file (fairbeam.design/1)
                                     as a new design, under a free id from its name when no id is given
@@ -660,13 +664,16 @@ class App:
                     print(f"fairbeam serve: result index was not updated: {type(exc).__name__}", flush=True)
             if job.kind != "research":
                 self.studies.on_finished(job)  # a mesh convergence study queues its next density
+                self.hairpin_studies.on_finished(job)  # a hairpin EDC study queues its next sample
 
         self.manager = manager or JobManager(self.jobs_dir, self.projects_dir, python=self.python,
                                              sim_root=self.sim_root)
         from .document_workspace import DocumentWorkspace
         self.documents = DocumentWorkspace(self.models_dir, self.projects_dir, self.history_dir, self.manager, backup_scope=self.backup_scope)
         from .convergence import ServerStudies
+        from .filter_synthesis.hairpin_edc import HairpinEdcStudies
         self.studies = ServerStudies(self.manager, self.projects_dir)
+        self.hairpin_studies = HairpinEdcStudies(self.manager, self.projects_dir)
         self.engines = detect_engines(self.python)
         previous = self.manager.on_finished
 
@@ -1816,6 +1823,67 @@ class App:
                                             "method": method, "excite": excite})
         return job.to_dict()
 
+    def filter_synthesis(self, body: dict) -> dict:
+        """Synthesize a planar filter layout (filter designer); preview_only skips design in the body."""
+        from fairbeam.filter_synthesis import synthesize
+        from fairbeam.filter_synthesis.types import BandwidthInfeasible
+
+        if not isinstance(body, dict):
+            raise ApiError(422, Message("field.body_object", "body must be a JSON object"))
+        topology = body.get("topology")
+        if not isinstance(topology, str) or not topology.strip():
+            raise ApiError(422, "topology is required", fields={"topology": "required"})
+        preview_only = bool(body.get("preview_only", False))
+        from fairbeam.filter_synthesis.registry import get_topology as get_filter_topology
+        from fairbeam.filter_synthesis.stack_presets import resolve_stack
+
+        topo_spec = get_filter_topology(topology.strip())
+        if topo_spec is None:
+            raise ApiError(400, f"unknown filter topology: {topology!r}")
+        try:
+            stack_in = body.get("stack") if isinstance(body.get("stack"), dict) else body.get("substrate")
+            if stack_in is not None:
+                body = {**body, "stack": resolve_stack(stack_in, topo_spec.medium)}
+        except ValueError as exc:
+            raise ApiError(422, str(exc)) from exc
+        try:
+            result = synthesize(topology.strip(), body)
+        except KeyError as exc:
+            raise ApiError(400, str(exc)) from exc
+        except BandwidthInfeasible as exc:
+            raise ApiError(422, exc.message, fields={"bandwidth": exc.code})
+        except (ValueError, TypeError) as exc:
+            raise ApiError(422, str(exc)) from exc
+
+        out: dict = {
+            "preview": result.preview,
+            "geometry_preview": result.geometry_preview,
+            "dimensions": result.dimensions,
+            "caveats": result.caveats,
+            "validation": {"checks": self._design_checks(result.design)},
+        }
+        if not preview_only:
+            out["design"] = result.design
+        return out
+
+    def hairpin_edc(self, body: dict) -> dict:
+        """Start, poll, or cancel one hairpin EDC study (POST /api/hairpin-edc)."""
+        if not isinstance(body, dict):
+            raise ApiError(422, "body must be a JSON object")
+        action = body.get("action")
+        try:
+            if action == "start":
+                return self.hairpin_studies.start(body.get("design"), body.get("electrical"))
+            if action == "poll":
+                return self.hairpin_studies.poll(body.get("study_id"))
+            if action == "cancel":
+                return self.hairpin_studies.cancel(body.get("study_id"))
+        except ValueError as exc:
+            raise ApiError(422, str(exc)) from None
+        except KeyError:
+            raise ApiError(404, "no hairpin EDC study") from None
+        raise ApiError(422, "action must be start, poll, or cancel")
+
     def research_probe(self, body: dict) -> dict:
         from .research import probe
         try:
@@ -2139,6 +2207,8 @@ class Handler(BaseHTTPRequestHandler):
             ("POST", r"/api/render-jobs/(rb-[0-9a-f]+)/cancel", self._cancel_render),
             ("GET", r"/api/models", lambda: self._json(200, app.models())),
             ("POST", r"/api/preview", lambda: self._json(200, app.do_preview(self._body(MAX_DESIGN_BODY)))),
+            ("POST", r"/api/filter-synthesis", lambda: self._json(200, app.filter_synthesis(self._body()))),
+            ("POST", r"/api/hairpin-edc", lambda: self._json(200, app.hairpin_edc(self._body(MAX_DESIGN_BODY)))),
             ("POST", r"/api/research/probe", lambda: self._json(200, app.research_probe(self._body()))),
             ("GET", r"/api/research/elmer/runtime", lambda: self._json(200, app.elmer_runtime_status())),
             ("POST", r"/api/research/elmer/install", lambda: self._json(202, app.elmer_runtime_install())),

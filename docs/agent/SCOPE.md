@@ -1,78 +1,36 @@
 # EMerge integration scope (fork intent)
 
-EMerge ([FennisRobert/EMerge](https://github.com/FennisRobert/EMerge/), PyPI `emerge`) is a Python frequency-domain FEM solver. Fairbeam's default remains openEMS (FDTD). Elmer already proves an **experimental multi-solver** pattern; EMerge should follow that pattern, not replace it.
+EMerge ([FennisRobert/EMerge](https://github.com/FennisRobert/EMerge/), PyPI `emerge`) is a Python frequency-domain FEM solver. Fairbeam's default remains openEMS (FDTD). Elmer already proves an **experimental multi-solver** pattern; EMerge follows that pattern, not a replacement.
 
-## Levels
+## What exists today (experimental)
 
-### A — Fixture MVP (first target)
+- Optional **Install EMerge** (managed venv / pinned `emerge==3.0.0b12` wheels), Windows first; separate process / import isolation (Elmer style).
+- Fixed **Research** WR-90 waveguide fixture (no Design translation).
+- One Design Run option **EMerge FEM · Experimental** (`backend: "emerge"`, `analysis: "emerge_nport"`, health `emerge` ≥ 3): homogeneous **1…8** ports, full experimental N×N S (`fairbeam.emerge-result/2`, `results_exported` only).
+- Geometry recipes on that path: driven/lumped (axis-aligned boxes + metal sheets), planar microstrip/Discrete (single-layer board + ground; microstrip may opt into `WavePort` via `accept_modal_ports`, else lumped terminals), classic CPW (coplanar top grounds; `WavePort` / lumped gap plate behind the same accept pair; GCPW rejected), all-coaxial TEM (`CoaxPort`, `accept_coaxial_tem`).
+- Session **Simulation › Solver** picker (openEMS default vs EMerge experimental): retargets settings chrome, mesh-only generate, FEM exterior overlay — not FDTD planes.
+- Explicit reject for unsupported geometry / mixed port types; no silent coercion.
+- Port-map matrix + Run preview/accept: [specs/2026-11-05-emerge-openems-port-mapping-design.md](specs/2026-11-05-emerge-openems-port-mapping-design.md). Limits: [EMERGE-EXPERIMENT.md](../EMERGE-EXPERIMENT.md).
 
-- Optional Install EMerge (managed venv / pinned wheels), Windows first.
-- One fixed research fixture (cavity or simple waveguide), not arbitrary Design translation.
-- Discover / capabilities handshake; results + provenance on disk; optional thin UI entry under Experimental solvers.
-- Success: reproducible run, documented limits, tests without requiring GPU.
+## What to do next
 
-### B — Bounded Design subset (legacy recipe under B3)
+Open work lives only in [BACKLOG-emerge-port-map.md](BACKLOG-emerge-port-map.md). Write a plan under `plans/` before multi-file coding. Do not reopen finished path wiring unless fixing a regression.
 
-- Axis-aligned dielectric boxes + metal sheets + lumped ports (Elmer antenna-class geometry gate).
-- Originally shipped as exactly one Discrete port and a separate **Experimental antenna** Run option;
-  that count gate and dual UI are superseded by Level B3 (recipe kept as the driven/lumped
-  classifier).
-- Sheet conductor loss via EMerge ThinConductor when Design `conductivity` is set; optional PEC approx.
-- Explicit reject for curves, booleans, thick metal volumes / SurfaceImpedance walls, and unsupported
-  port types (not “wrong count alone” after B3).
-- Map S into Fairbeam result tabs; label experimental.
-- Success (historical): one documented design class; openEMS still default; qualification notes honest.
+## Out of scope for now
 
-### B2 — Planar microstrip (hairpin class) — done; legacy recipe under B3
-
-- One substrate box, ground at the bottom (metal z-flat box or domain-floor PEC), z-normal copper
-  polygons (or z-flat boxes) on the substrate top, homogeneous microstrip or Discrete ports at board
-  edges.
-- Originally shipped as exactly two ports and a separate **Experimental planar two-port** Run option;
-  that count gate and dual UI are superseded by Level B3 (recipe kept as the planar classifier).
-- Worker rebuilds as substrate `Box` + copper traces (`ThinConductor` when σ set, else PEC) + PEC
-  ground + lumped strip-to-ground terminals; full experimental S in shared Results.
-- Rejects multilayer, vias, CPW, mixed port types, arbitrary PCB import; no silent geometry coercion.
-- Human decision (2026-11-04): integrate the hairpin class as Level B2 (plan
-  `docs/agent/plans/2026-11-04-emerge-level-b2-planar-two-port.md`).
-- Closed 2026-11-04 on `feat/emerge-experimental`. Open qualification gaps stay in that plan's
-  Task 8 notes (no openEMS S-parameter agreement claim; 41-pt timing deferred; hairpin numbers
-  primarily from managed 2.8.9 before the 3.0.0b12 pin).
-
-### B3 — Unified N-port experimental solver — done
-
-- One Run option **EMerge FEM · Experimental** (`backend: "emerge"`, `analysis: "emerge_nport"`)
-  when health `emerge` ≥ 3; dual antenna/planar selector removed from the UI.
-- Admits **1…N_MAX** ports (`N_MAX = 8`), all the same type, under today’s geometry recipes:
-  driven/lumped (Level B class) or planar microstrip/Discrete (Level B2 class). Classifier picks
-  `geometry_kind`; mixed types and unsupported geometry still reject explicitly.
-- Full experimental N×N S-matrix (`fairbeam.emerge-result/2`); status `results_exported` only.
-- Spec: `docs/agent/specs/2026-11-06-emerge-unified-nport-design.md`. Plan:
-  `docs/agent/plans/2026-11-06-emerge-unified-nport-b3.md`.
-
-### B4 — Shim cleanup — done
-
-- Design EMerge accepts only `analysis: "emerge_nport"` (no `driven` / `planar_two_port` remaps).
-- Assessed Design results are only `fairbeam.emerge-result/2` with `geometry_kind`; v1 schemas and
-  `as_nport_result` adapters removed. Dual Run re-exports deleted.
-- Spec: `docs/agent/specs/2026-11-06-emerge-b4-shim-cleanup-design.md`. Plan:
-  `docs/agent/plans/2026-11-06-emerge-b4-shim-cleanup.md`.
-- **B5+**: geometry widen (stackup/vias) and richer port BCs — not part of B4.
-
-### C — Out of scope for now
-
-- Production parity with openEMS (optimizer, arrays, thin copper sheets, full CAD).
+- Production parity with openEMS (optimizer, arrays, full CAD).
 - Bundling EMerge into the stock first-run installer.
 - Silent “make it fit” geometry conversion.
 - Marketing comparisons with proprietary FEM tools.
+- Neutral Design “port intent” schema; shared `translate_port()` with openEMS; `results_validated` / S-agreement claims for mapped EMerge runs.
 
 ## License posture
 
 - Fairbeam: GPL-3.0-or-later. New fork code (adapter, worker, UI, tests, docs) uses the same license; the fork cannot relicense upstream Fairbeam code.
-- EMerge **3.0.0b12** (managed pin; was 2.8.9): **GPL-2.0-or-later** (source headers: "version 2 ... or (at your option) any later version"; wheel ships GPL-2 LICENSE text; headers still offer later versions). That allows use under GPL-3.0, so it is compatible with Fairbeam. Rechecked 2026-11-04 on the `emerge-3.0.0b12` wheel; recheck again when the pinned version changes.
-- Human decision (2026-11-04): prefer the broadest license terms the upstream projects permit, which is the GPL-2.0-or-later reading above.
-- Managed install dependencies (fetched from PyPI on request, never shipped): gmsh GPL-2.0-or-later; emsutil MIT upstream with some GNU-headed files; Intel MKL and its runtime packages under the proprietary Intel Simplified Software License. Human decision (2026-11-04): keep MKL and disclose its license before install.
-- Still required: optional external install + adapter in a separate process (Elmer style). The installer bundles nothing. Vendoring EMerge source or shipping its binaries needs maintainer review, because Fairbeam would then carry EMerge's (and gmsh/MKL's) distribution and corresponding-source obligations.
+- EMerge **3.0.0b12** (managed pin): **GPL-2.0-or-later** (source headers offer later versions; wheel ships GPL-2 LICENSE text). Compatible with Fairbeam under GPL-3.0. Recheck when the pinned version changes.
+- Human decision (2026-11-04): prefer the broadest license terms the upstream projects permit (GPL-2.0-or-later reading above).
+- Managed install dependencies (fetched from PyPI on request, never shipped): gmsh GPL-2.0-or-later; emsutil MIT upstream with some GNU-headed files; Intel MKL and its runtime packages under the proprietary Intel Simplified Software License. Keep MKL and disclose its license before install.
+- Still required: optional external install + adapter in a separate process. The installer bundles nothing. Vendoring EMerge source or shipping its binaries needs maintainer review.
 
 ## Reference inside Fairbeam
 

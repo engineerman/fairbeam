@@ -60,5 +60,10 @@ CI workflow (`.github/workflows/ci.yml`) runs a wider set.
   ([docs/RELEASES.md](docs/RELEASES.md)).
 - **Releases:** build them only from a tag on `main`, and publish with
   `scripts/publish-release.mjs` (see [docs/RELEASES.md](docs/RELEASES.md)).
+  Before any push of a release to `main` / `origin/main`, verify that
+  [docs/RELEASES.md](docs/RELEASES.md) and [docs/release-notes/](docs/release-notes/)
+  cover the version being published and that version fields (at least `package.json`,
+  and the usual `tauri` / Python companions when bumped together) match. If notes or
+  versions are missing or outdated, do not push — flag the gaps to the human first.
 - **Simulations:** run them one at a time and prefer coarse runs for smoke tests.
 - **Local files:** don't commit personal files in `python/models/`.

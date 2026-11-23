@@ -4,6 +4,7 @@
 // its progress and results show in the designer's bottom dock (RunDock.tsx).
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { CircleAlert, Play, X } from "lucide-solid";
+import RunChecksAlert from "./RunChecksAlert";
 import { useModal } from "../lib/dialog";
 import { engine as storedEngine, engineSource, health, lastManualThreads, probeServer, serverState, setThreads, submitError, submitErrorDetail, submitting, threads as storedThreads } from "../runner/store";
 import { prepareDesignSubmission, setRunDialogOpen, startDesignRun, storedPoints } from "../runner/designRun";
@@ -11,15 +12,13 @@ import { openResearch } from "../runner/researchState";
 import { cellsText, estimateText } from "./meshStats";
 import { draftEstimate, draftExcitedPorts, draftMeshStats } from "./draftMesh";
 import { PreflightNote } from "./PreflightNote";
-import { addPort, applyFix, checks, defaultDesignerSession, dirty, draft, errorCount, file, focusPath, saving } from "./store";
+import { checks, defaultDesignerSession, dirty, draft, errorCount, file, saving } from "./store";
 import { openDesignerOptimize } from "./OptimizeDialog";
 import { readGeneralSettings } from "../lib/generalSettings";
 import { isDesktopShell } from "../lib/telemetry";
 import { autoThreads } from "../lib/autoThreads";
 import { t } from "../i18n";
-import { checkFixLabel, checkTitle } from "./checkText";
-import { checkAction } from "./checkActions";
-import { checkPlace, kindLabel } from "./DesignPane";
+import { kindLabel } from "./DesignPane";
 import { humanizePaths } from "./pathText";
 import "../styles/run-quality.css";
 import NumberField from "../components/NumberField";
@@ -152,29 +151,7 @@ export default function RunDialog() {
         {/* Solver body follows activeEngine on open; Elmer stays selectable without forcing chrome to Elmer. */}
         <Show when={solver() === "openems"} fallback={<Show when={solver() === "elmer-driven"} fallback={<Show when={solver() === "emerge"} fallback={<ElmerDesignRun close={close} useOpenEMS={() => setSolver("openems")} />}><EmergeRun close={close} /></Show>}><ElmerAntennaRun close={close} /></Show>}>
         <form class="rd-body" id="rd-form" onSubmit={run}>
-          <Show when={errors().length}>
-            <div class="status-block status-critical" role="alert">
-              <CircleAlert size={14} aria-hidden="true" />
-              <div>
-                <p>{t("run.fixErrors", { count: errors().length })}</p>
-                <ul class="rd-errors">
-                  <For each={errors().slice(0, 6)}>{(c) => (
-                    <li>
-                      {/* every row names its place in words (pathText), also inside the message */}
-                      <button type="button" class="linklike" onClick={() => { close(); focusPath(c.path); }}>{humanizePaths(checkTitle(c), draft, kindLabel)}</button>
-                      <span class="rd-where">
-                        <span class="muted">{checkPlace(c)}</span>
-                        {/* the check's own one-click fix (raise max timesteps, ...): the list follows the new checks */}
-                        <Show when={c.fix}>{(f) => <button type="button" class="btn btn-ghost btn-sm rd-fix" onClick={() => applyFix(f().set)}>{checkFixLabel(c)}</button>}</Show>
-                        <Show when={checkAction(c, draft.ports?.length ?? 0)}><button type="button" class="btn btn-ghost btn-sm rd-fix" onClick={() => { close(); addPort(); }}>{t("contextMenu.addPort")}</button></Show>
-                      </span>
-                    </li>
-                  )}</For>
-                </ul>
-                <Show when={errors().length > 6}><p class="muted">{t("run.moreErrors", { count: errors().length - 6 })}</p></Show>
-              </div>
-            </div>
-          </Show>
+          <RunChecksAlert onNavigate={close} />
           <div class="rd-grid">
             <label class="dz-field">
               <span class="dz-label">{t("run.engine")}</span>

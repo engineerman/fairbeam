@@ -10,7 +10,11 @@ import math
 import numpy as np
 
 def _run_timing(result):
-    """Map worker wall time into the Runs-dock fields (``solver_time_s`` / ``wall_time_s``)."""
+    """Map worker wall time into the Runs-dock fields (``solver_time_s`` / ``wall_time_s``).
+
+    Timing only — no FDTD ``converged`` / ``hit_timestep_limit``. Header and ``run_quality``
+    must treat EMerge via experimental-FEM branches (O16), not openEMS energy stop.
+    """
     elapsed = result.get("elapsed_seconds")
     if elapsed is None:
         return None
@@ -62,6 +66,15 @@ def _base_preview_bundle(design, settings, case, result, *, name_suffix=" · EMe
             if material.get("kind") == "metal":
                 material.pop("conductivity", None)
                 material.pop("thickness", None)
+    # Geometry-only for Results: do not run openEMS planar mesh gates. FDTD rules
+    # (e.g. "three cells across each CPW gap") are unrelated to the FEM tetrahedra
+    # already in ``result`` and must not fail packaging after a successful EMerge solve.
+    # Mesh / domain / solver fields below replace whatever preview would have written.
+    # Keep lumped/coax/waveguide ports so driven-class export can still widen feed boxes.
+    drawing["ports"] = [
+        p for p in (drawing.get("ports") or [])
+        if not isinstance(p, dict) or p.get("type") not in ("microstrip", "cpw")
+    ]
     bundle = build_preview(None, {}, design=drawing)["bundle"]
     bundle.pop("preview", None)
     bundle["name"] += name_suffix
@@ -99,7 +112,8 @@ def nport_result_bundle(design, result):
         raise ValueError("EMerge N-port never claims qualified gain")
     geometry_kind = result.get("geometry_kind")
     if geometry_kind not in GEOMETRY_KINDS:
-        raise ValueError("geometry_kind must be driven_lumped or planar_microstrip")
+        raise ValueError(
+            "geometry_kind must be driven_lumped, planar_microstrip, or coaxial_tem")
     settings = result["settings"]
     case = admit_geometry(design, settings, geometry_kind)
     if geometry_kind == "planar_microstrip":
@@ -127,6 +141,28 @@ def nport_result_bundle(design, result):
         terminals = sorted(case["terminals"], key=lambda t: t["number"])
         default_z = [t["z0"] for t in terminals]
         experimental_extra = {"enclosure": enclosure}
+    elif geometry_kind == "coaxial_tem":
+        bundle = _base_preview_bundle(design, settings, case, result)
+        bundle["solver"] = dict(
+            engine="EMerge", method="Frequency-domain FEM (experimental)",
+            excitation=dict(type="Harmonic coaxial TEM ports", f_min=settings["f_min_hz"],
+                            f_max=settings["f_max_hz"], dc_free=True),
+            boundaries={k: "Second-order absorbing" for k in ("x-", "x+", "y-", "y+", "z-", "z+")},
+            end_criteria_db=0, max_timesteps=0)
+        limitations = list(result.get("limitations", case["limitations"]))
+        pec = list(result.get("pec_approximations", case.get("pec_approximations") or []))
+        port_map = result.get("port_map")
+        if not port_map:
+            from fairbeam_emerge import port_map_from_coax_case
+            port_map = port_map_from_coax_case(case)
+        # Analytic TEM Z0; same formula as the worker (η0/(2π√εr)·ln(r_o/r_i)).
+        eta0 = 376.730313668
+        default_z = []
+        for port in sorted(case["ports"], key=lambda p: p["number"]):
+            default_z.append(
+                (eta0 / (2.0 * math.pi * math.sqrt(float(port["er"]))))
+                * math.log(float(port["r_o"]) / float(port["r_i"])))
+        experimental_extra = {}
     else:
         bundle = _base_preview_bundle(design, settings, case, result)
         bundle["solver"] = dict(
@@ -197,21 +233,29 @@ def _attach_fem_surface(bundle, mesh_counts):
 
 
 def _attach_field_cut(bundle, result):
-    """If the worker exported a mid-plane E cut, map it into ``field_planes`` (Play when phasors)."""
-    cut = result.get("field_cut")
-    if not cut:
+    """Map worker ``field_cuts`` (or legacy ``field_cut``) into switchable ``field_planes``."""
+    cuts = result.get("field_cuts")
+    if isinstance(cuts, list) and cuts:
+        cut_list = cuts
+    else:
+        single = result.get("field_cut")
+        cut_list = [single] if single else []
+    if not cut_list:
         return
     from .emerge_field_cut import FIELD_CUT_NOTE, to_field_plane
 
-    plane = to_field_plane(cut)
-    bundle["field_planes"] = [plane]
+    planes = [to_field_plane(cut) for cut in cut_list]
+    bundle["field_planes"] = planes
     limitations = list(bundle["experimental"].get("limitations") or [])
     if FIELD_CUT_NOTE not in limitations:
         limitations.append(FIELD_CUT_NOTE)
     bundle["experimental"]["limitations"] = limitations
-    bundle["experimental"]["field_cut"] = {
+    summaries = [{
         "freq_hz": plane["f"],
         "freq_choice": (plane.get("experimental") or {}).get("freq_choice"),
         "position_mm": plane["position_mm"],
         "has_phasor": bool(plane.get("phasor")),
-    }
+    } for plane in planes]
+    bundle["experimental"]["field_cuts"] = summaries
+    # Legacy single-cut summary (first map) for older readers.
+    bundle["experimental"]["field_cut"] = summaries[0]

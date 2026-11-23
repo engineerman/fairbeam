@@ -89,6 +89,49 @@ class ResearchContracts(unittest.TestCase):
             dll=Path(tmp)/'openEMS.dll';dll.write_bytes(b'dll')
             self.assertIn(str(dll.resolve()),research.binary_pins([exe]))
 
+    def test_emerge_execute_emits_setup_simulating_exporting(self):
+        """O7: EMerge research prints mesh → FEM → export milestones around the worker."""
+        import fairbeam_emerge as fem
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            exe = root / 'solver.exe';exe.write_bytes(b'identity')
+            (root / 'openEMS.dll').write_bytes(b'dll')
+            freqs = [0.75e9, 1.0e9, 1.25e9]
+            s = {f'{i},{j}': {'re': [0.1] * 3, 'im': [0.0] * 3} for i in (1, 2) for j in (1, 2)}
+            fake = {
+                'schema': fem.NPORT_RESULT_SCHEMA, 'backend': 'emerge', 'status': 'results_exported',
+                'geometry_kind': 'planar_microstrip', 'precision_converged': False, 'gain_qualified': False,
+                'frequency_hz': freqs, 's': s, 'z_ref': [50.0, 50.0], 'enclosure': 'shielded',
+                'settings': {}, 'mesh': {'nodes': 1, 'tetrahedra': 1}, 'elapsed_seconds': 0.1,
+                'phasor_convention': fem.PHASOR, 'native_phasor_convention': fem.PHASOR,
+                'limitations': ['Experimental'], 'pec_approximations': ['copper'],
+            }
+            design = {'model': {'id': 'o7', 'name': 'o7'}, 'materials': [], 'parts': [], 'ports': [],
+                      'domain': {}, 'sim': {}}
+            spec = {
+                'schema': 'fairbeam-research-input-1', 'backend': 'emerge', 'path': str(root),
+                'settings': {'analysis': 'nport'}, 'design': design,
+                'normalized': {'kind': 'planar', 'frequencies_hz': freqs},
+                'binary_sha256': research.binary_pins([exe]),
+            }
+            snap = root / 'snapshot.json'
+            snap.write_bytes(research.encode(spec))
+            out = root / 'out'
+            out.mkdir()
+            phases = []
+
+            def capture_print(*args, **kwargs):
+                text = ' '.join(str(a) for a in args)
+                if text.startswith('fairbeam-research: '):
+                    phases.append(json.loads(text[len('fairbeam-research: '):]).get('phase'))
+
+            with mock.patch('builtins.print', side_effect=capture_print), \
+                 mock.patch.object(fem, 'run_planar', return_value=fake), \
+                 mock.patch('fairbeam.emerge_bundle.export_emerge_bundle',
+                            return_value={'model': {'id': 'o7'}, 'experimental': {}}):
+                research.execute(snap, out, hashlib.sha256(snap.read_bytes()).hexdigest())
+            self.assertEqual(phases, ['setup', 'simulating', 'exporting', 'results_exported'])
+
 
 class ResearchFixtures:
     def setUp(self):
@@ -127,6 +170,19 @@ class ResearchFixtures:
 
 
 class SharedResearchQueue(ResearchFixtures, unittest.TestCase):
+    def test_emerge_phase_milestones_are_accepted(self):
+        """O7: Design dock needs setup/simulating/exporting; ResearchDialog keeps legacy names."""
+        from fairbeam.progress import ProgressParser
+        manager = self.manager(autostart=False)
+        job = manager.submit(model='research:emerge', model_path='', kind='research',
+                             research_input=self.spec('emerge'))
+        parser = ProgressParser()
+        for phase in ('setup', 'simulating', 'exporting', 'results_exported'):
+            manager._handle(job, parser, f'fairbeam-research: {json.dumps({"type": "phase", "phase": phase})}', 'stdout')
+            self.assertEqual(job.phase, phase)
+        manager._handle(job, parser, 'fairbeam-research: {"type":"phase","phase":"bogus"}', 'stdout')
+        self.assertEqual(job.phase, 'results_exported', 'unknown research phases must be ignored')
+
     def test_driven_bundle_is_published_only_with_matching_hash_and_input(self):
         for corrupt in (False, True):
             manager=self.manager(autostart=False)

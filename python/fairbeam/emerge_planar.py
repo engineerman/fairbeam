@@ -1,11 +1,15 @@
 """Admission of a planar N-port Design subset for experimental EMerge.
 
 Turns an admitted Design plus run settings into a neutral, metre-based ``kind: "planar"`` case.
-Ports are ``1…N_MAX`` homogeneous microstrip (``accept_lumped_terminals``) or Discrete/lumped
-(``accept_finite_feed``). Anything outside the admitted subset raises ``ValueError``; nothing is
-dropped or coerced apart from the explicit, user-accepted ``approximate_metals`` (force PEC) and
-port-map accept rewrites. Trace metals keep ``conductivity`` / sheet thickness for EMerge
-``ThinConductor`` unless approximated as PEC. The substrate-bottom ground stays PEC. This module
+Ports are ``1…N_MAX`` homogeneous microstrip or classic CPW (``accept_lumped_terminals`` →
+LumpedPort, or ``accept_modal_ports`` → WavePort) or Discrete/lumped (``accept_finite_feed``).
+Anything outside the admitted subset raises ``ValueError``; nothing is dropped or coerced apart
+from the explicit, user-accepted ``approximate_metals`` (force PEC) and port-map accept rewrites.
+Trace metals keep ``conductivity`` / sheet thickness for EMerge ``ThinConductor`` unless
+approximated as PEC. Microstrip / Discrete keep a substrate-bottom ground (PEC). Classic CPW uses
+coplanar top grounds only (``ground_mode: "coplanar"``); grounded CPW is rejected. CPW terminal
+faces span substrate height plus a fraction of ``air_height_mm`` above the metal plane so a
+modal port can see coplanar/air fields (microstrip stays substrate-tall). This module
 never imports ``emerge``, ``gmsh`` or ``emsutil``.
 """
 import copy
@@ -13,7 +17,7 @@ import math
 
 from .design import _given, check_design, design_params, resolve_names, resolve_parts, evaluate
 from .emerge_design import sheet_conductor
-from .emerge_limits import N_MAX
+from .emerge_limits import N_MAX, field_cut_frequencies_hz_from_settings
 from .emerge_port_map import resolve
 from .model import resolve_params
 
@@ -23,11 +27,16 @@ RESOLUTIONS = {"coarse": 0.25, "fine": 0.15}  # wavelength fractions at f_max (f
 PORT_PAD_MM = 1.0
 METAL_EDGE_MM = 0.4
 MAX_RESOURCE_CELLS = 400000  # tetrahedron-count proxy (frozen Task 1)
+# O17: classic CPW quasi-TEM lives in gaps + air above metal; WavePort/Lumped face
+# extends above substrate top by this fraction of air_height_mm (clamped to air box).
+# Task 1 used 0.5 (human FAIL — still high S11); Task 1b tries full air column.
+CPW_AIR_APERTURE_FRACTION = 1.0
 _REQUIRED = ("analysis", "enclosure", "air_height_mm",
              "resolution", "f_min_hz", "f_max_hz", "points")
 _ALLOWED = frozenset(_REQUIRED) | {
     "approximate_metals", "padding_mm", "refine_conductor_edges",
-    "accept_lumped_terminals", "accept_finite_feed",
+    "accept_lumped_terminals", "accept_modal_ports", "accept_finite_feed",
+    "field_cut_frequencies_hz",
 }
 _TOL = 1e-9
 
@@ -90,6 +99,7 @@ def _settings(settings):
         raise ValueError("approximate_metals must be boolean")
     if type(settings.get("refine_conductor_edges", True)) is not bool:
         raise ValueError("refine_conductor_edges must be boolean")
+    field_cut_frequencies_hz_from_settings(settings)  # validate early; attach in admit
     refine_edges = settings.get("refine_conductor_edges", True)
     return enclosure, air_height, padding, refine_edges
 
@@ -162,7 +172,7 @@ def _covers_footprint(lo, hi, sub_lo, sub_hi):
 def _admit_planar_ports(ports):
     """Validate planar port count / homogeneous type / numbers. Returns ``(sorted_ports, kind)``.
 
-    ``kind`` is ``"microstrip"`` or ``"lumped"``.
+    ``kind`` is ``"microstrip"``, ``"cpw"``, or ``"lumped"``.
     """
     n = len(ports)
     if n < 1 or n > N_MAX:
@@ -179,13 +189,44 @@ def _admit_planar_ports(ports):
         raise ValueError(f"Planar EMerge needs contiguous port numbers 1…{n}")
     port_types = [p.get("type", "lumped") for p in ports]
     all_microstrip = all(t == "microstrip" for t in port_types)
+    all_cpw = all(t == "cpw" for t in port_types)
     all_lumped = all(t == "lumped" for t in port_types)
-    if not (all_microstrip or all_lumped):
+    if not (all_microstrip or all_cpw or all_lumped):
         raise ValueError(
-            "Planar EMerge needs all ports microstrip or all Discrete (lumped); "
+            "Planar EMerge needs all ports microstrip, all CPW, or all Discrete (lumped); "
             "mixed types are rejected")
-    kind = "microstrip" if all_microstrip else "lumped"
+    if all_microstrip:
+        kind = "microstrip"
+    elif all_cpw:
+        kind = "cpw"
+    else:
+        kind = "lumped"
     return sorted(ports, key=lambda p: p["number"]), kind
+
+
+def _pec_on_zm(boundaries):
+    """True when Design boundaries put PEC on the substrate z− face."""
+    if isinstance(boundaries, str):
+        return boundaries == "PEC"
+    if isinstance(boundaries, list) and len(boundaries) >= 5:
+        return boundaries[4] == "PEC"
+    return False
+
+
+def _cpw_aperture_span_mm(strip_u0, strip_u1, gap_mm):
+    """Board-edge transverse span: center strip widened by ``2*gap`` each side (locked O8)."""
+    return strip_u0 - 2.0 * gap_mm, strip_u1 + 2.0 * gap_mm
+
+
+def _cpw_terminal_z_top_mm(sub_hi_z, air_height_mm):
+    """CPW board-edge face top z (mm): substrate top plus air above metal (O17).
+
+    Microstrip / Discrete keep substrate-only height elsewhere. Extension is
+    ``CPW_AIR_APERTURE_FRACTION * air_height_mm``, clamped so the port top stays at or
+    below ``sub_hi_z + air_height_mm`` (open-enclosure padding is above that box).
+    """
+    air_above = min(CPW_AIR_APERTURE_FRACTION * float(air_height_mm), float(air_height_mm))
+    return float(sub_hi_z) + air_above
 
 
 def admit(design, settings):
@@ -206,9 +247,14 @@ def admit(design, settings):
         raise ValueError("Additional lumped elements are not supported by planar EMerge")
     ports, port_kind = _admit_planar_ports(design.get("ports", []))
     all_microstrip = port_kind == "microstrip"
-    if all_microstrip:
-        if settings.get("accept_lumped_terminals") is not True:
-            raise ValueError("Explicit accept_lumped_terminals is required for planar EMerge")
+    all_cpw = port_kind == "cpw"
+    if all_microstrip or all_cpw:
+        if (settings.get("accept_modal_ports") is not True
+                and settings.get("accept_lumped_terminals") is not True):
+            label = "CPW" if all_cpw else "microstrip"
+            raise ValueError(
+                "Explicit accept_modal_ports (WavePort) or accept_lumped_terminals "
+                f"(LumpedPort) is required for planar {label} EMerge")
     else:
         if settings.get("accept_finite_feed") is not True:
             raise ValueError("Explicit experimental finite-feed acceptance is required")
@@ -219,11 +265,19 @@ def admit(design, settings):
             raise ValueError(mapped["error"])
         start = [float(evaluate(v, names)) for v in port["start"]]
         stop = [float(evaluate(v, names)) for v in port["stop"]]
-        if all_microstrip:
+        if all_microstrip or all_cpw:
             if port.get("direction") not in ("x", "y"):
-                raise ValueError("Planar EMerge microstrip port direction must be x or y")
-            if port.get("excitation_direction") != "z":
-                raise ValueError("Planar EMerge microstrip excitation_direction must be z")
+                raise ValueError(
+                    f"Planar EMerge {port_kind} port direction must be x or y")
+            if all_microstrip:
+                if port.get("excitation_direction") != "z":
+                    raise ValueError("Planar EMerge microstrip excitation_direction must be z")
+            else:
+                transverse_name = "y" if port["direction"] == "x" else "x"
+                if port.get("excitation_direction") != transverse_name:
+                    raise ValueError(
+                        "Planar EMerge CPW excitation_direction must be the in-plane "
+                        f"transverse axis ({transverse_name})")
             conductor = next(
                 (m for m in design.get("materials", []) if m.get("name") == port.get("conductor")), None)
             if conductor is None or conductor.get("kind") != "metal":
@@ -231,15 +285,21 @@ def admit(design, settings):
             impedance = float(evaluate(port.get("reference_ohm", 50), names))
             if not math.isfinite(impedance) or impedance <= 0:
                 raise ValueError("Planar port reference_ohm must be a positive real number")
-            resolved_ports.append({
-                "number": int(port["number"]), "kind": "microstrip",
+            entry = {
+                "number": int(port["number"]), "kind": port_kind,
                 "direction": port["direction"],
                 "start": start, "stop": stop, "z0": impedance,
-                "design_port_type": port.get("type", "microstrip"),
+                "design_port_type": port.get("type", port_kind),
                 "mapped_bc": mapped["mapped_bc"],
                 "approximations": list(mapped["approximations"]),
                 "accept_used": list(mapped["accept_used"]),
-            })
+            }
+            if all_cpw:
+                gap = float(evaluate(port.get("gap"), names))
+                if not math.isfinite(gap) or gap <= 0:
+                    raise ValueError("Planar CPW port gap must be a positive real number")
+                entry["gap"] = gap
+            resolved_ports.append(entry)
         else:
             if port.get("direction") != "z":
                 raise ValueError("Planar EMerge Discrete port direction must be z")
@@ -335,30 +395,69 @@ def admit(design, settings):
                 raise ValueError("Trace metal must lie on the substrate top elevation")
             traces.append((ring, elevation, sigma, thickness_m))
 
-    ground_ok = ground_box is not None
     boundaries = design.get("simulation", {}).get("boundaries") or []
-    if not ground_ok:
-        if len(boundaries) >= 5 and boundaries[4] == "PEC":
-            ground_ok = True
-        else:
-            raise ValueError("Planar EMerge needs a ground sheet at the substrate bottom or PEC on z−")
+    if all_cpw:
+        if ground_box is not None:
+            raise ValueError(
+                "Grounded CPW is not admitted yet (bottom ground sheet present)")
+        if _pec_on_zm(boundaries):
+            raise ValueError("Grounded CPW is not admitted yet (PEC on z−)")
+        if len(traces) < 3:
+            raise ValueError(
+                "Classic CPW needs a center strip and at least two coplanar ground "
+                "sheets on the substrate top")
+        ground_mode = "coplanar"
+    else:
+        ground_ok = ground_box is not None
+        if not ground_ok:
+            if _pec_on_zm(boundaries):
+                ground_ok = True
+            else:
+                raise ValueError(
+                    "Planar EMerge needs a ground sheet at the substrate bottom or PEC on z−")
+        ground_mode = "bottom"
 
     rings = [ring for ring, _z, _sigma, _thick in traces]
     terminals = []
     terminal_faces = []
     for port in sorted(resolved_ports, key=lambda p: p["number"]):
         a, b = port["start"], port["stop"]
-        if port["kind"] == "microstrip":
+        if port["kind"] in ("microstrip", "cpw"):
             prop = "xyz".index(port["direction"])
             transverse = 1 - prop
             faces = (a[prop], b[prop])
             on_edge = [_near(face, sub_lo[prop]) or _near(face, sub_hi[prop]) for face in faces]
             if sum(1 for ok in on_edge if ok) != 1:
-                raise ValueError("Each microstrip port face must lie on the substrate edge")
+                raise ValueError(
+                    f"Each {port['kind']} port face must lie on the substrate edge")
             face = faces[0] if on_edge[0] else faces[1]
-            u0, u1 = sorted((a[transverse], b[transverse]))
-            if not (u1 - u0 > 0):
-                raise ValueError("Microstrip port must span a nonzero strip width")
+            strip_u0, strip_u1 = sorted((a[transverse], b[transverse]))
+            if not (strip_u1 - strip_u0 > 0):
+                raise ValueError(
+                    f"{port['kind'].capitalize()} port must span a nonzero strip width")
+            if port["kind"] == "cpw":
+                gap = port["gap"]
+                u0, u1 = _cpw_aperture_span_mm(strip_u0, strip_u1, gap)
+                if not _edge_covered(strip_u0, strip_u1, face, prop, transverse, rings):
+                    raise ValueError(
+                        "A center strip must cover the CPW port strip across its full width")
+                left_lo, left_hi = u0, strip_u0 - gap
+                right_lo, right_hi = strip_u1 + gap, u1
+                if not (left_hi - left_lo > 0 and right_hi - right_lo > 0):
+                    raise ValueError("CPW aperture into coplanar grounds must be nonzero")
+                if not _edge_covered(left_lo, left_hi, face, prop, transverse, rings):
+                    raise ValueError(
+                        "Classic CPW needs coplanar ground metal beside the strip "
+                        "(into-ground aperture side)")
+                if not _edge_covered(right_lo, right_hi, face, prop, transverse, rings):
+                    raise ValueError(
+                        "Classic CPW needs coplanar ground metal beside the strip "
+                        "(into-ground aperture side)")
+            else:
+                u0, u1 = strip_u0, strip_u1
+                if not _edge_covered(u0, u1, face, prop, transverse, rings):
+                    raise ValueError(
+                        "A trace must cover the terminal top edge across the full strip width")
         else:
             # Discrete: Design start/stop is the board-edge plate (flat on x or y); no feed_width_mm.
             lo_p, hi_p = _box_bounds(a, b)
@@ -376,11 +475,16 @@ def admit(design, settings):
                 raise ValueError("Discrete port must span a nonzero strip width")
             if not (_near(lo_p[2], sub_lo[2]) and _near(hi_p[2], sub_hi[2])):
                 raise ValueError("Discrete port must span substrate height (strip-to-ground)")
-        if not _edge_covered(u0, u1, face, prop, transverse, rings):
-            raise ValueError("A trace must cover the terminal top edge across the full strip width")
-        height = sub_hi[2] - sub_lo[2]
+            if not _edge_covered(u0, u1, face, prop, transverse, rings):
+                raise ValueError(
+                    "A trace must cover the terminal top edge across the full strip width")
+        if all_cpw:
+            z_top = _cpw_terminal_z_top_mm(sub_hi[2], air_height_mm)
+        else:
+            z_top = sub_hi[2]
+        height = z_top - sub_lo[2]
         lo = [0.0, 0.0, sub_lo[2]]
-        hi = [0.0, 0.0, sub_hi[2]]
+        hi = [0.0, 0.0, z_top]
         lo[prop] = hi[prop] = face
         lo[transverse], hi[transverse] = u0, u1
         terminals.append({
@@ -415,11 +519,31 @@ def admit(design, settings):
         raise ValueError(f"Domain too large for the EMerge prototype (about {cells:.0f} cells, "
                          f"limit {MAX_RESOURCE_CELLS}); reduce padding or use coarse resolution")
 
+    mapped0 = resolved_ports[0]["mapped_bc"] if resolved_ports else None
     if all_microstrip:
-        port_limit = (
-            "Each microstrip port becomes a lumped strip-to-ground terminal at the board-edge face; "
-            "feed_shift, measurement_shift and termination are unused in this FEM run."
-        )
+        if mapped0 == "WavePort":
+            port_limit = (
+                "Each microstrip port becomes a WavePort at the board-edge face; "
+                "feed_shift, measurement_shift and termination are unused in this FEM run."
+            )
+        else:
+            port_limit = (
+                "Each microstrip port becomes a lumped strip-to-ground terminal at the board-edge face; "
+                "feed_shift, measurement_shift and termination are unused in this FEM run."
+            )
+    elif all_cpw:
+        if mapped0 == "WavePort":
+            port_limit = (
+                "Each CPW port becomes a WavePort at the board-edge CPW aperture "
+                "(center strip + gaps into coplanar grounds); "
+                "feed_shift, measurement_shift and termination are unused in this FEM run."
+            )
+        else:
+            port_limit = (
+                "Each CPW port becomes a lumped gap terminal at the board-edge CPW aperture "
+                "(center strip + gaps into coplanar grounds, not strip-to-ground); "
+                "feed_shift, measurement_shift and termination are unused in this FEM run."
+            )
     else:
         port_limit = (
             "Each Discrete port becomes a LumpedPort plate at the board-edge face; "
@@ -429,8 +553,23 @@ def admit(design, settings):
         port_limit,
         f"Enclosure is {enclosure}; mesh and padding convergence are not certified.",
         "No far field in this run.",
-        "Substrate-bottom ground remains PEC even when the ground material has finite conductivity.",
     ]
+    if all_cpw:
+        limitations.append(
+            "Classic CPW uses coplanar top grounds only; admit does not invent a "
+            "substrate-bottom ground.")
+    else:
+        limitations.append(
+            "Substrate-bottom ground remains PEC even when the ground material has finite conductivity.")
+    if mapped0 == "WavePort" and (all_microstrip or all_cpw):
+        if all_cpw:
+            limitations.append(
+                "WavePort faces use the board-edge CPW aperture; EMerge may warn that "
+                "ports are partially not on the exterior boundary of the simulation domain.")
+        else:
+            limitations.append(
+                "WavePort faces reuse the strip-to-ground board-edge plate; EMerge may warn that "
+                "ports are partially not on the exterior boundary of the simulation domain.")
     if substrate["tan_d"]:
         limitations.append("Constant loss tangent; frequency dependence is not modelled beyond tan_d_freq.")
     if pec_approximations:
@@ -457,6 +596,7 @@ def admit(design, settings):
         },
         "traces": trace_dicts,
         "ground_z": sub_lo[2] * 1e-3,
+        "ground_mode": ground_mode,
         "terminals": terminals,
         "air": {"lo": _mm(air_lo), "hi": _mm(air_hi)},
         "enclosure": enclosure,
@@ -469,4 +609,7 @@ def admit(design, settings):
     }
     if refine_edges:
         case["metal_edge_m"] = METAL_EDGE_MM * 1e-3
+    field_cut_hz = field_cut_frequencies_hz_from_settings(settings)
+    if field_cut_hz is not None:
+        case["field_cut_frequencies_hz"] = field_cut_hz
     return case

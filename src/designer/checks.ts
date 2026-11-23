@@ -38,7 +38,7 @@ export const CHEAP = new Set([
   "cells-per-wavelength", "end-criterion", "port-length", "port-volume", "port-r", "port-reference", "port-overlap", "no-port",
   "no-metal", "resistor-r", "resistor-length", "component-path", "cone-radii", "cone-length", "torus-radii",
   "wire-points", "wg-mode", "wg-size", "wg-cutoff", "wg-aperture", "cut-sheet", "boolean-transform-angle", "sheet-transform-angle", "scale", "mesh-lines",
-  "monitor-efficiency", "field-plane", "conductivity", "metal-thickness", "tan-d-band", "ff-step", "ff-field-budget", "mesh-local-region",
+  "monitor-efficiency", "field-plane", "emerge-port-admit", "conductivity", "metal-thickness", "tan-d-band", "ff-step", "ff-field-budget", "mesh-local-region",
 ]);
 
 /** Keep CHEAP wording in sync with Python EXPLANATIONS (checked by check-designer). */
@@ -106,7 +106,8 @@ export const EXPLANATIONS: Readonly<Record<string, string>> = {
   "wg-aperture": "The port cross-section does not match the dimensions used to calculate its mode field. Adjust the port bounds or a and b so the aperture and mode dimensions agree.",
   "cut-sheet": "A rectangle cut must lie in the plane of the sheet it removes material from. Make start and stop equal on exactly one axis and give the other two axes a positive extent.",
   "monitor-efficiency": "The efficiency over the band is computed from the far-field box after the run, so it needs the far field and a usable number of frequencies. Turn the far field on and use a whole number of frequencies from 3 to 201; 21 is usually enough.",
-  "field-plane": "A field plane records E or H at a few frequencies inside the simulated band, and each map adds to the run's memory and result size. Give each plane one to four frequencies within the band and use at most four planes."
+  "field-plane": "A field plane records E or H at a few frequencies inside the simulated band, and each map adds to the run's memory and result size. Give each plane one to four frequencies within the band and use at most four planes.",
+  "emerge-port-admit": "EMerge experimental is not a full replacement for openEMS. On a Design it can excite only lumped, microstrip, CPW, or coaxial ports, and every port must be the same type. Waveguide feeds (typical for horns and guides) need openEMS. To try EMerge itself without changing this design, use Research › Experimental solvers › EMerge WR-90 fixture.",
 };
 
 /** The end-criterion policy (design_checks.py END_DB_MIN / END_DB_MAX, the Solver field's min and
@@ -147,7 +148,18 @@ const g = (v: number) => String(Number(v.toPrecision(6)));
 const inPlane = (n: number) => [(n + 1) % 3, (n + 2) % 3];
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-export function designChecks(d: Design): Check[] {
+/** EMerge chrome: skip FDTD manual-mesh port-on-line rules without mutating `design.mesh`. */
+export type DesignCheckOptions = { skipOpenEmsManualPortGrid?: boolean };
+
+/** Server or client check aligned with openEMS manual mesh / design.py build. */
+export function isOpenEmsManualPortGridIssue(path: string, message: string, code = "expr"): boolean {
+  if (code !== "expr") return false;
+  if (!/^ports(\[|\.)/.test(path) && !path.includes(".group.members[")) return false;
+  return /must lie on a (manual )?.*mesh line/i.test(message);
+}
+
+export function designChecks(d: Design, options?: DesignCheckOptions): Check[] {
+  const skipOpenEmsManualPortGrid = options?.skipOpenEmsManualPortGrid === true;
   const out: Check[] = [];
   const add = (severity: Severity, path: string, code: string, message: string, fix?: CheckFix) =>
     out.push({ severity, path, code, message, explain: EXPLANATIONS[code], ...(fix ? { fix } : {}) });
@@ -633,14 +645,16 @@ export function designChecks(d: Design): Check[] {
       if (extents[AXES.indexOf(axis)][0] < lines[0] - 1e-6 || extents[AXES.indexOf(axis)][1] > lines.at(-1)! + 1e-6)
         error(`mesh.lines.${axis}`, "expr", `manual mesh extent must contain the model on ${axis}`);
     }
-    (d.ports ?? []).flatMap((port, i) => portFeedEntries(port, `ports[${i}]`)).forEach(([w, port]) => { for (const end of ["start", "stop"] as const) {
-      const coords = port[end].map((v) => { try { return evaluate(v, names); } catch { return NaN; } });
-      // Native planar admission checks the final probe/metal planes instead of
-      // forcing free in-plane strip edges onto mesh lines (design.py build).
-      const checked = (axis: Axis) => port.type !== "microstrip" && port.type !== "cpw"
-        && (port.type !== "coaxial" || axis === port.direction);
-      AXES.forEach((axis, k) => { const lines = resolved[axis]; if (checked(axis) && lines && Number.isFinite(coords[k]) && !lines.some((line) => Math.abs(line-coords[k]) <= 1e-6)) error(`${w}.${end}[${k}]`, "expr", `port ${end} coordinate must lie on a manual ${axis} mesh line (within 1e-6 mm)`); });
-    }});
+    if (!skipOpenEmsManualPortGrid) {
+      (d.ports ?? []).flatMap((port, i) => portFeedEntries(port, `ports[${i}]`)).forEach(([w, port]) => { for (const end of ["start", "stop"] as const) {
+        const coords = port[end].map((v) => { try { return evaluate(v, names); } catch { return NaN; } });
+        // Native planar admission checks the final probe/metal planes instead of
+        // forcing free in-plane strip edges onto mesh lines (design.py build).
+        const checked = (axis: Axis) => port.type !== "microstrip" && port.type !== "cpw"
+          && (port.type !== "coaxial" || axis === port.direction);
+        AXES.forEach((axis, k) => { const lines = resolved[axis]; if (checked(axis) && lines && Number.isFinite(coords[k]) && !lines.some((line) => Math.abs(line-coords[k]) <= 1e-6)) error(`${w}.${end}[${k}]`, "expr", `port ${end} coordinate must lie on a manual ${axis} mesh line (within 1e-6 mm)`); });
+      }});
+    }
   }
   if (rawMesh.refine_features !== undefined && typeof rawMesh.refine_features !== "boolean")
     error("mesh.refine_features", "expr", "refine features must be true or false");

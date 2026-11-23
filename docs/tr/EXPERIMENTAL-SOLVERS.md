@@ -1,6 +1,14 @@
 # Deneysel çözücüler
 
-Varsayılan çözücü openEMS'tir. **Elmer FEM — Deneysel özmodlar**, **Elmer FEM · Deneysel anten**, sabit **EMerge** WR-90 dalga kılavuzu fikstürü, **EMerge · Deneysel anten** (sınırlı Tasarım alt kümesi) ve **EMerge FEM · Deneysel düzlemsel iki port** (hairpin sınıfı mikroşerit), geometri ve sonuç desteği daha sınırlı, isteğe bağlı araştırma yollarıdır. Arka ucun kurulması veya bir çalıştırmanın tamamlanması, tasarımınızın sayısal doğruluğunu kanıtlamaz.
+Varsayılan çözücü openEMS'tir. **Elmer FEM — Deneysel özmodlar**, **Elmer FEM · Deneysel anten**, sabit **EMerge** WR-90 dalga kılavuzu fikstürü ve **EMerge FEM · Deneysel** (birleşik N-port Tasarım yolu: uyarılmış/toplu, düzlemsel mikroşerit veya tümü koaksiyel TEM tarifleri, en fazla 8 port), geometri ve sonuç desteği daha sınırlı, isteğe bağlı araştırma yollarıdır. Arka ucun kurulması veya bir çalıştırmanın tamamlanması, tasarımınızın sayısal doğruluğunu kanıtlamaz.
+
+## Etkin çözücü (Simülasyon şeridi)
+
+Masaüstü tasarımcıda **Simülasyon › Çözücü**, oturumun etkin çözücüsü olarak **openEMS** veya **EMerge (deneysel)** seçmenizi sağlar. Yeni oturumda varsayılan openEMS'tir. EMerge seçmek Çalıştır görünümünü (etiket ve vurgu), Frekans / Sınırlar / Mesh ayarlarını ve hangi Simülasyon / Sonra / Optimize eylemlerinin açık kalacağını yeniden hedefler. openEMS'i ürün varsayılanı olarak değiştirmez ve EMerge'i doğrulanmış üretim çözücüsü yapmaz.
+
+Elmer ve sabit EMerge dalga kılavuzu fikstürü **Deneysel çözücüler** / Çalıştır penceresinin uzun seçenek listesinde kalır — bu seçicide üçüncü bir şerit vurgusu değildir. EMerge etkinken **Optimize** (Tarama / Optimizatör) kapalı kalır; bu yol ertelenmiştir. EMerge altında Mesh görünümü, Mesh oluştur (veya yüzey kenarlarını dışa aktaran bir EMerge sonucu) sonrası deneysel FEM **dış yüzey** tel çerçevesini çizer. openEMS FDTD ızgarasını tetrahedral meshmiş gibi göstermez.
+
+Kalan EMerge izleme maddeleri: [docs/agent/BACKLOG-emerge-port-map.md](../agent/BACKLOG-emerge-port-map.md).
 
 ## Masaüstü uygulamasında kurulum
 
@@ -22,21 +30,13 @@ macOS ve Linux'ta yönetilen kurucu yoktur. `emerge==3.0.0b12` içeren kendi Pyt
 
 Fikstür tanımı, kabul ölçütleri ve kaydedilmiş yerel gözlemler için [EMerge deneyine](EMERGE-EXPERIMENT.md) bakın.
 
-## EMerge · Deneysel anten
+## EMerge FEM · Deneysel (birleşik N-port)
 
-Çalıştırma sunucusu `emerge` ≥ 2 bildiriyorsa **Simülasyon çalıştır** penceresinde Elmer seçeneklerinden sonra **EMerge · Deneysel anten** görünür. Elmer'in uyarılmış anten yolundakiyle aynı sınırlı sınıfı kabul eder: eksenlere paralel dielektrik kutular, PEC levhalar, tek Ayrık port, açıkça kabul edilen sonlu besleme genişliği, isteğe bağlı `approximate_metals` ve kayıp varsa sabit `tan_d`. Ek portlar, dirençler, toplu elemanlar, dönüşümler, kesiler, boşluklar, örtüşmeler ve kutu olmayan ilkeller reddedilir. Dış sınır: dolgulu hava kutusunun soğurucu yüzleri (PML değil). Uzak alan ve kazanç belgesi yoktur; durum `results_exported`'tur.
+Çalıştırma sunucusu `emerge` ≥ 3 bildiriyorsa **Çalıştır**, Elmer seçeneklerinden sonra **EMerge FEM · Deneysel** sunar. Tek giriş şu Tasarım tariflerini kapsar: uyarılmış/toplu (eksenlere paralel dielektrik kutular ve metal levhalar), düzlemsel mikroşerit/Ayrık (altta toprak ve üstte z-normal bakırlı tek katman tahta), klasik CPW (eşdüzlemli üst topraklar; `accept_modal_ports` / `accept_lumped_terminals` arkasında `WavePort` / toplu boşluk plakası) ve tümü koaksiyel TEM (analitik `CoaxPort`, sabit εr dolgu, açık `accept_coaxial_tem`). Port sayısı, tek türden **1…8** olabilir; karışık türler, çok katman, via, topraklı CPW, eğriler ve desteklenmeyen geometri reddedilir. Yaklaşık eşlemeler mevcut `accept_*` kapılarını korur. Tasarım düzlemsel sınıflanırsa muhafaza / hava / pay görünür; koaksiyel taslaklarda bunun yerine koaksiyel kabul açıklaması gösterilir. Uzak alan ve kazanç belgesi yoktur; durum `results_exported`'tur. Paylaşılan Sonuçlar, openEMS'in yerine geçmeden eksiksiz N×N deneysel S matrisini gösterir. B/C aşaması sınırları [EMerge deneyinde](EMERGE-EXPERIMENT.md) yer alır.
 
-Çözünürlükler `f_max`teki dalga boyu kesirleridir: `coarse` = 0,25, `fine` = 0,15. İşçi zaman aşımı 1800 saniyedir; ucuz bir hacim vekili aşırı büyük alanları başlatmadan reddeder. S11 ve Zin, openEMS'in yerine geçmeden paylaşılan Sonuçlar görünümünde yer alır.
+Çözünürlükler `f_max`teki dalga boyu kesirleridir: `coarse` = 0,25, `fine` = 0,15. Nokta sayısı 3–41. Uyarılmış sınıf işçi zaman aşımı 1800 s (hacim vekili); düzlemsel sınıf 3600 s (tetrahedra vekili, 400000). Şema `fairbeam.emerge-result/2`.
 
-Yerleşik Patch şablonu için 2026-11-04 yerel çalıştırmalarında EMerge S11 minimumu 2,30 GHz'te kaydedildi (2–3 GHz, 11 nokta; coarse −7,427 dB, fine −6,349 dB). Aynı şablonun Fairbeam openEMS çalıştırmasında S11 minimumu 2,453981250 GHz (−45,574 dB) idi. EMerge Tasarım yolu bu openEMS sonucuyla uyum iddia etmez. Ayrıntılar: [EMerge deneyi](EMERGE-EXPERIMENT.md).
-
-## EMerge FEM · Deneysel düzlemsel iki port
-
-Çalıştırma sunucusu `emerge` ≥ 3 bildiriyorsa **Simülasyon çalıştır** penceresinde **EMerge · Deneysel anten** seçeneğinden sonra **EMerge FEM · Deneysel düzlemsel iki port** görünür. Tek katmanlı mikroşerit iki port sınıfını kabul eder: bir alttaş kutusu, altta toprak, alttaş üstünde z-normal bakır çokgenler (veya z-düz kutular), tahta kenarında tam iki mikroşerit port. Çok katman, via, CPW, diğer port türleri veya sayıları, dirençler, dönüşümler, kesiler, boşluklar ve başka yüksekliklerde metal reddedilir. Her mikroşerit port, yalnızca bu çalıştırma için tahta kenarında şeritten toprağa toplu terminale dönüşür (`accept_lumped_terminals`); besleme ve ölçüm kaymaları kullanılmaz. Sonlu bakır için `approximate_metals` (PEC levhalar) gerekir. Muhafaza `shielded` (kapalı PEC kutu) veya `open` (`padding_mm` ile soğurucu yanlar ve üst) olur. Uzak alan ve kazanç belgesi yoktur; durum `results_exported`'tur. Paylaşılan Sonuçlar, openEMS'in yerine geçmeden eksiksiz 2 × 2 S matrisini gösterir.
-
-Çözünürlükler `f_max`teki dalga boyu kesirleridir: `coarse` = 0,25, `fine` = 0,15. İşçi zaman aşımı 3600 saniyedir; tetrahedra vekili 400000 üzerini başlatmadan reddeder. Nokta sayısı 3–41.
-
-Hairpin test fikstürü için 2026-11-04 yerel EMerge 2.8.9 çalıştırmalarında (15 nokta, 0,75–1,25 GHz, levha bakır) en iyi |S21| **1,071429 GHz**'te kaydedildi (shielded coarse ve fine −0,63 dB; open coarse −0,51 dB). Bu ızgarada coarse→fine tepe kayması 0 idi. Aynı fikstürün Fairbeam openEMS GPU çalıştırması (varsayılan tek port uyarımı) fiziksel olmayan |S21| > 1 bildirdi; bu yüzden B2 düzeyi o openEMS yoluyla S parametresi uyumu iddia etmez. Ayrıntılar: [EMerge deneyi](EMERGE-EXPERIMENT.md).
+Kayıtlı Patch ve hairpin yerel sayıları (ve EMerge'in openEMS S parametresi uyumu iddia etmediği dürüstlük ifadeleri) [EMerge deneyinde](EMERGE-EXPERIMENT.md) kalır. Mesh oluştur çözümsüz deneysel FEM yüzeyini de üretebilir; ayrıntılar İngilizce sayfa ve README ile aynıdır.
 
 ## Mevcut tasarımın özmodları
 

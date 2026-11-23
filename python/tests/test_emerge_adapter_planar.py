@@ -6,7 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import fairbeam_emerge as fem
@@ -44,6 +44,7 @@ def sample_case(**overrides):
         ],
         "air": {"lo": [-0.025, -0.030, 0.0], "hi": [0.025, 0.029, 0.008]},
         "enclosure": "shielded",
+        "ground_mode": "bottom",
         "frequencies_hz": [0.9e9, 1.0e9, 1.1e9],
         "resolution": 0.25,
         "resolution_name": "coarse",
@@ -52,6 +53,43 @@ def sample_case(**overrides):
         "limitations": ["Each microstrip port becomes a lumped strip-to-ground terminal."],
         "pec_approximations": ["copper"],
     }
+    case.update(overrides)
+    return case
+
+
+def sample_cpw_case(**overrides):
+    """Minimal admitted classic-CPW planar case (metres); synthetic twin of portmap_cpw_line."""
+    case = sample_case(
+        ground_mode="coplanar",
+        traces=[
+            {"xy": [[-0.015, -0.00075], [0.015, -0.00075], [0.015, 0.00075], [-0.015, 0.00075]],
+             "z": 0.0016},
+            {"xy": [[-0.015, -0.01], [0.015, -0.01], [0.015, -0.00175], [-0.015, -0.00175]],
+             "z": 0.0016},
+            {"xy": [[-0.015, 0.00175], [0.015, 0.00175], [0.015, 0.01], [-0.015, 0.01]],
+             "z": 0.0016},
+        ],
+        terminals=[
+            {"number": 1, "lo": [-0.015, -0.00175, 0.0], "hi": [-0.015, 0.00175, 0.0016],
+             "width": 0.0035, "height": 0.0016, "z0": 50.0,
+             "design_port_type": "cpw", "mapped_bc": "WavePort",
+             "approximations": [
+                 "cpw → WavePort at board-edge CPW aperture; feed_shift/measurement_shift unused"],
+             "accept_used": ["accept_modal_ports"]},
+            {"number": 2, "lo": [0.015, -0.00175, 0.0], "hi": [0.015, 0.00175, 0.0016],
+             "width": 0.0035, "height": 0.0016, "z0": 50.0,
+             "design_port_type": "cpw", "mapped_bc": "WavePort",
+             "approximations": [
+                 "cpw → WavePort at board-edge CPW aperture; feed_shift/measurement_shift unused"],
+             "accept_used": ["accept_modal_ports"]},
+        ],
+        limitations=[
+            "Classic CPW uses coplanar top grounds only; admit does not invent a backside ground.",
+            "Each CPW port becomes a WavePort on a board-edge CPW aperture "
+            "(center strip + gaps into coplanar grounds).",
+        ],
+        mesh_only=True,
+    )
     case.update(overrides)
     return case
 
@@ -320,6 +358,149 @@ class PlanarWorkerContract(unittest.TestCase):
         s = {"1,1": [0.2], "2,1": [0.5], "1,2": [0.5], "2,2": [0.1]}
         self.assertEqual(self.worker._field_cut_s_kwargs(s, 2), {"s21": s["2,1"]})
         self.assertEqual(self.worker._field_cut_s_kwargs({"1,1": [0.3]}, 1), {"s11": [0.3]})
+
+    def test_apply_planar_terminal_bc_waveport(self):
+        plate = object()
+        port = sample_case()["terminals"][0]
+        port = {**port, "mapped_bc": "WavePort", "accept_used": ["accept_modal_ports"]}
+        sim = MagicMock()
+        em = MagicMock()
+        em.ZAX = "Z"
+        wp = MagicMock()
+        sim.mw.bc.WavePort.return_value = wp
+        self.worker.apply_planar_terminal_bc(sim, em, plate, port)
+        sim.mw.bc.WavePort.assert_called_once_with(
+            plate, 1, number_of_modes=1, impedance_definition="PV")
+        wp.set_terminals.assert_not_called()
+        sim.mw.bc.LumpedPort.assert_not_called()
+
+    def test_apply_planar_terminal_bc_waveport_sets_cpw_terminals(self):
+        plate = object()
+        port = {**sample_cpw_case()["terminals"][0], "mapped_bc": "WavePort"}
+        sim = MagicMock()
+        em = MagicMock()
+        wp = MagicMock()
+        sim.mw.bc.WavePort.return_value = wp
+        strip, g0, g1 = object(), object(), object()
+        self.worker.apply_planar_terminal_bc(
+            sim, em, plate, port, strip_metal=strip, ground_metals=[g0, g1])
+        wp.set_terminals.assert_called_once_with(positive=strip, negative=g0)
+
+    def test_apply_planar_terminal_bc_lumped(self):
+        plate = object()
+        port = sample_case()["terminals"][0]
+        sim = MagicMock()
+        em = MagicMock()
+        em.ZAX = "Z"
+        self.worker.apply_planar_terminal_bc(sim, em, plate, port)
+        sim.mw.bc.LumpedPort.assert_called_once_with(
+            plate, 1, width=0.002, height=0.0016, direction="Z", Z0=50.0)
+        sim.mw.bc.WavePort.assert_not_called()
+
+    def test_apply_planar_terminal_bc_rejects_unknown(self):
+        port = {**sample_case()["terminals"][0], "mapped_bc": "ModalPort"}
+        with self.assertRaisesRegex(ValueError, "WavePort or LumpedPort"):
+            self.worker.apply_planar_terminal_bc(MagicMock(), MagicMock(), object(), port)
+
+    def test_apply_planar_terminal_bc_waveport_error_does_not_fallback(self):
+        plate = object()
+        port = {**sample_case()["terminals"][0], "mapped_bc": "WavePort"}
+        sim = MagicMock()
+        sim.mw.bc.WavePort.side_effect = RuntimeError("waveport failed")
+        em = MagicMock()
+        with self.assertRaises(RuntimeError) as caught:
+            self.worker.apply_planar_terminal_bc(sim, em, plate, port)
+        self.assertIn("waveport failed", str(caught.exception))
+        sim.mw.bc.LumpedPort.assert_not_called()
+
+    def _run_solve_planar_mocked(self, case):
+        """Drive ``solve_planar`` with fake EMerge; return ``(sim, diel_bottom)``."""
+        import numpy as np
+
+        sim = MagicMock(name="sim")
+        em = MagicMock(name="emerge")
+        em.__version__ = "3.0.0b12"
+        em.Simulation.return_value = sim
+        em.lib.PEC = "PEC"
+        em.Material = MagicMock(side_effect=lambda *a, **k: ("mat", a, k))
+        em.GCS.displace.return_value = "cs"
+        poly = MagicMock(name="poly")
+        metal_geo = MagicMock(name="metal")
+        poly.geo.return_value = metal_geo
+        em.geo.XYPolygon.return_value = poly
+
+        diel = MagicMock(name="diel")
+        diel_bottom = object()
+        diel.bottom = diel_bottom
+        diel.set_material.return_value = diel
+        air = MagicMock(name="air")
+        air.background.return_value = air
+        air.face.side_effect = lambda face: f"air.{face}"
+        plate = object()
+
+        with patch.dict(sys.modules, {"emerge": em, "numpy": np}):
+            with patch.object(self.worker, "_prepare_env"), \
+                 patch.object(self.worker, "_box", side_effect=[air, diel]), \
+                 patch.object(self.worker, "_plate", return_value=plate), \
+                 patch.object(self.worker, "mesh_counts",
+                              return_value={"nodes": 1, "tetrahedra": 1}), \
+                 patch.object(self.worker, "build_mesh_raw",
+                              return_value={"mesh_only": True}) as build_mesh:
+                out = self.worker.solve_planar(case)
+        self.assertEqual(out, {"mesh_only": True})
+        build_mesh.assert_called_once()
+        return sim, diel_bottom
+
+    def test_solve_planar_skips_bottom_pec_for_classic_cpw(self):
+        case = sample_cpw_case()
+        sim, diel_bottom = self._run_solve_planar_mocked(case)
+        pec_targets = [c.args[0] for c in sim.mw.bc.PEC.call_args_list]
+        self.assertNotIn(diel_bottom, pec_targets)
+        self.assertEqual(sim.mw.bc.WavePort.call_count, 2)
+        sim.mw.bc.LumpedPort.assert_not_called()
+        for call, number in zip(sim.mw.bc.WavePort.call_args_list, (1, 2)):
+            self.assertEqual(call.args[1], number)
+            self.assertEqual(call.kwargs["number_of_modes"], 1)
+            self.assertEqual(call.kwargs["impedance_definition"], "PV")
+
+    def test_solve_planar_cpw_lumped_skips_bottom_pec(self):
+        terminals = []
+        for t in sample_cpw_case()["terminals"]:
+            terminals.append({
+                **t, "mapped_bc": "LumpedPort",
+                "accept_used": ["accept_lumped_terminals"],
+                "approximations": [
+                    "cpw → lumped gap terminal at board-edge face; "
+                    "feed_shift/measurement_shift unused"],
+            })
+        case = sample_cpw_case(terminals=terminals)
+        sim, diel_bottom = self._run_solve_planar_mocked(case)
+        pec_targets = [c.args[0] for c in sim.mw.bc.PEC.call_args_list]
+        self.assertNotIn(diel_bottom, pec_targets)
+        self.assertEqual(sim.mw.bc.LumpedPort.call_count, 2)
+        sim.mw.bc.WavePort.assert_not_called()
+
+    def test_solve_planar_microstrip_still_pec_on_bottom(self):
+        case = sample_case(mesh_only=True)
+        sim, diel_bottom = self._run_solve_planar_mocked(case)
+        pec_targets = [c.args[0] for c in sim.mw.bc.PEC.call_args_list]
+        self.assertIn(diel_bottom, pec_targets)
+        self.assertEqual(sim.mw.bc.LumpedPort.call_count, 2)
+        sim.mw.bc.WavePort.assert_not_called()
+
+    def test_solve_planar_microstrip_waveport_still_pec_on_bottom(self):
+        terminals = []
+        for t in sample_case()["terminals"]:
+            terminals.append({
+                **t, "mapped_bc": "WavePort",
+                "accept_used": ["accept_modal_ports"],
+            })
+        case = sample_case(mesh_only=True, terminals=terminals)
+        sim, diel_bottom = self._run_solve_planar_mocked(case)
+        pec_targets = [c.args[0] for c in sim.mw.bc.PEC.call_args_list]
+        self.assertIn(diel_bottom, pec_targets)
+        self.assertEqual(sim.mw.bc.WavePort.call_count, 2)
+        sim.mw.bc.LumpedPort.assert_not_called()
 
 
 if __name__ == "__main__":

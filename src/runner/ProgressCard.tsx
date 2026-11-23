@@ -7,7 +7,7 @@ import { cancelRun, jobs, live, liveEnergy, liveInfo, liveLog, liveProgress, liv
 import { StatusBadge, paramSummary } from "./status";
 import { api } from "./api";
 import { cancelSweep } from "./sweep";
-import { pulseNote as livePulseNote } from "./liveRun";
+import { isEmergeResearchJob, normalizeDockPhase, pulseNote as livePulseNote } from "./liveRun";
 import { engineThreadsText } from "./RunQueue";
 import { fmt, t } from "../i18n";
 
@@ -46,6 +46,7 @@ function etaText(): { value: string; note: string } {
 
 export default function ProgressCard() {
   const job = () => live.job!;
+  const emerge = () => isEmergeResearchJob(job());
   const done = () => isTerminal(job().status);
   const now = useNow(() => !done());
   const elapsed = () => {
@@ -54,14 +55,14 @@ export default function ProgressCard() {
     return Math.max(0, (j.finished ?? now()) - j.started);
   };
   const stepIndex = () => {
-    const ph = job().phase;
+    const ph = normalizeDockPhase(job().phase);
     const i = STEPS.findIndex((s) => s.id === ph);
     if (i >= 0) return i;
-    if (ph === "done") return STEPS.length;
+    if (ph === "done" || job().phase === "done") return STEPS.length;
     // failed / cancelled / interrupted: the last phase reached before that
     const phases = live.events.filter((e) => e.type === "phase").map((e) => (e as { phase: Phase }).phase);
     for (let k = phases.length - 1; k >= 0; k--) {
-      const idx = STEPS.findIndex((s) => s.id === phases[k]);
+      const idx = STEPS.findIndex((s) => s.id === normalizeDockPhase(phases[k]));
       if (idx >= 0) return idx;
     }
     return 0;
@@ -72,6 +73,7 @@ export default function ProgressCard() {
   /** Why the energy line is flat at the start (liveRun.ts): gone once the solver is past the pulse or
    * has finished, also when the run ended between two progress lines. */
   const pulseNote = () => {
+    if (emerge()) return null;
     const note = livePulseNote(liveInfo(), liveProgress(), liveStats(), job().phase, job().status);
     if (!note) return null;
     return note.kind === "overLimit" ? t("progress.pulse.overLimit", { pulse: fmt.int(note.pulse), limit: fmt.int(note.limit) })
@@ -160,7 +162,15 @@ export default function ProgressCard() {
                 <span class="rp-step-mark" aria-hidden="true">
                   <Show when={state() === "done"}><Check size={10} /></Show>
                 </span>
-                <span class="rp-step-label">{s.id === "running" && (liveInfo().port_total ?? 1) > 1 ? t("progress.step.runningPort", { run: liveInfo().port_run, total: liveInfo().port_total }) : t(s.label)}</span>
+                <span class="rp-step-label">{s.id === "running"
+                  ? (emerge()
+                    ? t("runDock.phase.fem")
+                    : (liveInfo().port_total ?? 1) > 1
+                      ? t("progress.step.runningPort", { run: liveInfo().port_run, total: liveInfo().port_total })
+                      : t(s.label))
+                  : s.id === "setup" && emerge()
+                    ? t("runDock.phase.femMesh")
+                    : t(s.label)}</span>
                 <span class="visually-hidden">{state() === "done" ? ` (${t("progress.state.done")})` : state() === "current" ? ` (${t("progress.state.current")})` : state() === "stopped" ? ` (${t("progress.state.stopped")})` : ""}</span>
               </li>
             );
@@ -168,39 +178,44 @@ export default function ProgressCard() {
         </For>
       </ol>
 
+      <Show when={emerge() && !done()}>
+        <p class="muted" role="status">{t("runDock.femProgressNote")}</p>
+      </Show>
       <dl class="kv rp-stats">
-        <dt>{t("results.mesh.timestep")}</dt>
-        <dd class="mono">
-          {(() => { const n = liveProgress()?.timestep ?? liveStats().timesteps; return n === undefined || n === null ? "—" : fmt.int(n); })()}
-          <Show when={liveInfo().max_timesteps}>
-            <span class="muted"> / {t("progress.max", { n: fmt.int(liveInfo().max_timesteps!) })}</span>
+        <Show when={!emerge()}>
+          <dt>{t("results.mesh.timestep")}</dt>
+          <dd class="mono">
+            {(() => { const n = liveProgress()?.timestep ?? liveStats().timesteps; return n === undefined || n === null ? "—" : fmt.int(n); })()}
+            <Show when={liveInfo().max_timesteps}>
+              <span class="muted"> / {t("progress.max", { n: fmt.int(liveInfo().max_timesteps!) })}</span>
+            </Show>
+          </dd>
+          <dt>{t("spec.throughput")}</dt>
+          <dd class="mono">{num(liveProgress()?.speed_mcs ?? liveStats().speed_mcells_s, 1)} MC/s</dd>
+          <dt>{t("progress.fieldEnergy")}</dt>
+          <dd class="mono">
+            {/* once the run reports its summary, a bound (energy reached the criterion after the last
+                logged sample) replaces the stale live sample */}
+            {liveStats().final_energy_db === undefined && liveStats().final_energy_bound_db !== undefined
+              ? `≤ ${num(liveStats().final_energy_bound_db, 1)}`
+              : num(liveProgress()?.energy_db ?? liveStats().final_energy_db, 1)}{" "}dB
+            <span class="muted"> · {t("progress.target", { db: endText() })}</span>
+          </dd>
+          <Show when={!done() && pulseNote()}>
+            <dt>{t("progress.pulse")}</dt>
+            <dd class="rp-pulse-note" role="status">{pulseNote()}</dd>
           </Show>
-        </dd>
-        <dt>{t("spec.throughput")}</dt>
-        <dd class="mono">{num(liveProgress()?.speed_mcs ?? liveStats().speed_mcells_s, 1)} MC/s</dd>
-        <dt>{t("progress.fieldEnergy")}</dt>
-        <dd class="mono">
-          {/* once the run reports its summary, a bound (energy reached the criterion after the last
-              logged sample) replaces the stale live sample */}
-          {liveStats().final_energy_db === undefined && liveStats().final_energy_bound_db !== undefined
-            ? `≤ ${num(liveStats().final_energy_bound_db, 1)}`
-            : num(liveProgress()?.energy_db ?? liveStats().final_energy_db, 1)}{" "}dB
-          <span class="muted"> · {t("progress.target", { db: endText() })}</span>
-        </dd>
-        <Show when={!done() && pulseNote()}>
-          <dt>{t("progress.pulse")}</dt>
-          <dd class="rp-pulse-note" role="status">{pulseNote()}</dd>
         </Show>
         <dt>{t("progress.elapsed")}</dt>
         <dd class="mono">{seconds(elapsed())}</dd>
-        <Show when={!done()}>
+        <Show when={!emerge() && !done()}>
           <dt>{t("progress.remaining")}</dt>
           <dd>
             <span class="mono">{etaText().value}</span>
             <span class="rp-eta-note">{etaText().note}</span>
           </dd>
         </Show>
-        <Show when={liveInfo().grid}>
+        <Show when={!emerge() && liveInfo().grid}>
           <dt>{t("spec.grid")}</dt>
           <dd class="mono">{liveInfo().grid!.join(" × ")} · {t("progress.cells", { cells: compact(liveInfo().cells) })}</dd>
         </Show>
@@ -209,7 +224,7 @@ export default function ProgressCard() {
         <dd class="mono">{engineThreadsText(liveInfo().engine ?? job().engine, liveInfo().threads ?? job().threads)}</dd>
       </dl>
 
-      <Show when={series().length || !done()}>
+      <Show when={!emerge() && (series().length || !done())}>
         <div class="rp-chart">
           <Show
             when={series().length}

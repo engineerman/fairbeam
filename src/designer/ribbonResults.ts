@@ -22,10 +22,8 @@ export const ribbonExportReason = () => (designResultState().loading ? t("packag
 
 export interface Availability { ok: boolean; reason: string }
 
-/** EMerge experimental export: Fairbeam marks solver.engine and experimental.solver. */
-export function isEmergeExperimentalBundle(b: Bundle | null | undefined): boolean {
-  return !!b && (b.experimental?.solver === "EMerge" || b.solver.engine === "EMerge");
-}
+import { isEmergeExperimentalBundle } from "../lib/runQuality";
+export { isEmergeExperimentalBundle };
 
 /** Bundle of the focused Post run (or the dock's latest), once loaded. */
 export function ribbonResultBundle(): Bundle | null {

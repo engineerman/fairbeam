@@ -61,7 +61,7 @@ CHEAP = frozenset({
     "cells-per-wavelength", "end-criterion", "port-length", "port-volume", "port-r", "port-reference", "port-overlap", "no-port",
     "no-metal", "resistor-r", "resistor-length", "component-path", "cone-radii", "cone-length", "torus-radii",
     "wire-points", "wg-mode", "wg-size", "wg-cutoff", "wg-aperture", "cut-sheet", "boolean-transform-angle", "sheet-transform-angle", "scale", "mesh-lines",
-    "monitor-efficiency", "field-plane", "conductivity", "metal-thickness", "tan-d-band", "ff-step", "ff-field-budget", "dispersion", "dispersion-band",
+    "monitor-efficiency", "field-plane", "emerge-port-admit", "conductivity", "metal-thickness", "tan-d-band", "ff-step", "ff-field-budget", "dispersion", "dispersion-band",
 })
 
 
@@ -132,6 +132,7 @@ EXPLANATIONS = {
     "cut-sheet": "A rectangle cut must lie in the plane of the sheet it removes material from. Make start and stop equal on exactly one axis and give the other two axes a positive extent.",
     "monitor-efficiency": "The efficiency over the band is computed from the far-field box after the run, so it needs the far field and a usable number of frequencies. Turn the far field on and use a whole number of frequencies from 3 to 201; 21 is usually enough.",
     "field-plane": "A field plane records E or H at a few frequencies inside the simulated band, and each map adds to the run's memory and result size. Give each plane one to four frequencies within the band and use at most four planes.",
+    "emerge-port-admit": "EMerge experimental is not a full replacement for openEMS. On a Design it can excite only lumped, microstrip, CPW, or coaxial ports, and every port must be the same type. Waveguide feeds (typical for horns and guides) need openEMS. To try EMerge itself without changing this design, use Research › Experimental solvers › EMerge WR-90 fixture.",
     "field-plane-position": "A field plane outside the simulation domain cannot be recorded where it was placed; the run would record it at the domain's edge instead. Move the plane's position inside the domain shown by the 3D view's domain box.",
     "monitor-band": "A current monitor outside the simulated band cannot give a reliable frequency result. Move its frequency into the band or expand the band to include it.",
     "smallest-cell": "The timestep follows the smallest cell, so the shape named here sets how long the run takes. Make that detail coarser, model thin metal as a sheet, or merge outlines that differ by a hair.",
@@ -1572,6 +1573,23 @@ class _Lint:
                       f"a feature {worst[0]:.3g} mm thick along {worst[2]} falls between mesh lines: "
                       "the automatic mesh cannot resolve it and FDTD drops it (make it thicker or a sheet, "
                       "or raise cells per wavelength)")
+        self._coax_mesh(lines)
+
+    def _coax_mesh(self, lines):
+        """Native coaxial ports: same mesh contract as openEMS build (fairbeam.coax.validate_mesh_lines)."""
+        if not all(isinstance(line, list) and len(line) > 3 for line in lines):
+            return
+        from .coax import resolved_coax, validate_mesh_lines
+        boundaries = self.d.get("simulation", {}).get("boundaries", "MUR")
+        for i, po in enumerate(self.d.get("ports", [])):
+            if po.get("type") != "coaxial":
+                continue
+            w = f"ports[{i}]"
+            try:
+                record = resolved_coax(po, self.d.get("materials", []), lambda value, key: evaluate(value, self.names))
+                validate_mesh_lines(lines, record, boundaries)
+            except (ValueError, DesignError, TypeError) as error:
+                self.error(w, "coax-port", str(error))
 
     def _cells_cause(self, b: dict, mesh: dict) -> tuple[str | None, str | None]:
         """What drives a large cell count, and the hint that fixes it, by cause:

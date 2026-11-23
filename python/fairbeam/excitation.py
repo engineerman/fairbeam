@@ -33,6 +33,18 @@ def dgauss_duration_s(f_max: float) -> float:
     return 10.0 / (np.sqrt(2.0) * np.pi * f_max / _MINUS_20_DB_RATIO)
 
 
+def dgauss_f_max_for_duration(duration_s: float) -> float:
+    """The ``f_max`` argument that makes :func:`dgauss_duration_s` equal ``duration_s``."""
+    if duration_s <= 0:
+        raise ValueError("pulse duration must be > 0")
+    return 10.0 * _MINUS_20_DB_RATIO / (np.sqrt(2.0) * np.pi * duration_s)
+
+
+def dgauss_expression_for_duration(duration_s: float) -> str:
+    """A Gaussian-derivative pulse whose length is ``duration_s`` (10 tau)."""
+    return dgauss_expression(dgauss_f_max_for_duration(duration_s))
+
+
 def dgauss_relative_level_db(f: np.ndarray, f_max: float) -> np.ndarray:
     """Relative spectral level (dB re. peak) of :func:`dgauss_expression` at frequencies ``f``."""
     x = np.asarray(f, dtype=float) / (f_max / _MINUS_20_DB_RATIO)

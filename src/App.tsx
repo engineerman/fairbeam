@@ -37,6 +37,7 @@ const RunPanel = lazy(() => import("./components/RunPanel"));
 const ResearchDialog = lazy(() => import("./designer/ResearchDialog"));
 const CstImportDialog = lazy(() => import("./components/CstImportDialog"));
 const PcbImportDialog = lazy(() => import("./components/PcbImportDialog"));
+const HairpinDesignerDialog = lazy(() => import("./designer/hairpinDesigner/HairpinDesignerDialog"));
 // usage statistics (docs/TELEMETRY.md): asks once, only in a desktop build with the feature
 const UsageStatsPrompt = lazy(() => import("./components/UsageStatsPrompt"));
 import { PreviewBadge, RunNotice } from "./runner/Overlays";
@@ -56,6 +57,7 @@ import { exportResultTouchstone } from "./designer/resultTouchstone";
 import { exampleEntries, linkedExample } from "./runner/examples";
 import { cstImportOpen, setCstImportOpen } from "./lib/cstImport";
 import { pcbImportOpen, setPcbImportOpen } from "./lib/pcbImport";
+import { hairpinDesignerOpen } from "./designer/hairpinDesigner/state";
 import { isDesktopShell } from "./lib/telemetry";
 import { t } from "./i18n";
 import ConfirmDialog from "./lib/ConfirmDialog";
@@ -334,6 +336,7 @@ export default function App() {
       <ExampleCopyDialog />
       <Show when={!DEMO && cstImportOpen()}><CstImportDialog /></Show>
       <Show when={!DEMO && pcbImportOpen()}><PcbImportDialog /></Show>
+      <Show when={!DEMO && hairpinDesignerOpen()}><HairpinDesignerDialog /></Show>
       <Show when={saveAsOpen() && canSaveAs()}>
         <SaveAsDialog source={{ id: designFile()!.id, name: designDraft.model?.name ?? designFile()!.id }} close={() => setSaveAsOpen(false)} />
       </Show>

@@ -11,6 +11,70 @@
 
 /* Import CST macro (src/components/CstImportDialog.tsx) and its entry on the Start page */
 .home-import { display: flex; flex-wrap: wrap; align-items: center; gap: var(--al-space-2) var(--al-space-3); padding-top: var(--al-space-3); border-top: 1px solid var(--al-border); }
+.home-filter-design-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--al-space-3) var(--al-space-4);
+  padding-top: var(--al-space-3);
+  border-top: 1px solid var(--al-border);
+}
+/* Product tile: must beat .btn's fixed control height / row flex. */
+.btn.home-filter-design {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--al-space-2);
+  width: 11.75rem;
+  height: auto;
+  min-height: 0;
+  padding: var(--al-space-3) var(--al-space-3) var(--al-space-2);
+  white-space: normal;
+  line-height: 1.2;
+  border: 1px solid var(--al-border);
+  border-radius: var(--al-radius-lg);
+  background: var(--al-surface-2, var(--al-surface));
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--al-border) 70%, transparent);
+  flex: none;
+}
+.btn.home-filter-design:hover:not(:disabled, [aria-disabled="true"]) {
+  border-color: var(--al-accent-line, var(--al-border-strong));
+  background: var(--al-surface);
+}
+.home-filter-design-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 100%;
+  height: 6.5rem;
+  overflow: hidden;
+  border-radius: var(--al-radius);
+  background:
+    radial-gradient(ellipse at 50% 70%, color-mix(in srgb, var(--al-accent, #3b82f6) 12%, transparent), transparent 70%),
+    color-mix(in srgb, var(--al-viewport, #f4f4f5) 55%, transparent);
+}
+.home-filter-design-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: contain;
+  pointer-events: none;
+}
+.home-filter-design-label {
+  flex: none;
+  font-size: var(--al-text-sm);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--al-text-1);
+}
+.home-filter-design-row > .muted {
+  flex: 1 1 12rem;
+  max-width: 22rem;
+  font-size: var(--al-text-xs);
+  margin: 0;
+}
 .home-import .muted { font-size: var(--al-text-xs); }
 .ci-dialog { width: min(760px, 100%); }
 .ci-dialog .nm-body { align-content: start; gap: var(--al-space-3); }

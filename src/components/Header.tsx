@@ -25,6 +25,7 @@ import AccountChip from "./AccountChip";
 import { accountUiEnabled } from "../lib/account";
 import { accountStatus, setAccountDialogOpen } from "./AccountState";
 import { fmt, t, decimalComma } from "../i18n";
+import { isEmergeExperimentalBundle } from "../lib/runQuality";
 
 /** the compact cell count (1.90 M) with the locale's decimal separator */
 const compactText = (v: number | null | undefined) => {
@@ -182,15 +183,24 @@ export default function Header() {
                 <>
                   <span class="sep" />
                   <Show
-                    when={r().converged}
+                    when={isEmergeExperimentalBundle(b())}
                     fallback={
-                      <span class="status status-warn" title={t("header.status.notConvergedTitle")}>
-                        <TriangleAlert size={13} aria-hidden="true" /> <span class="status-label">{t("header.status.notConverged")}</span>
-                      </span>
+                      <Show
+                        when={r().converged}
+                        fallback={
+                          <span class="status status-warn" title={t("header.status.notConvergedTitle")}>
+                            <TriangleAlert size={13} aria-hidden="true" /> <span class="status-label">{t("header.status.notConverged")}</span>
+                          </span>
+                        }
+                      >
+                        <span class="status status-good" title={r().final_energy_db !== undefined && r().final_energy_db !== null ? t("header.status.energyFell", { value: dbText(r().final_energy_db) }) : t("header.status.energyBelow", { value: dbText(r().final_energy_bound_db) })}>
+                          <CircleCheck size={13} aria-hidden="true" /> <span class="status-label">{t("header.status.converged")}</span>
+                        </span>
+                      </Show>
                     }
                   >
-                    <span class="status status-good" title={r().final_energy_db !== undefined && r().final_energy_db !== null ? t("header.status.energyFell", { value: dbText(r().final_energy_db) }) : t("header.status.energyBelow", { value: dbText(r().final_energy_bound_db) })}>
-                      <CircleCheck size={13} aria-hidden="true" /> <span class="status-label">{t("header.status.converged")}</span>
+                    <span class="status status-warn" title={t("header.status.emergeUncertifiedTitle")} data-testid="header-emerge-uncertified">
+                      <TriangleAlert size={13} aria-hidden="true" /> <span class="status-label">{t("header.status.emergeUncertified")}</span>
                     </span>
                   </Show>
                 </>

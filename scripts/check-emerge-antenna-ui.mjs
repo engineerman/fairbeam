@@ -60,7 +60,7 @@ try {
     await s.click("home.newProject.create"); await s.wait(".rb");
     await s.click("ribbon.tab.sim", { sel: ".rb-tab" });
     // Run chrome shows the active engine name (default openEMS), not ribbon.sim.run.
-    await s.click("ribbon.sim.runEngine", { sel: ".rb-btn", params: { engine: "openEMS" } });
+    await s.click("ribbon.sim.runEngine", { sel: "[data-action='run-design']", params: { engine: "openEMS" } });
     await s.wait(".rd-dialog");
     // Unified gate is health.emerge >= 3 (legacy dual options removed).
     assert.equal(await page.$$eval('.rd-solver select option[value="emerge"]', rows => rows.length), 0,
@@ -77,17 +77,17 @@ try {
     await page.select(".rd-solver select", "emerge");
     await s.wait('[data-testid="emerge-run-form"]');
     assert.equal(await page.$("#rd-form"), null, "FDTD controls unmounted for EMerge");
-    assert.ok(await page.$eval('[data-testid="emerge-run-form"] button[type=submit]', e => e.disabled),
-      "acceptance required before submit");
+    assert.ok(await page.$('[data-testid="emerge-port-map-preview"]'),
+      "port mapping preview shown");
+    assert.equal(await page.$('[data-testid="emerge-run-accept-finite"]'), null,
+      "finite-feed ack checkbox removed (default map)");
 
     for (const [key, val] of Object.entries({ f_min_hz: "2.0", f_max_hz: "3.0", points: "5", padding_mm: "40", feed_width_mm: "1", air_height_mm: "6.4" })) {
       await s.fill(await s.field(await s.T(`emergeExp.${key}`)), val);
     }
     await page.select('[data-testid="emerge-run-resolution"]', "fine");
-    assert.ok(await page.$eval('[data-testid="emerge-run-form"] button[type=submit]', e => e.disabled),
-      "still disabled without finite-feed acceptance");
-    await page.click('[data-testid="emerge-run-accept-finite"]');
-    assert.equal(await page.$eval('[data-testid="emerge-run-form"] button[type=submit]', e => e.disabled), false);
+    assert.equal(await page.$eval('[data-testid="emerge-run-form"] button[type=submit]', e => e.disabled), false,
+      "submit enabled with default port map");
     await page.screenshot({ path: `.impeccable/review/emerge-antenna-${lang}.png` });
 
     await page.click('[data-testid="emerge-run-form"] button[type=submit]');

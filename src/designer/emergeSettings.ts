@@ -4,6 +4,9 @@ import { createSignal } from "solid-js";
 export type EmergeEnclosure = "shielded" | "open";
 export type EmergeResolutionPreset = "coarse" | "fine" | "custom";
 
+/** Post-solve E cut samples (same spirit as openEMS FIELD_PLANE_FREQS_MAX). */
+export const FIELD_CUT_FREQS_MAX = 4;
+
 export type EmergeSessionSettings = {
   f_min_ghz: string;
   f_max_ghz: string;
@@ -19,6 +22,11 @@ export type EmergeSessionSettings = {
   global_max_size_mm: string;
   refine_conductor_edges: boolean;
   approximate_metals: boolean;
+  /**
+   * Optional comma-separated field-cut frequencies in GHz (≤ FIELD_CUT_FREQS_MAX).
+   * Empty = one auto frequency after the FEM sweep (not a second solve).
+   */
+  field_cut_frequencies_ghz: string;
 };
 
 export const EMERGE_DEFAULT_SETTINGS: EmergeSessionSettings = {
@@ -36,6 +44,7 @@ export const EMERGE_DEFAULT_SETTINGS: EmergeSessionSettings = {
   refine_conductor_edges: true,
   // When false (default), sheet/trace σ maps to EMerge ThinConductor. When true, force PEC for this run.
   approximate_metals: false,
+  field_cut_frequencies_ghz: "",
 };
 
 const [emergeSettings, setEmergeSettingsRaw] = createSignal<EmergeSessionSettings>({ ...EMERGE_DEFAULT_SETTINGS });
@@ -64,6 +73,29 @@ export function emergeAdmitResolution(s: EmergeSessionSettings = emergeSettings(
   const r = Number(s.resolution_lambda);
   if (!Number.isFinite(r) || !(r > 0 && r <= 0.5)) return "coarse";
   return r;
+}
+
+/** Tokens from the optional GHz field-cut list (empty tokens dropped). */
+export function fieldCutFrequencyTokensGhz(text: string): string[] {
+  return text.split(",").map((part) => part.trim()).filter(Boolean);
+}
+
+/**
+ * Parse optional comma-separated GHz → Hz for admit / worker.
+ * Empty / whitespace → ``undefined`` (omit key; worker keeps one auto cut).
+ * Returns ``null`` when the text is non-empty but invalid (form should block submit).
+ */
+export function fieldCutFrequenciesHzFromText(text: string): number[] | undefined | null {
+  const parts = fieldCutFrequencyTokensGhz(text);
+  if (!parts.length) return undefined;
+  if (parts.length > FIELD_CUT_FREQS_MAX) return null;
+  const hz: number[] = [];
+  for (const part of parts) {
+    const ghz = Number(part);
+    if (!Number.isFinite(ghz) || !(ghz > 0)) return null;
+    hz.push(ghz * 1e9);
+  }
+  return hz;
 }
 
 /** @deprecated Use emergeAdmitResolution — kept for call sites that only need a named preset label. */

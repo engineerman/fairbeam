@@ -29,14 +29,14 @@ import { differingParams, differs, madeLabels } from "./resultTabs";
 import type { RunMetrics } from "./runSummary";
 import { RunQualityBadge, RunQualityBanner } from "./RunQualityView";
 import { createEtaPresenter } from "./etaPresentation";
-import { ETA_MIN_DECAY_DB, pulseNote as livePulseNote, runFraction } from "../runner/liveRun";
+import { ETA_MIN_DECAY_DB, isEmergeResearchJob, normalizeDockPhase, pulseNote as livePulseNote, runFraction } from "../runner/liveRun";
 import { slowHint, watchSpeed } from "./slowRun";
 import { estimateTime } from "./meshStats";
 import { fmt, t } from "../i18n";
 import "../styles/designer-sim.css";
 import "../styles/result-views.css";
 
-// labels are i18n keys
+// labels are i18n keys (openEMS FDTD spine; EMerge swaps the solve label to FEM)
 const PHASES: { id: Phase; label: string }[] = [
   { id: "queued", label: "runDock.phase.queued" },
   { id: "building", label: "runDock.phase.build" },
@@ -45,6 +45,13 @@ const PHASES: { id: Phase; label: string }[] = [
   { id: "postprocessing", label: "runDock.phase.postprocess" },
   { id: "exporting", label: "runDock.phase.export" },
 ];
+
+function phaseLabelKey(id: Phase, emerge: boolean): string {
+  if (id === "running") return emerge ? "runDock.phase.fem" : "runDock.phase.fdtd";
+  if (id === "setup") return emerge ? "runDock.phase.femMesh" : "runDock.phase.mesh";
+  const row = PHASES.find((p) => p.id === id);
+  return row?.label ?? "runDock.phase.queued";
+}
 
 function useNow(active: () => boolean) {
   const [now, setNow] = createSignal(Date.now() / 1000);
@@ -60,18 +67,21 @@ function useNow(active: () => boolean) {
 
 function RunProgress() {
   const job = () => designJob()!;
+  const emerge = () => isEmergeResearchJob(job());
+  const dockPh = () => normalizeDockPhase(job().phase);
   const done = () => isTerminal(job().status);
   const presentEta = createEtaPresenter();
   const now = useNow(() => !done());
   const elapsed = () => (job().started ? Math.max(0, (job().finished ?? now()) - job().started!) : null);
   const phaseIndex = () => {
-    const i = PHASES.findIndex((p) => p.id === job().phase);
-    return i >= 0 ? i : job().phase === "done" ? PHASES.length : -1;
+    const i = PHASES.findIndex((p) => p.id === dockPh());
+    return i >= 0 ? i : dockPh() === "done" || job().phase === "done" ? PHASES.length : -1;
   };
   const endDb = () => liveInfo().end_criteria_db ?? job().end_criteria_db ?? -40;
   /** Why the energy line is flat at the start (runner/liveRun.ts): gone once the solver is past the
    * pulse or has finished, also when the run ended between two progress lines. */
   const pulseNote = () => {
+    if (emerge()) return null;
     const note = livePulseNote(liveInfo(), liveProgress(), liveStats(), job().phase, job().status);
     if (!note) return null;
     return note.kind === "overLimit" ? t("progress.pulse.overLimit", { pulse: fmt.int(note.pulse), limit: fmt.int(note.limit) })
@@ -88,11 +98,11 @@ function RunProgress() {
   const expected = createMemo(() => estimateTime(meshSource(), job().engine ?? "cpu")?.mcps);
   createEffect(() => {
     const at = now();
-    if (done() || job().phase !== "running") return void setSlowSince(null);
+    if (done() || emerge() || dockPh() !== "running") return void setSlowSince(null);
     const measured = speed();
     setSlowSince((since) => watchSpeed(since, at, measured, untrack(expected)));
   });
-  const slow = () => !done() && slowHint(slowSince(), now());
+  const slow = () => !emerge() && !done() && slowHint(slowSince(), now());
   const etaRaw = (): Eta | undefined => liveProgress()?.eta ?? undefined;
   const etaBasis = (value: ReturnType<typeof eta>) => t(`runDock.eta.basis.${value.basis ?? "unknown"}`);
   const etaConfidence = (value: ReturnType<typeof eta>) => t(`runDock.eta.confidence.${value.confidence ?? "unknown"}`);
@@ -111,9 +121,15 @@ function RunProgress() {
       `limit_s=${e.limit_s ?? "—"}`,
     ].join("\n");
   };
-  const etaTitle = () => etaDetails() || t("runDock.eta.waiting");
-  const solverPhase = () => job().phase === "running";
+  const etaTitle = () => emerge() ? t("runDock.eta.femMilestones") : (etaDetails() || t("runDock.eta.waiting"));
+  const solverPhase = () => dockPh() === "running";
   const etaStage = () => {
+    if (emerge()) {
+      if (dockPh() === "postprocessing") return t("runDock.eta.postprocessing");
+      if (dockPh() === "exporting") return t("runDock.eta.exporting");
+      if (solverPhase()) return t("runDock.eta.femSolving");
+      return t("runDock.eta.preparing");
+    }
     if (job().phase === "postprocessing") return t("runDock.eta.postprocessing");
     if (job().phase === "exporting") return t("runDock.eta.exporting");
     if (!solverPhase()) return t("runDock.eta.preparing");
@@ -209,11 +225,13 @@ function RunProgress() {
           <For each={PHASES}>{(p, i) => (
             <li classList={{ "rdk-ph-done": i() < phaseIndex(), "rdk-ph-now": i() === phaseIndex() && !done() }}
               aria-current={i() === phaseIndex() && !done() ? "step" : undefined}>
-              {p.id === "running" && (liveInfo().port_total ?? 1) > 1 ? `FDTD ${liveInfo().port_run}/${liveInfo().port_total}` : t(p.label)}
+              {p.id === "running" && !emerge() && (liveInfo().port_total ?? 1) > 1
+                ? t("progress.step.runningPort", { run: liveInfo().port_run, total: liveInfo().port_total })
+                : t(phaseLabelKey(p.id, emerge()))}
             </li>
           )}</For>
         </ol>
-        <div class="rdk-progress" role="progressbar" aria-label={t("runDock.progress")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fraction() * 100)}>
+        <div class="rdk-progress" role="progressbar" aria-label={emerge() ? t("runDock.progressFem") : t("runDock.progress")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fraction() * 100)}>
           <span style={{ width: `${fraction() * 100}%` }} />
         </div>
         <Show when={slow()}>
@@ -228,24 +246,29 @@ function RunProgress() {
             <span><strong>{t("progress.pulse")}</strong> {pulseNote()}</span>
           </p>
         </Show>
+        <Show when={emerge() && !done()}>
+          <p class="muted rdk-fem-note" role="status">{t("runDock.femProgressNote")}</p>
+        </Show>
         <dl class="rdk-stats">
-          <div><dt>{t("runDock.stat.timestep")}</dt><dd class="mono">{(() => { const n = liveProgress()?.timestep ?? liveStats().timesteps; return n === undefined || n === null ? "—" : fmt.int(n); })()}<Show when={liveInfo().max_timesteps}><span class="muted"> / {fmt.int(liveInfo().max_timesteps!)}</span></Show></dd></div>
-          <div><dt>{t("runDock.stat.speed")}</dt><dd class="mono">{num(liveProgress()?.speed_mcs ?? liveStats().speed_mcells_s, 0)} MC/s</dd></div>
-          <div><dt>{t("runDock.stat.energy")}</dt><dd class="mono">{energy()} / {endText()} dB</dd></div>
+          <Show when={!emerge()}>
+            <div><dt>{t("runDock.stat.timestep")}</dt><dd class="mono">{(() => { const n = liveProgress()?.timestep ?? liveStats().timesteps; return n === undefined || n === null ? "—" : fmt.int(n); })()}<Show when={liveInfo().max_timesteps}><span class="muted"> / {fmt.int(liveInfo().max_timesteps!)}</span></Show></dd></div>
+            <div><dt>{t("runDock.stat.speed")}</dt><dd class="mono">{num(liveProgress()?.speed_mcs ?? liveStats().speed_mcells_s, 0)} MC/s</dd></div>
+            <div><dt>{t("runDock.stat.energy")}</dt><dd class="mono">{energy()} / {endText()} dB</dd></div>
+          </Show>
           <div><dt>{t("runDock.stat.elapsed")}</dt><dd class="mono">{seconds(elapsed())}</dd></div>
           <Show when={!done()}>
             <div class="rdk-eta-stat">
               <dt>{etaLabel()}</dt>
               <dd class="mono" title={etaTitle()}>{etaValue()}</dd>
-              <Show when={etaNote()}><dd class="note rdk-eta-note">{etaNote()}</dd></Show>
-              <Show when={etaDetails()}>
+              <Show when={!emerge() && etaNote()}><dd class="note rdk-eta-note">{etaNote()}</dd></Show>
+              <Show when={!emerge() && etaDetails()}>
                 <dd><details class="rdk-eta-details">
                   <summary>{t("runDock.eta.details")}</summary>
                   <pre class="code">{etaDetails()}</pre>
                 </details></dd>
               </Show>
             </div>
-            <Show when={etaHasSeparateLimit()}>
+            <Show when={!emerge() && etaHasSeparateLimit()}>
               <div>
                 <dt>{t("runDock.eta.label.limit")}</dt>
                 <dd class="mono" title={`limit_s=${eta().limitSeconds}`}>{t("runDock.eta.boundValue", { time: seconds(eta().limitSeconds) })}</dd>
@@ -253,16 +276,29 @@ function RunProgress() {
               </div>
             </Show>
           </Show>
-          <Show when={liveInfo().cells}><div><dt>{t("runDock.stat.grid")}</dt><dd class="mono">{t("runDock.cells", { cells: compact(liveInfo().cells) })}</dd></div></Show>
+          <Show when={!emerge() && liveInfo().cells}><div><dt>{t("runDock.stat.grid")}</dt><dd class="mono">{t("runDock.cells", { cells: compact(liveInfo().cells) })}</dd></div></Show>
         </dl>
         <Show when={job().status === "done"}>
-          <p class="status-block" classList={{ "status-good": liveStats().converged !== false, "status-warn": liveStats().converged === false }}>
-            <Show when={liveStats().converged !== false} fallback={<TriangleAlert size={14} aria-hidden="true" />}><CircleCheck size={14} aria-hidden="true" /></Show>
-            <span>
-              {t(liveStats().converged === false ? "runDock.timestepLimit" : "runDock.converged")} {seconds(job().duration_s)}.
-              <Show when={designResult()}> <button class="linklike" onClick={() => showView("sparams", undefined, "main")}>{t("runDock.showSparams")}</button></Show>
-            </span>
-          </p>
+          <Show
+            when={emerge()}
+            fallback={
+              <p class="status-block" classList={{ "status-good": liveStats().converged !== false, "status-warn": liveStats().converged === false }}>
+                <Show when={liveStats().converged !== false} fallback={<TriangleAlert size={14} aria-hidden="true" />}><CircleCheck size={14} aria-hidden="true" /></Show>
+                <span>
+                  {t(liveStats().converged === false ? "runDock.timestepLimit" : "runDock.converged")} {seconds(job().duration_s)}.
+                  <Show when={designResult()}> <button class="linklike" onClick={() => showView("sparams", undefined, "main")}>{t("runDock.showSparams")}</button></Show>
+                </span>
+              </p>
+            }
+          >
+            <p class="status-block status-good">
+              <CircleCheck size={14} aria-hidden="true" />
+              <span>
+                {t("runDock.femFinished", { time: seconds(job().duration_s) })}
+                <Show when={designResult()}> <button class="linklike" onClick={() => showView("sparams", undefined, "main")}>{t("runDock.showSparams")}</button></Show>
+              </span>
+            </p>
+          </Show>
         </Show>
         <Show when={job().status === "failed" || job().status === "interrupted"}>
           <div class="status-block status-critical" role="alert">
@@ -274,15 +310,17 @@ function RunProgress() {
           </div>
         </Show>
       </div>
-      <div class="rdk-run-chart">
-        <Show when={series().length} fallback={<div class="panel-empty">{!done()
-          ? t("runDock.energy.waiting")
-          : liveEnergy().length ? t("progress.oneSampleDone") : t("runDock.energy.noSample")}</div>}>
-          <LineChart ariaLabel={t("runDock.energy.chart")} series={series()} xLabel={t("runDock.stat.timestep")} yLabel={t("runDock.energy.axis")}
-            yDomain={[Math.floor(Math.min(endDb() - 10, ...liveEnergy().map((p) => p.db)) / 10) * 10, 0]}
-            hlines={[{ y: endDb(), label: t("runDock.energy.end", { db: endText() }) }]} xFormat={(v) => compact(v)} yFormat={(v) => fmt.fixed(v, 0)} />
-        </Show>
-      </div>
+      <Show when={!emerge()}>
+        <div class="rdk-run-chart">
+          <Show when={series().length} fallback={<div class="panel-empty">{!done()
+            ? t("runDock.energy.waiting")
+            : liveEnergy().length ? t("progress.oneSampleDone") : t("runDock.energy.noSample")}</div>}>
+            <LineChart ariaLabel={t("runDock.energy.chart")} series={series()} xLabel={t("runDock.stat.timestep")} yLabel={t("runDock.energy.axis")}
+              yDomain={[Math.floor(Math.min(endDb() - 10, ...liveEnergy().map((p) => p.db)) / 10) * 10, 0]}
+              hlines={[{ y: endDb(), label: t("runDock.energy.end", { db: endText() }) }]} xFormat={(v) => compact(v)} yFormat={(v) => fmt.fixed(v, 0)} />
+          </Show>
+        </div>
+      </Show>
     </div>
   );
 }

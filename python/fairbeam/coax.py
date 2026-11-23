@@ -61,17 +61,30 @@ def resolved_coax(port, materials, num):
     return resolved
 
 
-def validate_mesh(sim, port):
-    """Require resolved annulus and three interior TL probe planes, outside absorbing cells."""
+def _boundary_faces(boundaries):
+    """Six face boundary tokens (x-, x+, y-, y+, z-, z+)."""
+    if isinstance(boundaries, str):
+        return [boundaries] * 6
+    if isinstance(boundaries, (list, tuple)) and len(boundaries) == 6:
+        return [str(x) for x in boundaries]
+    return ["MUR"] * 6
+
+
+def _pml_depth(boundary: str) -> int:
+    text = str(boundary)
+    return int(text.split("_")[-1]) if text.startswith("PML_") else 0
+
+
+def validate_mesh_lines(lines_xyz, port, boundaries):
+    """Require resolved annulus and probe planes on Cartesian mesh line lists (preview checks)."""
     import numpy as np
     axis = validate_coax(port)
-    if sim.mesh.GetMeshType() != 0:
-        raise ValueError("native coaxial ports currently require a Cartesian mesh")
-    a, b = port["start"], port["stop"]
-    sign = 1 if b[axis] > a[axis] else -1
-    lines = [np.asarray(sim.mesh.GetLines(k)) for k in range(3)]
+    lines = [np.asarray(v, dtype=float) for v in lines_xyz]
     if any(len(v) < 4 or np.any(np.diff(v) <= 0) for v in lines):
         raise ValueError("coaxial port requires a completed increasing mesh before native probe construction")
+    faces = _boundary_faces(boundaries)
+    a, b = port["start"], port["stop"]
+    sign = 1 if b[axis] > a[axis] else -1
     limit = min(port["r_i"] / 2, (port["r_o"] - port["r_i"]) / 3)
     for k in range(3):
         if k == axis:
@@ -79,28 +92,37 @@ def validate_mesh(sim, port):
         v = lines[k]
         if v[0] > a[k] - port["r_os"] or v[-1] < a[k] + port["r_os"]:
             raise ValueError("coaxial shield must fit inside the transverse mesh")
-        radial_pml = [int(str(sim.boundaries[2*k+side]).split("_")[-1]) if str(sim.boundaries[2*k+side]).startswith("PML_") else 0 for side in (0, 1)]
+        radial_pml = [_pml_depth(faces[2 * k + side]) for side in (0, 1)]
         if (radial_pml[0] >= len(v) or radial_pml[1] >= len(v)
                 or a[k] - port["r_os"] < v[radial_pml[0]]
-                or a[k] + port["r_os"] > v[len(v)-radial_pml[1]-1]):
+                or a[k] + port["r_os"] > v[len(v) - radial_pml[1] - 1]):
             raise ValueError("coaxial cross-section and shield must remain outside transverse PML")
         widths = np.diff(v)[(v[:-1] < a[k] + port["r_o"]) & (v[1:] > a[k] - port["r_o"])]
-        if np.max(widths) > limit * (1 + 1e-9):
+        if len(widths) and np.max(widths) > limit * (1 + 1e-9):
             raise ValueError("coaxial mesh is too coarse: use at least three cells across the annulus and two per inner radius")
     v = lines[axis]
     if min(a[axis], b[axis]) < v[0] or max(a[axis], b[axis]) > v[-1]:
         raise ValueError("coaxial endpoints must fit inside the axial mesh")
     target = a[axis] + sign * port["measurement_shift"]
     idx = int(np.argmin(abs(v - target)))
-    pml = [int(str(sim.boundaries[2 * axis + side]).split("_")[-1]) if str(sim.boundaries[2 * axis + side]).startswith("PML_") else 0 for side in (0, 1)]
+    pml = [_pml_depth(faces[2 * axis + side]) for side in (0, 1)]
     if port.get("termination", "open") == "short" and (pml[0] >= len(v) or pml[1] >= len(v)
-            or a[axis] < v[pml[0]] or a[axis] > v[len(v)-pml[1]-1]):
+            or a[axis] < v[pml[0]] or a[axis] > v[len(v) - pml[1] - 1]):
         raise ValueError("coaxial physical short termination must remain outside axial PML")
-    if idx <= pml[0] or idx >= len(v) - pml[1] - 1 or not min(a[axis], b[axis]) < v[idx-1] < v[idx+1] < max(a[axis], b[axis]):
+    if idx <= pml[0] or idx >= len(v) - pml[1] - 1 or not min(a[axis], b[axis]) < v[idx - 1] < v[idx + 1] < max(a[axis], b[axis]):
         raise ValueError("coaxial measurement needs three adjacent planes strictly inside the line and outside PML")
-    if not np.isclose(v[idx]-v[idx-1], v[idx+1]-v[idx], rtol=1e-6, atol=1e-12):
+    if not np.isclose(v[idx] - v[idx - 1], v[idx + 1] - v[idx], rtol=1e-6, atol=1e-12):
         raise ValueError("coaxial native TL probes require equally spaced mesh lines around the measurement plane")
     feed_idx = int(np.argmin(abs(v - (a[axis] + sign * port.get("feed_shift", 0)))))
     if port.get("excite", True) and (feed_idx <= pml[0] or feed_idx >= len(v) - pml[1] - 1 or sign * (v[idx] - v[feed_idx]) <= 0):
         raise ValueError("coaxial excitation must be outside PML and before the measurement plane")
     return float(v[idx])
+
+
+def validate_mesh(sim, port):
+    """Require resolved annulus and three interior TL probe planes, outside absorbing cells."""
+    if sim.mesh.GetMeshType() != 0:
+        raise ValueError("native coaxial ports currently require a Cartesian mesh")
+    import numpy as np
+    lines = [np.asarray(sim.mesh.GetLines(k)) for k in range(3)]
+    return validate_mesh_lines(lines, port, sim.boundaries)

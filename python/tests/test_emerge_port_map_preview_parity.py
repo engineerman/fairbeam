@@ -1,4 +1,4 @@
-"""Parity: TS Run-dialog preview frozen strings match emerge_port_map APPROX_* / MAPPED_LUMPED.
+"""Parity: TS Run-dialog preview frozen strings match emerge_port_map APPROX_* / MAPPED_*.
 
 Expected preview lines are locked here against Python constants (no front-end unit runner).
 Loads emerge_port_map by file path so this gate does not require CSXCAD/openEMS DLLs.
@@ -25,35 +25,96 @@ def _load_emerge_port_map():
 _epm = _load_emerge_port_map()
 APPROX_DRIVEN_LUMPED = _epm.APPROX_DRIVEN_LUMPED
 APPROX_PLANAR_MICROSTRIP = _epm.APPROX_PLANAR_MICROSTRIP
+APPROX_PLANAR_MICROSTRIP_MODAL = _epm.APPROX_PLANAR_MICROSTRIP_MODAL
+APPROX_PLANAR_CPW = _epm.APPROX_PLANAR_CPW
+APPROX_PLANAR_CPW_MODAL = _epm.APPROX_PLANAR_CPW_MODAL
 APPROX_PLANAR_LUMPED = _epm.APPROX_PLANAR_LUMPED
+APPROX_COAX_TEM = _epm.APPROX_COAX_TEM
 MAPPED_LUMPED = _epm.MAPPED_LUMPED
+MAPPED_WAVE = _epm.MAPPED_WAVE
+MAPPED_COAX = _epm.MAPPED_COAX
 
-# Minimal expected-line fixture (Shared facts formats). Built with Python constants so
-# edits to APPROX_* without updating the TS scrape or these phrases fail the suite.
+# Minimal expected-line fixture. OK lines show mapped BC only (no APPROX parenthetical);
+# APPROX_* still parity-checked as TS string constants against Python.
+# Planar microstrip defaults to LumpedPort; WavePort when accept_modal_ports wins.
+# Planar CPW needs accept (modal → WavePort; lumped → LumpedPort).
 EXPECTED_LINES = [
     {
         "path": "driven",
         "ports": [{"number": 1, "type": "lumped"}],
         "ok": True,
-        "lines": [f"Port 1 · lumped → {MAPPED_LUMPED} ({APPROX_DRIVEN_LUMPED})"],
+        "lines": [f"Port 1 · lumped → {MAPPED_LUMPED}"],
     },
     {
         "path": "planar",
         "ports": [{"number": 1, "type": "microstrip"}],
         "ok": True,
-        "lines": [f"Port 1 · microstrip → {MAPPED_LUMPED} ({APPROX_PLANAR_MICROSTRIP})"],
+        "lines": [f"Port 1 · microstrip → {MAPPED_LUMPED}"],
+    },
+    {
+        "path": "planar",
+        "ports": [{"number": 1, "type": "microstrip"}],
+        "accept": {"accept_modal_ports": True},
+        "ok": True,
+        "lines": [f"Port 1 · microstrip → {MAPPED_WAVE}"],
+    },
+    {
+        "path": "planar",
+        "ports": [{"number": 1, "type": "microstrip"}],
+        "accept": {"accept_modal_ports": True, "accept_lumped_terminals": True},
+        "ok": True,
+        "lines": [f"Port 1 · microstrip → {MAPPED_WAVE}"],
+    },
+    {
+        "path": "planar",
+        "ports": [{"number": 1, "type": "cpw"}],
+        "ok": False,
+        "lines": ["Port 1 · cpw → accept_modal_ports required"],
+    },
+    {
+        "path": "planar",
+        "ports": [{"number": 1, "type": "cpw"}],
+        "accept": {"accept_modal_ports": True},
+        "ok": True,
+        "lines": [f"Port 1 · cpw → {MAPPED_WAVE}"],
+    },
+    {
+        "path": "planar",
+        "ports": [{"number": 1, "type": "cpw"}],
+        "accept": {"accept_modal_ports": True, "accept_lumped_terminals": True},
+        "ok": True,
+        "lines": [f"Port 1 · cpw → {MAPPED_WAVE}"],
+    },
+    {
+        "path": "planar",
+        "ports": [{"number": 1, "type": "cpw"}],
+        "accept": {"accept_lumped_terminals": True},
+        "ok": True,
+        "lines": [f"Port 1 · cpw → {MAPPED_LUMPED}"],
     },
     {
         "path": "planar",
         "ports": [{"number": 1, "type": "lumped"}],
         "ok": True,
-        "lines": [f"Port 1 · lumped → {MAPPED_LUMPED} ({APPROX_PLANAR_LUMPED})"],
+        "lines": [f"Port 1 · lumped → {MAPPED_LUMPED}"],
+    },
+    {
+        "path": "coax",
+        "ports": [{"number": 1, "type": "coaxial"}],
+        "ok": True,
+        "lines": [f"Port 1 · coaxial → {MAPPED_COAX}"],
     },
     {
         "path": "driven",
         "ports": [{"number": 1, "type": "microstrip"}],
         "ok": False,
         "lines": ["Port 1 · microstrip → does not admit microstrip"],
+    },
+    {
+        "path": "driven",
+        "ports": [{"number": 1, "type": "cpw"}],
+        "ok": False,
+        "lines": ["Port 1 · cpw → does not admit CPW"],
     },
     {
         "path": "driven",
@@ -95,6 +156,12 @@ class StringParity(unittest.TestCase):
     def test_mapped_lumped(self):
         self.assertEqual(_ts_string_const(self.src, "MAPPED_LUMPED"), MAPPED_LUMPED)
 
+    def test_mapped_wave(self):
+        self.assertEqual(_ts_string_const(self.src, "MAPPED_WAVE"), MAPPED_WAVE)
+
+    def test_mapped_coax(self):
+        self.assertEqual(_ts_string_const(self.src, "MAPPED_COAX"), MAPPED_COAX)
+
     def test_approx_driven_lumped(self):
         self.assertEqual(_ts_string_const(self.src, "APPROX_DRIVEN_LUMPED"), APPROX_DRIVEN_LUMPED)
 
@@ -104,18 +171,42 @@ class StringParity(unittest.TestCase):
             APPROX_PLANAR_MICROSTRIP,
         )
 
+    def test_approx_planar_microstrip_modal(self):
+        self.assertEqual(
+            _ts_string_const(self.src, "APPROX_PLANAR_MICROSTRIP_MODAL"),
+            APPROX_PLANAR_MICROSTRIP_MODAL,
+        )
+
+    def test_approx_planar_cpw(self):
+        self.assertEqual(_ts_string_const(self.src, "APPROX_PLANAR_CPW"), APPROX_PLANAR_CPW)
+
+    def test_approx_planar_cpw_modal(self):
+        self.assertEqual(
+            _ts_string_const(self.src, "APPROX_PLANAR_CPW_MODAL"),
+            APPROX_PLANAR_CPW_MODAL,
+        )
+
     def test_approx_planar_lumped(self):
         self.assertEqual(
             _ts_string_const(self.src, "APPROX_PLANAR_LUMPED"),
             APPROX_PLANAR_LUMPED,
         )
 
+    def test_approx_coax_tem(self):
+        self.assertEqual(_ts_string_const(self.src, "APPROX_COAX_TEM"), APPROX_COAX_TEM)
+
     def test_ok_line_templates_present_in_ts(self):
-        # TS builds `LumpedPort (${APPROX_...})` — constants must appear as string literals.
+        # APPROX_* remain as frozen string literals for Python parity; UI lines use MAPPED_* only.
         self.assertIn(APPROX_DRIVEN_LUMPED, self.src)
         self.assertIn(APPROX_PLANAR_MICROSTRIP, self.src)
+        self.assertIn(APPROX_PLANAR_MICROSTRIP_MODAL, self.src)
+        self.assertIn(APPROX_PLANAR_CPW, self.src)
+        self.assertIn(APPROX_PLANAR_CPW_MODAL, self.src)
         self.assertIn(APPROX_PLANAR_LUMPED, self.src)
+        self.assertIn(APPROX_COAX_TEM, self.src)
         self.assertIn(MAPPED_LUMPED, self.src)
+        self.assertIn(MAPPED_WAVE, self.src)
+        self.assertIn(MAPPED_COAX, self.src)
 
 
 class PreviewLineFixture(unittest.TestCase):
@@ -126,27 +217,85 @@ class PreviewLineFixture(unittest.TestCase):
         planar_ms = next(
             c for c in payload
             if c["path"] == "planar" and c["ok"] and c["ports"][0]["type"] == "microstrip"
+            and not c.get("accept")
+        )
+        planar_ms_modal = next(
+            c for c in payload
+            if c["path"] == "planar" and c["ok"] and c["ports"][0]["type"] == "microstrip"
+            and (c.get("accept") or {}).get("accept_modal_ports") is True
+            and (c.get("accept") or {}).get("accept_lumped_terminals") is not True
+        )
+        planar_ms_both = next(
+            c for c in payload
+            if c["path"] == "planar" and c["ok"] and c["ports"][0]["type"] == "microstrip"
+            and (c.get("accept") or {}).get("accept_modal_ports") is True
+            and (c.get("accept") or {}).get("accept_lumped_terminals") is True
+        )
+        planar_cpw_modal = next(
+            c for c in payload
+            if c["path"] == "planar" and c["ok"] and c["ports"][0]["type"] == "cpw"
+            and (c.get("accept") or {}).get("accept_modal_ports") is True
+            and (c.get("accept") or {}).get("accept_lumped_terminals") is not True
+        )
+        planar_cpw_both = next(
+            c for c in payload
+            if c["path"] == "planar" and c["ok"] and c["ports"][0]["type"] == "cpw"
+            and (c.get("accept") or {}).get("accept_modal_ports") is True
+            and (c.get("accept") or {}).get("accept_lumped_terminals") is True
+        )
+        planar_cpw_lumped = next(
+            c for c in payload
+            if c["path"] == "planar" and c["ok"] and c["ports"][0]["type"] == "cpw"
+            and (c.get("accept") or {}).get("accept_lumped_terminals") is True
+            and (c.get("accept") or {}).get("accept_modal_ports") is not True
         )
         planar_lumped = next(
             c for c in payload
             if c["path"] == "planar" and c["ok"] and c["ports"][0]["type"] == "lumped"
         )
+        coax_ok = next(c for c in payload if c["path"] == "coax" and c["ok"])
         self.assertEqual(
             driven_ok["lines"][0],
-            f"Port 1 · lumped → {MAPPED_LUMPED} ({APPROX_DRIVEN_LUMPED})",
+            f"Port 1 · lumped → {MAPPED_LUMPED}",
         )
         self.assertEqual(
             planar_ms["lines"][0],
-            f"Port 1 · microstrip → {MAPPED_LUMPED} ({APPROX_PLANAR_MICROSTRIP})",
+            f"Port 1 · microstrip → {MAPPED_LUMPED}",
+        )
+        self.assertEqual(
+            planar_ms_modal["lines"][0],
+            f"Port 1 · microstrip → {MAPPED_WAVE}",
+        )
+        self.assertEqual(
+            planar_ms_both["lines"][0],
+            f"Port 1 · microstrip → {MAPPED_WAVE}",
+        )
+        self.assertEqual(
+            planar_cpw_modal["lines"][0],
+            f"Port 1 · cpw → {MAPPED_WAVE}",
+        )
+        self.assertEqual(
+            planar_cpw_both["lines"][0],
+            f"Port 1 · cpw → {MAPPED_WAVE}",
+        )
+        self.assertEqual(
+            planar_cpw_lumped["lines"][0],
+            f"Port 1 · cpw → {MAPPED_LUMPED}",
         )
         self.assertEqual(
             planar_lumped["lines"][0],
-            f"Port 1 · lumped → {MAPPED_LUMPED} ({APPROX_PLANAR_LUMPED})",
+            f"Port 1 · lumped → {MAPPED_LUMPED}",
+        )
+        self.assertEqual(
+            coax_ok["lines"][0],
+            f"Port 1 · coaxial → {MAPPED_COAX}",
         )
 
     def test_reject_phrases(self):
         rejects = [c for c in EXPECTED_LINES if not c["ok"]]
         self.assertTrue(any("does not admit microstrip" in c["lines"][0] for c in rejects))
+        self.assertTrue(any("does not admit CPW" in c["lines"][0] for c in rejects))
+        self.assertTrue(any("accept_modal_ports required" in c["lines"][0] for c in rejects))
         self.assertTrue(any("not supported on this path" in c["lines"][0] for c in rejects))
 
 

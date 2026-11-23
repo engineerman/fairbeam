@@ -213,7 +213,10 @@ def _run(args, module, sim, params, slug, label, sim_path):
     if getattr(sim, "excitation", {}).get("type") == "gaussian-derivative":
         from .excitation import dgauss_duration_s
 
-        print(f"fairbeam: excitation pulse {dgauss_duration_s(sim.f_max):.6g} s", flush=True)
+        duration = sim.excitation.get("duration_s")
+        if duration is None:
+            duration = dgauss_duration_s(sim.f_max)
+        print(f"fairbeam: excitation pulse {duration:.6g} s", flush=True)
     if args.engine == "cpu":
         from . import native_cpu_note
 
@@ -695,15 +698,25 @@ def _finite(x) -> bool:
         return False
 
 
+def _is_emerge_experimental(b: dict) -> bool:
+    """True when the bundle is an EMerge experimental export (engine and/or experimental.solver)."""
+    experimental = b.get("experimental") if isinstance(b.get("experimental"), dict) else {}
+    solver = b.get("solver") if isinstance(b.get("solver"), dict) else {}
+    return experimental.get("solver") == "EMerge" or solver.get("engine") == "EMerge"
+
+
 def run_quality(b: dict) -> str | None:
     """"converged", "not-converged" or "suspicious" for a finished run; None for a bundle without
     results (a geometry preview). Mirrors runQuality() in src/lib/runQuality.ts:
       - not-converged: a run (any port's) stopped at the timestep limit;
       - suspicious: converged, but |S11| is more than 0.1 dB above 0 dB somewhere, or a far-field
         radiation efficiency is above 1.05, or the port is not coupled (|S11| never below -0.5 dB over
-        the band, or the total efficiency below 2 % in every far-field entry)."""
+        the band, or the total efficiency below 2 % in every far-field entry).
+      - EMerge experimental: None (no FDTD energy/timestep verdict; O16)."""
     res, run = b.get("results"), b.get("run")
     if res is None or run is None:
+        return None
+    if _is_emerge_experimental(b):
         return None
     port_runs = run.get("port_runs") if isinstance(run, dict) else None
     if port_runs:
