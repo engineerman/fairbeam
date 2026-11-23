@@ -215,6 +215,8 @@ def synthesize_hairpin_stripline_bp(spec: HairpinStriplineBpSpec) -> SynthesisRe
         {"name": "filter", "material": "copper", "label": "Hairpin filter", "primitives": filter_primitives},
     ]
 
+    # Lumped ports span bottom ground → center strip (z=0), same as coupled_stripline_fixture.
+    # Spanning −b/2…+b/2 shorts through the feed metal (port-in-metal).
     design["ports"] = [
         {
             "number": 1,
@@ -222,7 +224,7 @@ def synthesize_hairpin_stripline_bp(spec: HairpinStriplineBpSpec) -> SynthesisRe
             "R": spec.z0,
             "excite": True,
             "start": [f"{x_feed0}", "y_feed0-w_feed/2", "-b/2"],
-            "stop": [f"{x_feed0}", "y_feed0+w_feed/2", "b/2"],
+            "stop": [f"{x_feed0}", "y_feed0+w_feed/2", "0"],
             "direction": "z",
         },
         {
@@ -231,7 +233,7 @@ def synthesize_hairpin_stripline_bp(spec: HairpinStriplineBpSpec) -> SynthesisRe
             "R": spec.z0,
             "excite": False,
             "start": ["x_end+feed_len", "y_feed1-w_feed/2", "-b/2"],
-            "stop": ["x_end+feed_len", "y_feed1+w_feed/2", "b/2"],
+            "stop": ["x_end+feed_len", "y_feed1+w_feed/2", "0"],
             "direction": "z",
         },
     ]

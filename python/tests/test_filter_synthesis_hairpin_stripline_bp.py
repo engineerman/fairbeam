@@ -1,6 +1,7 @@
 import unittest
 
 from fairbeam.design import check_design
+from fairbeam.design_checks import errors, lint
 from fairbeam.filter_synthesis.hairpin_stripline_bp import (
     DEFAULT_HAIRPIN_STRIPLINE_BP,
     HairpinStriplineBpSpec,
@@ -14,10 +15,14 @@ class FilterSynthesisHairpinStriplineBpTests(unittest.TestCase):
         result = synthesize_hairpin_stripline_bp(spec)
         design = result.design
         check_design(design)
+        self.assertEqual(errors(lint(design)), [])
         part_names = {p["name"] for p in design["parts"]}
         self.assertIn("gnd_top", part_names)
         self.assertIn("gnd_bottom", part_names)
         self.assertEqual(len(design.get("ports", [])), 2)
+        for port in design["ports"]:
+            self.assertEqual(port["stop"][2], "0")
+            self.assertEqual(port["start"][2], "-b/2")
         gap_keys = [d["key"] for d in result.dimensions if d["key"].startswith("gap")]
         self.assertEqual(len(gap_keys), spec.order)
         sp_keys = [d["key"] for d in result.dimensions if d["key"].startswith("sp")]
