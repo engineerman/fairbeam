@@ -25,9 +25,8 @@ Choose a microstrip hairpin card:
 - **Hairpin bandpass** — square outer fold corners (`hairpin_microstrip_bp`);
   thumb `src/assets/hairpin-topology-card.png`
 - **Hairpin bandpass (mitered)** — Douville–James miters on the U outer folds
-  (`hairpin_microstrip_bp_mitered`), same electrical / stack synthesizer.
-  Distinct thumb goes at `src/assets/hairpin-topology-card-mitered.png` (user-provided;
-  until that file is wired in `TopologyStep.tsx`, the card reuses the square thumb as a placeholder).
+  (`hairpin_microstrip_bp_mitered`), same electrical / stack synthesizer;
+  thumb `src/assets/hairpin-topology-card-mitered.png`
 
 Selecting a card advances to Parameters. Other planar filter families are not offered yet.
 
