@@ -92,6 +92,28 @@ def _place(design: dict, n_res: int, tap_mm: float, spacings_mm: list[float]) ->
     set_hairpin_placement_exprs(design, n_res)
 
 
+def _prims_per_u(prims: list, order: int) -> int:
+    """How many filter primitives make one U (3 boxes or 1 mitered polygon).
+
+    Layout is always ``[feed0, U0…, feed1]``. Square fold uses three boxes per U;
+    mitered fold uses one polygon per U.
+    """
+    if not isinstance(prims, list) or order < 1:
+        raise ValueError("filter primitives are not feed + U resonators + feed")
+    if len(prims) == 2 + 3 * order:
+        mid = prims[1:-1]
+        if all(isinstance(p, dict) and p.get("kind") == "box" for p in mid):
+            return 3
+    if len(prims) == 2 + order:
+        mid = prims[1:-1]
+        if all(isinstance(p, dict) and p.get("kind") == "polygon" for p in mid):
+            return 1
+    raise ValueError(
+        "filter primitives are not feed + 3 boxes per U + feed "
+        "(or feed + 1 mitered polygon per U + feed)"
+    )
+
+
 def study_design(
     seed: dict,
     *,
@@ -113,10 +135,9 @@ def study_design(
         raise ValueError("study has more resonators than the seed")
     part = _filter_part(design)
     prims = part.get("primitives") or []
-    if len(prims) != 2 + 3 * order:
-        raise ValueError("filter primitives are not feed + 3 boxes per U + feed")
+    per_u = _prims_per_u(prims, order)
     _place(design, n_res, tap_mm, spacings_mm)
-    kept = prims[0 : 1 + 3 * n_res]
+    kept = prims[0 : 1 + per_u * n_res]
     if not one_port:
         kept = kept + [prims[-1]]
     part["primitives"] = kept

@@ -19,6 +19,10 @@ from fairbeam.filter_synthesis.hairpin_bp_common import (
     response_qe_ripple,
     synthesize_hairpin_layout,
 )
+from fairbeam.filter_synthesis.hairpin_miter import (
+    FoldStyle,
+    douville_james_edge_chamfer_mm,
+)
 from fairbeam.filter_synthesis.preview import coupled_line_bandpass_s, two_port_preview
 from fairbeam.filter_synthesis.types import SynthesisResult
 
@@ -37,6 +41,7 @@ class HairpinMicrostripBpSpec:
     feed_len_mm: float = 6.0
     board_margin_mm: float = 8.0
     intra_gap_mm: float | None = None
+    fold_style: FoldStyle = "square"
     design_name: str = "Hairpin microstrip bandpass"
     design_id: str = "filter-hairpin-microstrip-bp"
 
@@ -128,6 +133,20 @@ def hairpin_microstrip_bp_spec_from_body(body: dict[str, Any]) -> HairpinMicrost
         bw_hz = float(elec.get("bw_hz", elec.get("bandwidth_hz", 0.2e9)))
     thickness = stack.get("thickness_mm", layout.get("h_mm", 1.58))
     intra = layout.get("intra_gap_mm")
+    fold_raw = str(layout.get("fold_style") or body.get("fold_style") or "square").strip().lower()
+    if fold_raw not in ("square", "mitered"):
+        raise ValueError("fold_style must be square or mitered")
+    fold_style: FoldStyle = "mitered" if fold_raw == "mitered" else "square"
+    default_name = (
+        "Hairpin microstrip bandpass (mitered)"
+        if fold_style == "mitered"
+        else "Hairpin microstrip bandpass"
+    )
+    default_id = (
+        "filter-hairpin-microstrip-bp-mitered"
+        if fold_style == "mitered"
+        else "filter-hairpin-microstrip-bp"
+    )
     return HairpinMicrostripBpSpec(
         f0_hz=f0,
         order=_order_from_electrical(elec),
@@ -141,8 +160,9 @@ def hairpin_microstrip_bp_spec_from_body(body: dict[str, Any]) -> HairpinMicrost
         feed_len_mm=float(layout.get("feed_len_mm", 6.0)),
         board_margin_mm=float(layout.get("board_margin_mm", 8.0)),
         intra_gap_mm=None if intra is None else float(intra),
-        design_name=str(body.get("name") or "Hairpin microstrip bandpass"),
-        design_id=str(body.get("design_id") or "filter-hairpin-microstrip-bp"),
+        fold_style=fold_style,
+        design_name=str(body.get("name") or default_name),
+        design_id=str(body.get("design_id") or default_id),
     )
 
 
@@ -217,12 +237,18 @@ def synthesize_hairpin_microstrip_bp(spec: HairpinMicrostripBpSpec) -> Synthesis
         {"key": "board_margin", "default": spec.board_margin_mm, "label": "Kart payı", "unit": "mm", "min": 2.0, "max": 20.0},
     ]
 
+    fold_note = (
+        "Douville–James mitered outer fold corners; "
+        if spec.fold_style == "mitered"
+        else "square fold corners; "
+    )
     design = microstrip_filter_base(
         design_id=spec.design_id,
         name=spec.design_name,
         description=(
-            "Hairpin microstrip bandpass (alternating U resonators, Hong tap offset from fold, "
-            "symmetric inter-resonator spacing from Qe/k)."
+            "Hairpin microstrip bandpass (alternating U resonators, "
+            + fold_note
+            + "Hong tap offset from fold, symmetric inter-resonator spacing from Qe/k)."
         ),
         stack_params=stack_params,
         electrical_params=electrical_params,
@@ -240,6 +266,18 @@ def synthesize_hairpin_microstrip_bp(spec: HairpinMicrostripBpSpec) -> Synthesis
         layout_dims.append(
             {"key": f"gap{k}", "default": sec["gap_mm"], "label": f"Rezonatör {k + 1} iç aralığı", "unit": "mm"}
         )
+        if spec.fold_style == "mitered":
+            chamfer = douville_james_edge_chamfer_mm(float(sec["width_mm"]), spec.h_mm)
+            # Keep a tiny clearance so the polygon stays connected (a < w).
+            chamfer = min(chamfer, float(sec["width_mm"]) * 0.95)
+            layout_dims.append(
+                {
+                    "key": f"miter{k}",
+                    "default": chamfer,
+                    "label": f"Resonator {k + 1} fold miter",
+                    "unit": "mm",
+                }
+            )
     for k, sp in enumerate(inter_spacing):
         layout_dims.append(
             {"key": f"sp{k}", "default": sp, "label": f"Aralık {k + 1}", "unit": "mm"}
@@ -281,6 +319,7 @@ def synthesize_hairpin_microstrip_bp(spec: HairpinMicrostripBpSpec) -> Synthesis
         x_end=x_end,
         w_feed=w_feed,
         metal_z_expr="h",
+        fold_style=spec.fold_style,
     )
 
     design["parts"] = [
@@ -375,6 +414,11 @@ def synthesize_hairpin_microstrip_bp(spec: HairpinMicrostripBpSpec) -> Synthesis
         "Preview is the ideal J-inverter coupled-line network, not an openEMS result.",
         "Bend radiation and gap fringing are not modeled in the closed-form seed.",
     ]
+    if spec.fold_style == "mitered":
+        caveats.insert(
+            1,
+            "Outer fold corners use Douville–James miters (miter{k} seeds); retune after changing w or h.",
+        )
 
     return SynthesisResult(
         design=design,

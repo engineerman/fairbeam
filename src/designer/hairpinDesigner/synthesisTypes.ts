@@ -5,7 +5,7 @@ import type { Design } from "../types.ts";
 export type FilterSynthesisResponseKind = "chebyshev" | "butterworth" | "equiripple";
 
 export interface FilterSynthesisRequest {
-  topology: "hairpin_microstrip_bp";
+  topology: "hairpin_microstrip_bp" | "hairpin_microstrip_bp_mitered";
   electrical?: {
     f0_hz?: number;
     bw_hz?: number;
