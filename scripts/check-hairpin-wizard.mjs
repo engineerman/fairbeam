@@ -58,4 +58,20 @@ const css = fs.readFileSync(new URL("../src/styles/hairpin-designer.css", import
 if (/hd-pin::before/.test(css)) throw new Error("pin dots still in css");
 if (!css.includes("hd-pin-active")) throw new Error("pin active class");
 
+const stack = fs.readFileSync(new URL("../src/designer/hairpinDesigner/StackUpDiagram.tsx", import.meta.url), "utf8");
+if (!stack.includes('StackUpKind = "microstrip" | "stripline"') && !stack.includes('"microstrip" | "stripline"')) {
+  throw new Error("StackUpDiagram must support microstrip | stripline");
+}
+if (!stack.includes("ariaStripline")) throw new Error("stripline stack aria key");
+if (!/topGroundY|bottomGroundY/.test(stack)) throw new Error("stripline must draw top and bottom grounds");
+const params = fs.readFileSync(new URL("../src/designer/hairpinDesigner/ParametersStep.tsx", import.meta.url), "utf8");
+if (!params.includes("HAIRPIN_STRIPLINE_TOPOLOGY_ID")) throw new Error("ParametersStep must pick stack kind from topology");
+if (!params.includes('kind={hairpinTopology() === HAIRPIN_STRIPLINE_TOPOLOGY_ID ? "stripline" : "microstrip"}')) {
+  throw new Error("ParametersStep must pass stripline kind for stripline topology");
+}
+const en = fs.readFileSync(new URL("../src/i18n/en.json", import.meta.url), "utf8");
+const tr = fs.readFileSync(new URL("../src/i18n/tr.json", import.meta.url), "utf8");
+if (!en.includes('"hairpinDesigner.stack.ariaStripline"')) throw new Error("en ariaStripline");
+if (!tr.includes('"hairpinDesigner.stack.ariaStripline"')) throw new Error("tr ariaStripline");
+
 console.log("check-hairpin-wizard: ok");

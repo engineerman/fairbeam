@@ -20,8 +20,16 @@ Modal üç adım izler: **Topoloji → Parametreler → Önizleme**.
 
 ### Topoloji
 
-**Saç tokası bant geçiren** (microstrip) seçin. Bu sürümde sunulan topoloji kartı budur; diğer
-düzlemsel filtre kartları henüz yoktur. Kartı seçmek Parametreler’e ilerletir.
+Saç tokası bant geçiren kartlarından birini seçin:
+
+- **Saç tokası bant geçiren** — kare dış kat (`hairpin_microstrip_bp`); medium **microstrip**
+- **Saç tokası bant geçiren (miterli)** — Douville–James miterler (`hairpin_microstrip_bp_mitered`);
+  medium **microstrip**
+- **Saç tokası bant geçiren (stripline)** — stripline sandviç (`hairpin_stripline_bp`);
+  medium **stripline** (sentez `stack_kind: "stripline"` gönderir; kart seçilince stripline
+  dostu form varsayılanları yüklenir)
+
+Kartı seçmek Parametreler’e ilerletir. Diğer düzlemsel filtre aileleri henüz yoktur.
 
 ### Parametreler
 

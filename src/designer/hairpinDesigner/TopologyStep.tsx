@@ -4,6 +4,7 @@ import topologyCardUrl from "../../assets/hairpin-topology-card.png";
 import topologyCardMiteredUrl from "../../assets/hairpin-topology-card-mitered.png";
 import {
   HAIRPIN_MITERED_TOPOLOGY_ID,
+  HAIRPIN_STRIPLINE_TOPOLOGY_ID,
   HAIRPIN_TOPOLOGY_ID,
   HAIRPIN_TOPOLOGY_IDS,
   type HairpinTopologyId,
@@ -15,11 +16,19 @@ import {
 const TOPOLOGY_TITLE_KEY: Record<HairpinTopologyId, string> = {
   [HAIRPIN_TOPOLOGY_ID]: "hairpinDesigner.topology.hairpin_microstrip_bp",
   [HAIRPIN_MITERED_TOPOLOGY_ID]: "hairpinDesigner.topology.hairpin_microstrip_bp_mitered",
+  [HAIRPIN_STRIPLINE_TOPOLOGY_ID]: "hairpinDesigner.topology.hairpin_stripline_bp",
 };
 
 const TOPOLOGY_THUMB_URL: Record<HairpinTopologyId, string> = {
   [HAIRPIN_TOPOLOGY_ID]: topologyCardUrl,
   [HAIRPIN_MITERED_TOPOLOGY_ID]: topologyCardMiteredUrl,
+  [HAIRPIN_STRIPLINE_TOPOLOGY_ID]: topologyCardUrl,
+};
+
+const TOPOLOGY_MEDIUM_KEY: Record<HairpinTopologyId, string> = {
+  [HAIRPIN_TOPOLOGY_ID]: "hairpinDesigner.medium.microstrip",
+  [HAIRPIN_MITERED_TOPOLOGY_ID]: "hairpinDesigner.medium.microstrip",
+  [HAIRPIN_STRIPLINE_TOPOLOGY_ID]: "hairpinDesigner.medium.stripline",
 };
 
 export default function TopologyStep() {
@@ -40,7 +49,7 @@ export default function TopologyStep() {
           >
             <img class="hd-card-thumb" src={TOPOLOGY_THUMB_URL[id]} alt="" />
             <strong class="hd-card-title">{t(TOPOLOGY_TITLE_KEY[id])}</strong>
-            <span class="hd-card-meta">{t("hairpinDesigner.medium.microstrip")}</span>
+            <span class="hd-card-meta">{t(TOPOLOGY_MEDIUM_KEY[id])}</span>
           </button>
         )}
       </For>

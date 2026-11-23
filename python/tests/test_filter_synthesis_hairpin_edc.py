@@ -24,6 +24,10 @@ from fairbeam.filter_synthesis.hairpin_microstrip_bp import (
     HairpinMicrostripBpSpec,
     synthesize_hairpin_microstrip_bp,
 )
+from fairbeam.filter_synthesis.hairpin_stripline_bp import (
+    HairpinStriplineBpSpec,
+    synthesize_hairpin_stripline_bp,
+)
 from fairbeam.jobs import JobManager
 from fairbeam.server import ApiError, App
 
@@ -163,6 +167,38 @@ class HairpinEdcGeometryTests(unittest.TestCase):
         self.assertAlmostEqual(_default(pair, "sp0"), 0.8)
         check_design(qe)
         check_design(pair)
+
+    def test_plan_samples_accepts_stripline_ground_separation_b(self):
+        """Stripline seeds store stack thickness as ``b``, not microstrip ``h``."""
+        design = synthesize_hairpin_stripline_bp(
+            HairpinStriplineBpSpec(f0_hz=2e9, order=3, bw_hz=0.2e9, ripple_db=0.1)
+        ).design
+        electrical = {
+            "f0_hz": 2e9,
+            "bw_hz": 0.2e9,
+            "order": 3,
+            "ripple_db": 0.1,
+            "response": "chebyshev",
+        }
+        with self.assertRaises(KeyError):
+            _default(design, "h")
+        self.assertGreater(_default(design, "b"), 0.0)
+        samples = plan_samples(design, electrical)
+        self.assertTrue(any(s["kind"] == "qe" for s in samples))
+        self.assertTrue(any(s["kind"] == "k" for s in samples))
+
+    def test_study_design_accepts_stripline_seed(self):
+        """EDC sample builds must resolve stripline placement (open_down + b stack)."""
+        design = synthesize_hairpin_stripline_bp(
+            HairpinStriplineBpSpec(f0_hz=2e9, order=3, bw_hz=0.2e9, ripple_db=0.1)
+        ).design
+        qe = study_design(design, n_res=1, tap_mm=4.0, spacings_mm=[], one_port=True)
+        pair = study_design(design, n_res=2, tap_mm=4.0, spacings_mm=[0.8], one_port=False)
+        check_design(qe)
+        check_design(pair)
+        self.assertEqual(len(qe["ports"]), 1)
+        self.assertEqual(len(pair["ports"]), 2)
+        self.assertAlmostEqual(_default(pair, "sp0"), 0.8)
 
     def test_assemble_changes_tap_and_mirrored_spacing_only(self):
         design, _ = _seed()

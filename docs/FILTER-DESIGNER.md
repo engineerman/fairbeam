@@ -20,13 +20,17 @@ The modal walks three steps: **Topology → Parameters → Preview**.
 
 ### Topology
 
-Choose a microstrip hairpin card:
+Choose a hairpin bandpass card:
 
 - **Hairpin bandpass** — square outer fold corners (`hairpin_microstrip_bp`);
-  thumb `src/assets/hairpin-topology-card.png`
+  thumb `src/assets/hairpin-topology-card.png`; medium **microstrip**
 - **Hairpin bandpass (mitered)** — Douville–James miters on the U outer folds
-  (`hairpin_microstrip_bp_mitered`), same electrical / stack synthesizer;
-  thumb `src/assets/hairpin-topology-card-mitered.png`
+  (`hairpin_microstrip_bp_mitered`), same electrical / stack synthesizer as the square card;
+  thumb `src/assets/hairpin-topology-card-mitered.png`; medium **microstrip**
+- **Hairpin bandpass (stripline)** — alternating U layout in a stripline sandwich
+  (`hairpin_stripline_bp`); reuses the square-fold thumb until a dedicated asset exists;
+  medium **stripline** (synthesis sends `stack_kind: "stripline"` and stripline-friendly
+  form defaults when you select the card)
 
 Selecting a card advances to Parameters. Other planar filter families are not offered yet.
 

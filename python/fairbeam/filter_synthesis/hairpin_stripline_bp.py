@@ -14,6 +14,11 @@ from fairbeam.filter_synthesis.hairpin_bp_common import (
     modal_z_pairs,
     synthesize_hairpin_layout,
 )
+from fairbeam.filter_synthesis.hairpin_microstrip_bp import (
+    hairpin_feed_y_expr,
+    hairpin_x_base_expr,
+    hairpin_x_end_expr,
+)
 from fairbeam.filter_synthesis.preview import coupled_line_bandpass_s, two_port_preview
 from fairbeam.filter_synthesis.stripline import (
     stripline_center_width,
@@ -147,11 +152,33 @@ def synthesize_hairpin_stripline_bp(spec: HairpinStriplineBpSpec) -> SynthesisRe
         )
     add_tunable_layout_params(design, layout_dims)
 
+    # Same placement knobs as microstrip so EDC can rewrite tap/spacing via exprs.
     for k in range(n_sec):
-        design["params"].append({"key": f"x_base{k}", "default": x_bases[k], "label": f"Resonator {k + 1} x", "unit": "mm"})
-    design["params"].append({"key": "x_end", "default": x_end, "label": "Output port x", "unit": "mm"})
-    design["params"].append({"key": "y_feed0", "default": y_feed0, "label": "Input feed centre y", "unit": "mm"})
-    design["params"].append({"key": "y_feed1", "default": y_feed1, "label": "Output feed centre y", "unit": "mm"})
+        design["params"].append(
+            {"key": f"x_base{k}", "expr": hairpin_x_base_expr(k), "label": f"Resonator {k + 1} x", "unit": "mm"}
+        )
+        design["params"].append(
+            {
+                "key": f"open_down{k}",
+                "default": 1.0 if resonators[k]["open_down"] else 0.0,
+                "label": f"Resonator {k + 1} open-down",
+                "unit": "",
+            }
+        )
+    design["params"].append(
+        {"key": "x_end", "expr": hairpin_x_end_expr(n_sec), "label": "Output port x", "unit": "mm"}
+    )
+    design["params"].append(
+        {"key": "y_feed0", "expr": hairpin_feed_y_expr(0), "label": "Input feed centre y", "unit": "mm"}
+    )
+    design["params"].append(
+        {
+            "key": "y_feed1",
+            "expr": hairpin_feed_y_expr(n_sec - 1),
+            "label": "Output feed centre y",
+            "unit": "mm",
+        }
+    )
     design["params"].append(
         {
             "key": "y_half",
@@ -215,6 +242,8 @@ def synthesize_hairpin_stripline_bp(spec: HairpinStriplineBpSpec) -> SynthesisRe
         {"name": "filter", "material": "copper", "label": "Hairpin filter", "primitives": filter_primitives},
     ]
 
+    # Lumped ports span bottom ground → center strip (z=0), same as coupled_stripline_fixture.
+    # Spanning −b/2…+b/2 shorts through the feed metal (port-in-metal).
     design["ports"] = [
         {
             "number": 1,
@@ -222,7 +251,7 @@ def synthesize_hairpin_stripline_bp(spec: HairpinStriplineBpSpec) -> SynthesisRe
             "R": spec.z0,
             "excite": True,
             "start": [f"{x_feed0}", "y_feed0-w_feed/2", "-b/2"],
-            "stop": [f"{x_feed0}", "y_feed0+w_feed/2", "b/2"],
+            "stop": [f"{x_feed0}", "y_feed0+w_feed/2", "0"],
             "direction": "z",
         },
         {
@@ -231,7 +260,7 @@ def synthesize_hairpin_stripline_bp(spec: HairpinStriplineBpSpec) -> SynthesisRe
             "R": spec.z0,
             "excite": False,
             "start": ["x_end+feed_len", "y_feed1-w_feed/2", "-b/2"],
-            "stop": ["x_end+feed_len", "y_feed1+w_feed/2", "b/2"],
+            "stop": ["x_end+feed_len", "y_feed1+w_feed/2", "0"],
             "direction": "z",
         },
     ]

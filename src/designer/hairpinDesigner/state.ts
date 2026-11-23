@@ -14,7 +14,13 @@ import { createDesign, openDesign } from "../store";
 export const HAIRPIN_TOPOLOGY_ID = "hairpin_microstrip_bp" as const;
 /** Douville–James mitered outer folds (engineerman/fairbeam#2). */
 export const HAIRPIN_MITERED_TOPOLOGY_ID = "hairpin_microstrip_bp_mitered" as const;
-export const HAIRPIN_TOPOLOGY_IDS = [HAIRPIN_TOPOLOGY_ID, HAIRPIN_MITERED_TOPOLOGY_ID] as const;
+/** Stripline sandwich hairpin (engineerman/fairbeam#4). */
+export const HAIRPIN_STRIPLINE_TOPOLOGY_ID = "hairpin_stripline_bp" as const;
+export const HAIRPIN_TOPOLOGY_IDS = [
+  HAIRPIN_TOPOLOGY_ID,
+  HAIRPIN_MITERED_TOPOLOGY_ID,
+  HAIRPIN_STRIPLINE_TOPOLOGY_ID,
+] as const;
 export type HairpinTopologyId = (typeof HAIRPIN_TOPOLOGY_IDS)[number];
 
 export const HAIRPIN_STEP_KEYS = ["topology", "parameters", "preview"] as const;
@@ -53,6 +59,19 @@ export const HAIRPIN_FORM_DEFAULTS: HairpinParameterForm = {
   eps_r: "4.2",
   h: "1.58",
   tan_d: "0.02",
+};
+
+const HAIRPIN_MICROSTRIP_STACK_DEFAULTS: Pick<HairpinParameterForm, "eps_r" | "h" | "tan_d"> = {
+  eps_r: HAIRPIN_FORM_DEFAULTS.eps_r,
+  h: HAIRPIN_FORM_DEFAULTS.h,
+  tan_d: HAIRPIN_FORM_DEFAULTS.tan_d,
+};
+
+/** Matches ``HairpinStriplineBpSpec`` seed (εr, b, tan δ). */
+const HAIRPIN_STRIPLINE_STACK_DEFAULTS: Pick<HairpinParameterForm, "eps_r" | "h" | "tan_d"> = {
+  eps_r: "2.2",
+  h: "3.2",
+  tan_d: "0",
 };
 
 const NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
@@ -118,6 +137,7 @@ export function hairpinSynthesisRequest(form: HairpinParameterForm = hairpinForm
   const f0 = Number(form.f0.trim());
   const bw = Number(form.bw.trim());
   const topology = isHairpinTopologySelected(hairpinTopology()) ? hairpinTopology()! : HAIRPIN_TOPOLOGY_ID;
+  const stackKind = topology === HAIRPIN_STRIPLINE_TOPOLOGY_ID ? "stripline" : "microstrip";
   return {
     topology,
     electrical: {
@@ -129,7 +149,7 @@ export function hairpinSynthesisRequest(form: HairpinParameterForm = hairpinForm
       z0: Number(form.z0.trim()),
     },
     stack: {
-      stack_kind: "microstrip",
+      stack_kind: stackKind,
       eps_r: Number(form.eps_r.trim()),
       thickness_mm: Number(form.h.trim()),
       tan_d: Number(form.tan_d.trim()),
@@ -252,6 +272,9 @@ export function openHairpinDesigner() {
 
 export function selectHairpinTopology(id: HairpinTopologyId) {
   setHairpinTopology(id);
+  const stack =
+    id === HAIRPIN_STRIPLINE_TOPOLOGY_ID ? HAIRPIN_STRIPLINE_STACK_DEFAULTS : HAIRPIN_MICROSTRIP_STACK_DEFAULTS;
+  setHairpinForm({ ...hairpinForm(), ...stack });
 }
 
 export function patchHairpinForm(patch: Partial<HairpinParameterForm>) {
@@ -262,7 +285,7 @@ export function patchHairpinForm(patch: Partial<HairpinParameterForm>) {
 }
 
 function isHairpinTopologySelected(id: string | null | undefined): id is HairpinTopologyId {
-  return id === HAIRPIN_TOPOLOGY_ID || id === HAIRPIN_MITERED_TOPOLOGY_ID;
+  return (HAIRPIN_TOPOLOGY_IDS as readonly string[]).includes(id ?? "");
 }
 
 /** Step 1 needs a hairpin card. Step 2 needs a valid form. Step 3 uses Finish. */

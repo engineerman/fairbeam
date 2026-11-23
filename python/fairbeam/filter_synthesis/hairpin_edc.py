@@ -53,6 +53,16 @@ def _default(design: dict, key: str) -> float:
     raise KeyError(key)
 
 
+def _stack_thickness_mm(design: dict) -> float:
+    """Microstrip substrate ``h`` or stripline ground separation ``b``."""
+    for key in ("h", "b"):
+        try:
+            return _default(design, key)
+        except KeyError:
+            continue
+    raise ValueError("design is missing stack thickness ('h' or 'b')")
+
+
 def set_independent(design: dict, key: str, value: float) -> None:
     """Write a numeric default. Tunable rows keep a ±20% band around the new value."""
     value = float(value)
@@ -203,7 +213,9 @@ def plan_samples(design: dict, electrical: dict) -> list[dict]:
         raise ValueError("design order does not match the electrical target")
     samples = [{"kind": "qe", "tap_mm": tap} for tap in tap_samples(_default(design, "q_len"))]
     if order >= 2:
-        samples.extend({"kind": "k", "sp_mm": sp} for sp in spacing_samples(_default(design, "h")))
+        samples.extend(
+            {"kind": "k", "sp_mm": sp} for sp in spacing_samples(_stack_thickness_mm(design))
+        )
     return samples
 
 
