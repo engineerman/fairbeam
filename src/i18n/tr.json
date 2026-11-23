@@ -4573,6 +4573,7 @@
   "hairpinDesigner.solve.ready": "Tasarım hazır. Sonraki adım optimizasyondur.",
   "hairpinDesigner.solve.startEdc": "EDC’yi başlat",
   "hairpinDesigner.stack.aria": "Microstrip yığın kesiti",
+  "hairpinDesigner.stack.ariaStripline": "Stripline yığın kesiti",
   "hairpinDesigner.step.geometry": "Geometri",
   "hairpinDesigner.step.parameters": "Parametreler",
   "hairpinDesigner.step.preview": "Önizleme",

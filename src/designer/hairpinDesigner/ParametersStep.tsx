@@ -4,9 +4,11 @@ import PreviewPlot from "./PreviewPlot";
 import StackUpDiagram from "./StackUpDiagram";
 import {
   HAIRPIN_RESPONSES,
+  HAIRPIN_STRIPLINE_TOPOLOGY_ID,
   hairpinForm,
   hairpinParameterIssues,
   hairpinSynthError,
+  hairpinTopology,
   patchHairpinForm,
   type HairpinFieldIssue,
   type HairpinParameterForm,
@@ -108,7 +110,12 @@ export default function ParametersStep() {
       </div>
       <div class="hd-params-side">
         <PreviewPlot />
-        <StackUpDiagram eps_r={form().eps_r} h={form().h} tan_d={form().tan_d} />
+        <StackUpDiagram
+          kind={hairpinTopology() === HAIRPIN_STRIPLINE_TOPOLOGY_ID ? "stripline" : "microstrip"}
+          eps_r={form().eps_r}
+          h={form().h}
+          tan_d={form().tan_d}
+        />
       </div>
     </div>
   );

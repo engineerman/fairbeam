@@ -4657,6 +4657,7 @@
   "hairpinDesigner.solve.ready": "Design is ready. The next step is optimization.",
   "hairpinDesigner.solve.startEdc": "Start EDC",
   "hairpinDesigner.stack.aria": "Microstrip stack cross-section",
+  "hairpinDesigner.stack.ariaStripline": "Stripline stack cross-section",
   "hairpinDesigner.step.geometry": "Geometry",
   "hairpinDesigner.step.parameters": "Parameters",
   "hairpinDesigner.step.preview": "Preview",
