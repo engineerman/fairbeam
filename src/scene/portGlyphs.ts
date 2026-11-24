@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { LumpedElement, Vec3 } from "../types";
+import { sectionClippingPlanes } from "./sectionCut.ts";
 
 /**
  * Port and lumped-element glyphs for the 3D view.
@@ -41,12 +42,13 @@ function unit(): Shared {
 
 interface Look { solid: THREE.MeshBasicMaterial; xray: THREE.MeshBasicMaterial; line: THREE.LineBasicMaterial; fill: THREE.MeshBasicMaterial }
 function looks(color: string): Look {
+  const clippingPlanes = sectionClippingPlanes();
   return {
-    solid: new THREE.MeshBasicMaterial({ color }),
+    solid: new THREE.MeshBasicMaterial({ color, clippingPlanes }),
     // the x-ray pass: on top of the model, translucent so it never hides what it marks
-    xray: new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, depthTest: false, depthWrite: false }),
-    line: new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95, depthTest: false }),
-    fill: new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.2, depthTest: false, depthWrite: false, side: THREE.DoubleSide }),
+    xray: new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, depthTest: false, depthWrite: false, clippingPlanes }),
+    line: new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95, depthTest: false, clippingPlanes }),
+    fill: new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.2, depthTest: false, depthWrite: false, side: THREE.DoubleSide, clippingPlanes }),
   };
 }
 function applyHighlight(l: Look, on: boolean, base: string, hl?: string) {
@@ -179,7 +181,7 @@ export function waveguidePortObject(start: Vec3, stop: Vec3, direction: "x" | "y
   if (Math.abs(stop[n] - start[n]) > 1e-9) {
     const probe = quad(stop[n]);
     const m = Math.min(du, dv);
-    const o2 = new THREE.LineSegments(probe.edges, new THREE.LineDashedMaterial({ color, dashSize: m / 24, gapSize: m / 36, depthTest: false }));
+    const o2 = new THREE.LineSegments(probe.edges, new THREE.LineDashedMaterial({ color, dashSize: m / 24, gapSize: m / 36, depthTest: false, clippingPlanes: sectionClippingPlanes() }));
     o2.computeLineDistances();
     o2.renderOrder = 61;
     g.add(o2);
@@ -257,8 +259,8 @@ export function lumpedObject(start: Vec3, stop: Vec3, color: string, minT: numbe
   } else {
     symbolRotation.setFromUnitVectors(Z, UNIT_AXES[n]);
   }
-  const body = new THREE.Mesh(unit().box, new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
-  const lineMat = new THREE.LineBasicMaterial({ color: accent, depthTest: false, transparent: true, opacity: 0.95 });
+  const body = new THREE.Mesh(unit().box, new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, clippingPlanes: sectionClippingPlanes() }));
+  const lineMat = new THREE.LineBasicMaterial({ color: accent, depthTest: false, transparent: true, opacity: 0.95, clippingPlanes: sectionClippingPlanes() });
   const makeStrokes = (symbol: LumpedElement["symbol"]) => elementPaths({ ...values, symbol }).map((points) => {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(points.flat(), 3));

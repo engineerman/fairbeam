@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { validColor, validOpacity } from "../designer/colors.ts";
 import type { Bundle, Part, Primitive, Vec3 } from "../types";
 import { ghostHostName, isGhostPart, partKind } from "./partKind.ts";
+import { sectionClippingPlanes } from "./sectionCut.ts";
 import type { PartKind } from "./partKind.ts";
 export { partKind, isGhostPart, ghostHostName };
 export type { PartKind };
@@ -283,6 +284,7 @@ export function solidLook(kind: PartKind, xray: boolean, own?: number): { transp
 }
 
 export function buildParts(b: Bundle, colors: SceneColors, env: THREE.Texture | null, xray: boolean, cache?: SceneGeometryCache): PartObject[] {
+  const clippingPlanes = sectionClippingPlanes();
   return b.parts.map((part) => {
     const kind = partKind(part);
     const group = new THREE.Group();
@@ -297,30 +299,31 @@ export function buildParts(b: Bundle, colors: SceneColors, env: THREE.Texture | 
       // a cut-out: a clearly blue translucent fill over copper and dielectric alike (pulled forward, so a face lying on its
       // host's still shows it); the through-everything pass and the outline below keep it visible when it is hidden inside
       ? new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.42, depthWrite: false, side: THREE.DoubleSide,
-          polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 })
+          polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8, clippingPlanes })
       : kind === "metal"
         ? new THREE.MeshStandardMaterial({
             color, metalness: 0.9, roughness: 0.34, envMap: env, envMapIntensity: 1.0, ...solidLook(kind, xray, part.opacity),
-            side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4,
+            side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4, clippingPlanes,
           })
         : new THREE.MeshStandardMaterial({
             color, metalness: 0, roughness: 0.75, envMap: env, envMapIntensity: 0.4,
             ...solidLook(kind, xray, part.opacity), side: THREE.DoubleSide,
-            polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 4,
+            polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 4, clippingPlanes,
           });
     const meshes: THREE.Mesh[] = [];
     const edges: THREE.LineSegments[] = [];
     const edgeMat = ghost
-      ? new THREE.LineBasicMaterial({ color, transparent: true, opacity: 1, depthTest: false, depthWrite: false })
-      : new THREE.LineBasicMaterial({ color: colors.edge, transparent: true, opacity: kind === "metal" ? 0.45 : 0.3 });
+      ? new THREE.LineBasicMaterial({ color, transparent: true, opacity: 1, depthTest: false, depthWrite: false, clippingPlanes })
+      : new THREE.LineBasicMaterial({ color: colors.edge, transparent: true, opacity: kind === "metal" ? 0.45 : 0.3, clippingPlanes });
     for (const prim of part.primitives) {
       const cached = cache?.get(prim);
       const g = cached?.geometry ?? (cache ? null : primitiveGeometry(prim));
       if (!g) continue;
       // shapes the exporter could only approximate by their bounding box are drawn as wireframes
       // Shapes need independent emissive highlights, even when they share a solid and color.
-      const mesh = new THREE.Mesh(g, prim.exact ? (meshes.length ? material.clone() : material)
-        : new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.6 }));
+      // Material.clone() copies the clipping planes; the clone must hold the shared array instead
+      const mesh = new THREE.Mesh(g, prim.exact ? (meshes.length ? Object.assign(material.clone(), { clippingPlanes }) : material)
+        : new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.6, clippingPlanes }));
       mesh.userData.part = hostName;
       mesh.userData.primitive = prim;
       mesh.userData.metal = !ghost && kind !== "dielectric";
@@ -332,7 +335,7 @@ export function buildParts(b: Bundle, colors: SceneColors, env: THREE.Texture | 
       if (ghost) {
         e.renderOrder = 4; mesh.renderOrder = 3;
         // the part of the cut-out hidden inside its host or behind other solids: a faint fill drawn through everything
-        const through = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.14, depthTest: false, depthWrite: false, side: THREE.DoubleSide }));
+        const through = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.14, depthTest: false, depthWrite: false, side: THREE.DoubleSide, clippingPlanes }));
         through.userData.part = hostName; through.renderOrder = 3; through.raycast = () => {};
         group.add(through);
       }

@@ -9,7 +9,8 @@ import { activeExportSurface, exportNotice, geometryAvailable, registerSurfaceEx
 import { CAMERA_VIEWS, VIEW_DIRECTIONS, cameraShortcut, isViewCommand, nearestAxis, poseToSave, validPose, type CameraPose, type ViewName, type ViewCommand } from "./cameraViews";
 import { CameraViewIcon } from "./CameraViewIcon";
 import { stackLabels } from "./labelStack";
-import { bundle, centerView, farfieldIndex, setFarfieldIndex, hiddenParts, hoverPart, layers, meshPlane, meshHighlight, selectedPart, selectedShape, setHoverPart, setViewCursor, solidFade, theme } from "../state";
+import { bundle, centerView, farfieldIndex, setFarfieldIndex, hiddenParts, hoverPart, layers, meshPlane, meshHighlight, sectionZ, selectedPart, selectedShape, setHoverPart, setSectionZ, setViewCursor, solidFade, theme } from "../state";
+import { sectionClippingPlanes, sectionCutZ, sectionKeepsPoint, syncSectionPlane } from "./sectionCut";
 import { bottleneckTarget, meshHighlightSegments } from "../designer/meshBottlenecks";
 import { localMeshRegionSegments, localMeshReport } from "../designer/localMeshReport";
 import { keepCamera, openingView, setOpeningView } from "../state";
@@ -96,16 +97,19 @@ function fieldStops(): THREE.Color[] {
 
 /** The nearest hit, but a metal face wins over a dielectric face at the same depth: a patch or
  *  trace drawn on a substrate's top face is coplanar with it, and the ray would otherwise pick
- *  whichever mesh it tested first. */
-function pickHit(hits: THREE.Intersection[]): THREE.Intersection | undefined {
-  const first = hits[0];
+ *  whichever mesh it tested first. Faces cut away by the section cut are not hit. */
+function pickHit(hits: THREE.Intersection[], cutZ: number | null): THREE.Intersection | undefined {
+  const kept = hits.filter((h) => sectionKeepsPoint(cutZ, h.point.z));
+  const first = kept[0];
   if (!first) return;
   const tie = first.distance * 1e-4 + 1e-9;
-  return hits.find((h) => h.distance - first.distance <= tie && h.object.userData.metal) ?? first;
+  return kept.find((h) => h.distance - first.distance <= tie && h.object.userData.metal) ?? first;
 }
 
 export default function Viewport() {
   const localRegions = createMemo(() => localMeshReport(bundle()));
+  /** the resolved Z section cut of the shown bundle: null while the whole model is shown */
+  const sectionCut = createMemo(() => { const b = bundle(); return b ? sectionCutZ(b.domain, sectionZ()) : null; });
   let host!: HTMLDivElement;
   const [view, setView] = createSignal<ViewName | null>("iso");
   const [scaleBar, setScaleBar] = createSignal<{ px: number; label: string } | null>(null);
@@ -151,6 +155,7 @@ export default function Viewport() {
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.NeutralToneMapping;
+    renderer.localClippingEnabled = true;
     renderer.domElement.className = "vp-canvas";
     host.prepend(renderer.domElement);
 
@@ -794,6 +799,15 @@ export default function Viewport() {
       requestRender();
     }));
 
+    // every clipped material holds the shared plane array: moving the cut touches no material.
+    // A new domain that no longer holds the stored cut moves the stored value with it.
+    createEffect(() => {
+      const cut = sectionCut();
+      if (bundle() && cut !== sectionZ()) setSectionZ(cut);
+      syncSectionPlane(cut);
+      requestRender();
+    });
+
 
     // Symbol edits affect only the glyph, including when an older server preview arrives.
     createEffect(() => {
@@ -1009,7 +1023,7 @@ export default function Viewport() {
       ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
       const meshes = parts.filter((p) => p.group.visible).flatMap((p) => p.meshes);
-      const hit = pickHit(ray.intersectObjects(meshes, false));
+      const hit = pickHit(ray.intersectObjects(meshes, false), sectionCut());
       // while drawing, the draw overlay shows its own readout: no part tooltip or hover highlight
       const name = drawTool() || facePicking() || transformPlacement() || vertexTarget() || isFacePickMode(pointPickMode()) ? null : (hit?.object.userData.part as string | undefined) ?? null;
       setHoverPart(name);
@@ -1071,7 +1085,7 @@ export default function Viewport() {
       const r = renderer.domElement.getBoundingClientRect();
       ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
-      const hit = pickHit(ray.intersectObjects(parts.filter((p) => p.group.visible).flatMap((p) => p.meshes), false));
+      const hit = pickHit(ray.intersectObjects(parts.filter((p) => p.group.visible).flatMap((p) => p.meshes), false), sectionCut());
       const pointMode = pointPickMode();
       if (pointMode) {
         if (hit?.face) {
@@ -1093,7 +1107,7 @@ export default function Viewport() {
       const rect = renderer.domElement.getBoundingClientRect();
       ndc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
-      const hit = pickHit(ray.intersectObjects(parts.filter(part => part.group.visible).flatMap(part => part.meshes), false));
+      const hit = pickHit(ray.intersectObjects(parts.filter(part => part.group.visible).flatMap(part => part.meshes), false), sectionCut());
       window.dispatchEvent(new CustomEvent("fairbeam:point-hover", { detail: hit?.face ? candidate(hit, mode, "Preview", false) : null }));
     };
     /** A point candidate, or for face alignment the planar face under the hit (a click on a curved
@@ -1127,7 +1141,7 @@ export default function Viewport() {
       const r = renderer.domElement.getBoundingClientRect();
       ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
-      const hit = pickHit(ray.intersectObjects(parts.filter((p) => p.group.visible).flatMap((p) => p.meshes), false));
+      const hit = pickHit(ray.intersectObjects(parts.filter((p) => p.group.visible).flatMap((p) => p.meshes), false), sectionCut());
       const i = designDraft.parts.findIndex((p) => p.name === hit?.object.userData.part);
       if (!hit || i < 0) return;
       const j = pickedShape(i, ray);
@@ -1332,7 +1346,7 @@ export default function Viewport() {
           if (!isPicked(p, m, sel, shape)) {
             // the part's other shapes: a faint outline only, so the picked one stands out
             const faint = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 25),
-              new THREE.LineBasicMaterial({ color: pick, depthTest: false, depthWrite: false, transparent: true, opacity: 0.3 }));
+              new THREE.LineBasicMaterial({ color: pick, depthTest: false, depthWrite: false, transparent: true, opacity: 0.3, clippingPlanes: sectionClippingPlanes() }));
             faint.renderOrder = 997;
             faint.name = "selection-outline";
             faint.raycast = () => {};
@@ -1341,12 +1355,12 @@ export default function Viewport() {
             continue;
           }
           const line = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 25),
-            new THREE.LineBasicMaterial({ color: pick, depthTest: false, depthWrite: false, transparent: true, opacity: 0.95 }));
+            new THREE.LineBasicMaterial({ color: pick, depthTest: false, depthWrite: false, transparent: true, opacity: 0.95, clippingPlanes: sectionClippingPlanes() }));
           line.renderOrder = 999;
           line.name = "selection-outline";
           // x-ray: a faint red fill over everything, so a hidden part reads as a shape, not just a line
           const xray = new THREE.Mesh(m.geometry, new THREE.MeshBasicMaterial({
-            color: pick, transparent: true, opacity: 0.34, depthTest: false, depthWrite: false, side: THREE.DoubleSide }));
+            color: pick, transparent: true, opacity: 0.34, depthTest: false, depthWrite: false, side: THREE.DoubleSide, clippingPlanes: sectionClippingPlanes() }));
           xray.renderOrder = 998;
           xray.name = "selection-xray";
           // picking hits the part itself, never its overlays
@@ -1562,6 +1576,26 @@ export default function Viewport() {
           </div>
         </Show>
       </div>
+
+      <Show when={bundle() && bundle()!.domain.max[2] > bundle()!.domain.min[2] ? bundle()!.domain : null}>
+        {(domain) => {
+          const text = () => {
+            const z = sectionCut();
+            return z === null ? t("viewport.section.whole") : t("viewport.section.value", { z: num(z * modelToMm(bundle()), 2) });
+          };
+          return (
+            <div class="vp-hud vp-section">
+              <span class="readout">{text()}</span>
+              <input type="range" min={domain().min[2]} max={domain().max[2]} step={(domain().max[2] - domain().min[2]) / 1000}
+                value={sectionZ() ?? domain().max[2]} aria-label={t("viewport.section.aria")} aria-valuetext={text()}
+                onInput={(e) => setSectionZ(sectionCutZ(domain(), Number(e.currentTarget.value)))} />
+              <Show when={sectionCut() !== null}>
+                <button class="btn btn-sm" onClick={() => setSectionZ(null)}>{t("viewport.section.reset")}</button>
+              </Show>
+            </div>
+          );
+        }}
+      </Show>
 
       {/* colour scales stack in one column (side by side on small viewports), so they never overlap */}
       <div class="vp-hud vp-hud-tr vp-scales">

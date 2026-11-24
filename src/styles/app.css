@@ -484,6 +484,15 @@ input[type="range"] { height: var(--al-control-h-sm); margin: 0; accent-color: v
   flex-wrap: wrap-reverse; justify-content: flex-end; max-width: calc(100% - 2 * var(--al-pad-hud) - 72px);
 }
 .vp-hud-br > * { pointer-events: none; }
+/* the Z section cut: a vertical slider on the left edge, the domain top (the whole model) at its top */
+.vp-section {
+  top: calc(var(--al-pad-hud) + var(--al-control-h) + var(--al-space-2)); bottom: var(--al-pad-hud); left: var(--al-pad-hud);
+  flex-direction: column; align-items: flex-start; justify-content: center;
+}
+.vp-section input[type="range"] {
+  writing-mode: vertical-lr; direction: rtl; flex: 0 1 220px; min-height: 64px; width: var(--al-control-h-sm);
+  margin: 0; accent-color: var(--al-accent);
+}
 .readout {
   display: inline-flex; align-items: center; height: var(--al-control-h-sm);
   font-family: var(--al-font-mono); font-size: var(--al-text-xs); color: var(--al-text-2);
