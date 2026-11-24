@@ -618,6 +618,8 @@ class JobManager:
             return [self.python, "-m", "fairbeam.research", "--snapshot", self.input_path(job),
                     "--sha256", job.research["snapshot_sha256"], "--outdir", str(job.dir / "research")]
         if job.kind == "optimize":
+            if (job.optimize or {}).get("emerge"):
+                return self.emerge_optimize_command(job)
             return self.optimize_command(job)
         cmd = [self.python, "-m", "fairbeam", "run", self.input_path(job), "--threads", str(job.threads),
                "--out", str(self.projects_dir)]
@@ -675,6 +677,13 @@ class JobManager:
         if job.name:
             cmd += ["--name", job.name]
         return cmd
+
+    def emerge_optimize_command(self, job: Job) -> list[str]:
+        """EMerge search. This is not ``python -m fairbeam optimize`` (that command runs openEMS)."""
+        return [self.python, "-m", "fairbeam.emerge_optimize",
+                "--design", self.input_path(job),
+                "--job", str(job.dir / "job.json"),
+                "--out", str(self.projects_dir)]
 
     def submit(self, *, model: str, model_path: str, model_id: str | None = None, params: dict | None = None,
                overrides: dict | None = None, threads: int = 1, name: str | None = None,

@@ -1818,6 +1818,12 @@ class App:
 
         m, resolved, overrides = self._validated(body)
         self._refuse_broken_design(m)
+        if "emerge" in body:
+            from .emerge_optimize import refuse_radiation_goals
+            try:
+                refuse_radiation_goals(body.get("goals"))
+            except ValueError as exc:
+                raise ApiError(422, str(exc)) from None
         errors: dict = {}
         st = self._settings(body, errors)
         specs = {s["key"]: s for s in m["params"]}
@@ -1889,6 +1895,14 @@ class App:
             errors["method"] = "secant needs one parameter and an f0 goal"
         if errors:
             raise ApiError(422, "invalid optimization", fields=errors)
+        emerge_session = None
+        if "emerge" in body:
+            emerge_session = self._emerge_optimize_session(body, m)
+            from .emerge_optimize import check_goal_band
+            try:
+                check_goal_band(clean_goals, emerge_session["settings"])
+            except ValueError as exc:
+                raise ApiError(422, str(exc)) from None
         self._refuse_by_preflight(body, st)
         # fixed parameters: everything the user changed except the varied ones
         fixed = {k: v for k, v in overrides.items() if k not in {c["key"] for c in clean_vary}}
@@ -1897,12 +1911,35 @@ class App:
         if (self.projects_dir / "optimizations" / f"{name}.json").exists():
             name = slugify(f"{name}-" + time.strftime("%H%M%S"))
         label = st["label"] or "Optimize " + ", ".join(c["key"] for c in clean_vary)
+        optimize_spec = {"vary": clean_vary, "goals": clean_goals, "max_evals": max_evals,
+                         "method": method, "excite": excite}
+        if emerge_session is not None:
+            optimize_spec["emerge"] = emerge_session
         job = self.manager.submit(model=m["key"], model_id=model_id, model_path=m["path"], design_input=m.get("_queued_design"), params=resolved,
                                   overrides=fixed, threads=st["threads"], engine=st["engine"],
                                   end_criteria_db=st["end_criteria_db"], name=name, label=label, kind="optimize",
-                                  optimize={"vary": clean_vary, "goals": clean_goals, "max_evals": max_evals,
-                                            "method": method, "excite": excite})
+                                  optimize=optimize_spec)
         return job.to_dict()
+
+    def _emerge_optimize_session(self, body, m) -> dict:
+        emerge = body["emerge"]
+        if (not isinstance(emerge, dict) or set(emerge) - {"path", "settings", "source"}
+                or "path" not in emerge or "settings" not in emerge):
+            raise ApiError(422, "emerge optimization expects path, settings, and an optional source")
+        settings = emerge["settings"]
+        if not isinstance(settings, dict):
+            raise ApiError(422, "emerge settings must be an object")
+        if "source" in emerge:
+            try:
+                design = json.loads(m["_queued_design"])
+            except (ValueError, TypeError) as exc:
+                raise ApiError(422, f"the design file cannot be read: {exc}") from None
+            try:
+                self._admitted_research_source(
+                    {"backend": "emerge", "settings": settings, "design": design}, emerge["source"])
+            except ValueError as exc:
+                raise ApiError(422, str(exc)) from None
+        return {"path": emerge["path"], "settings": settings}
 
     def filter_synthesis(self, body: dict) -> dict:
         """Synthesize a planar filter layout (filter designer); preview_only skips design in the body."""

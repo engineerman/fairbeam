@@ -158,5 +158,66 @@ class EmergeSweepQueue(unittest.TestCase):
         self.assertEqual(self.m.list(), [])
 
 
+class EmergeOptimizeQueue(unittest.TestCase):
+    def setUp(self):
+        EmergeSweepQueue.setUp(self)
+        self.app.projects_dir = self.m.projects_dir
+
+    def tearDown(self):
+        EmergeSweepQueue.tearDown(self)
+
+    def _optimize(self, kind, *, target=-20, at=2.5, settings=None):
+        return self.app.submit_optimization({
+            "model": "p",
+            "vary": [{"key": "h", "min": 1.0, "max": 3.0, "start": 1.5}],
+            "goals": [{"kind": kind, "target": target, "at": at}],
+            "max_evals": 2,
+            "emerge": {"path": "emerge-python", "settings": settings or design_settings()},
+        })
+
+    def test_radiation_goals_are_rejected_because_the_far_field_is_empty(self):
+        for kind, target in (("realized_gain_min", 5), ("dmax_min", 5), ("efficiency_min", 90)):
+            with self.subTest(kind=kind):
+                with self.assertRaises(ApiError) as caught:
+                    self._optimize(kind, target=target)
+                message = str(caught.exception)
+                self.assertIn("far field is empty", message)
+                self.assertIn(kind, message)
+                self.assertNotIn("score is zero", message.lower())
+                self.assertEqual(self.m.list(), [])
+
+    def test_s11_goal_is_accepted_and_command_is_not_openems_optimize(self):
+        job = self._optimize("s11_max")
+        self.assertEqual(job["kind"], "optimize")
+        cmd = self.m.default_command(self.m.get(job["id"]))
+        self.assertNotIn("-m fairbeam optimize", " ".join(cmd))
+        self.assertEqual(cmd[1:3], ["-m", "fairbeam.emerge_optimize"])
+
+    def test_goal_frequency_outside_the_emerge_band_is_rejected(self):
+        with self.assertRaises(ApiError) as caught:
+            self._optimize("s11_max", at=9.0)
+        self.assertIn("outside the EMerge band", str(caught.exception))
+        self.assertEqual(self.m.list(), [])
+
+    def test_admit_rejection_fails_that_evaluation_and_the_search_continues(self):
+        from fairbeam.emerge_optimize import run_emerge_optimization
+        from fairbeam.optimize import Vary, make_goal
+        design = blank_design("p", "Patch")
+        design["ports"] = []
+        with tempfile.TemporaryDirectory() as directory:
+            fake_venv(directory)
+            with mock.patch("fairbeam_emerge.run_design", side_effect=AssertionError("FEM solve")):
+                doc = run_emerge_optimization(
+                    design, {"path": directory, "settings": design_settings()},
+                    [Vary("h", 1.0, 3.0, start=1.5)],
+                    [make_goal("s11_max", -20, at=2.5)],
+                    out=Path(directory), name="opt", max_evals=2, method="nelder-mead")
+        self.assertEqual(len(doc["evaluations"]), 2)
+        for row in doc["evaluations"]:
+            self.assertIn("ports", row["error"])
+            self.assertFalse(row["error"].startswith("ValueError"))
+        self.assertEqual(_default(design, "h"), 1.524)
+
+
 if __name__ == "__main__":
     unittest.main()
