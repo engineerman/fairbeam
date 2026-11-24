@@ -2,6 +2,7 @@ import { For, onMount, Show } from "solid-js";
 import { CircleAlert, LoaderCircle, Plus, Target, X } from "lucide-solid";
 import { seconds } from "../lib/format";
 import { radioGroupKeys } from "../lib/a11y";
+import { isEmerge } from "../designer/activeEngine";
 import type { GoalKind } from "./api";
 import {
   addGoal,
@@ -42,6 +43,9 @@ import NumberField from "../components/NumberField";
 import { PreflightNote } from "../designer/PreflightNote";
 import { methodName } from "../designer/optimizationResults";
 import { meshStats } from "../designer/meshStats";
+
+const EMERGE_HIDDEN_GOALS = new Set<GoalKind>(["dmax_min", "realized_gain_min", "efficiency_min"]);
+const antennaGoalPresets = () => GOAL_PRESETS.filter((p) => !p.multi && !(isEmerge() && EMERGE_HIDDEN_GOALS.has(p.kind)));
 
 /** The target field's label: an i18n key, or a symbol that stays as it is */
 const TARGET_LABEL: Record<GoalKind, string> = {
@@ -152,7 +156,7 @@ export default function OptimizePanel(props: { onStarted?: (job: import("./api")
                 <select class="rp-select rp-select-sm op-grow" aria-label={t("opt.goalN", { n: i() + 1 })} value={g.kind}
                   onChange={(e) => setGoalKind(i(), e.currentTarget.value as GoalKind)}>
                   <optgroup label={t("opt.group.antenna")}>
-                    <For each={GOAL_PRESETS.filter((p) => !p.multi)}>{(p) => <option value={p.kind}>{t(p.label)}</option>}</For>
+                    <For each={antennaGoalPresets()}>{(p) => <option value={p.kind}>{t(p.label)}</option>}</For>
                   </optgroup>
                   <optgroup label={t("opt.group.multi")}>
                     <For each={GOAL_PRESETS.filter((p) => p.multi)}>

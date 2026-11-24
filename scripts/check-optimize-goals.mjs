@@ -26,6 +26,7 @@ const deps={
  currentModel:()=>({key:'synthetic-goal-control'}),submitting:()=>submitting,setSubmitting:value=>{submitting=value;},
  setSubmitError:value=>{lastErrors=value;},setOptErrors:()=>{},setFieldErrors:()=>{},setNotice:()=>{},
  paramPayload:()=>({width:999,fixed:1.23456789012345}),threadsForEngine:()=>2,threads:()=>2,health:()=>({default_threads:2}),
+ isEmerge:()=>false,designFile:()=>null,
  optEngine:()=>'cpu',meshStats:()=>null,meshSource:()=>null,runName:()=>'',excite:()=>'auto',
  api:{submitOptimization:async body=>{lastRequest=body;return{id:'captured-only'};}},attach:()=>{},refreshRuns:()=>{},
  t:translate,fmtG,

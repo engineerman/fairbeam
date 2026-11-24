@@ -868,12 +868,10 @@ export function Ribbon() {
       <Show when={tab.key === "optimize"}>
         <RGroup label={t("ribbon.optimize.group")} icon={SlidersHorizontal}>
           <RButton icon={ChartScatter} label={t("ribbon.optimize.sweep")}
-            disabled={isEmerge()}
-            title={isEmerge() ? t("ribbon.optimize.emergeDisabled") : t("ribbon.optimize.sweepTitle")}
+            title={isEmerge() ? t("ribbon.optimize.sweepEmergeTitle") : t("ribbon.optimize.sweepTitle")}
             onClick={() => void openDesignerSweep()} />
           <RButton icon={SlidersHorizontal} label={t("ribbon.optimize.optimizer")}
-            disabled={isEmerge()}
-            title={isEmerge() ? t("ribbon.optimize.emergeDisabled") : t("ribbon.optimize.optimizerTitle")}
+            title={isEmerge() ? t("ribbon.optimize.optimizerEmergeTitle") : t("ribbon.optimize.optimizerTitle")}
             onClick={() => void openDesignerOptimize()} />
         </RGroup>
       </Show>

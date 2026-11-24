@@ -36,6 +36,9 @@ import { pickVaryParam, sweepRange } from "../lib/rangeDefaults";
 import { setBottomDockCollapsed } from "./layoutState";
 import type { ParameterSweepDefinition, ParameterSweepSequence } from "./types";
 import { t } from "../i18n";
+import { hasDocumentResultScope } from "../lib/nativeDocuments";
+import { isEmerge } from "./activeEngine";
+import { currentEmergeMapKind, emergeResearchSource, emergeSolveRequest } from "./emergeRunRequest";
 import { paramLabelText } from "../lib/paramLabel";
 import { currentSchema } from "../lib/legacy";
 import { showToast } from "../lib/toast";
@@ -171,12 +174,21 @@ function Content() {
         name: s.name,
         sweep: s.sweep,
       }));
+      let emerge: ReturnType<typeof emergeSolveRequest> | undefined;
+      if (isEmerge()) {
+        const probed = await api.health();
+        if (!dialogActive) return;
+        const source = emergeResearchSource(probed, f);
+        if (hasDocumentResultScope(f) && !source) throw new Error(t("emergeExp.serverUpdate"));
+        emerge = emergeSolveRequest(draft.ports, currentEmergeMapKind(draft.ports), source);
+      }
       const result = await api.submitSweep({
         model: f.id,
         params: base,
         sequences,
         ...(designCells() ? { cells: designCells() } : {}),
         ...runSettings(),
+        ...(emerge ? { emerge } : {}),
       });
       setRunId(result.sweep.id);
       await refreshRuns();

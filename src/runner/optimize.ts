@@ -5,7 +5,11 @@ import { createStore, reconcile } from "solid-js/store";
 import { pinAll } from "../compare/store";
 import { OPTIMIZE_SPAN, pickVaryParam, rangeAround } from "../lib/rangeDefaults";
 import { bundle } from "../state";
+import { isEmerge } from "../designer/activeEngine";
+import { currentEmergeMapKind, emergeResearchSource, emergeSolveRequest } from "../designer/emergeRunRequest";
 import { meshStats } from "../designer/meshStats";
+import { file as designFile } from "../designer/store";
+import { hasDocumentResultScope } from "../lib/nativeDocuments";
 import { t, tEn } from "../i18n";
 import { requirementGoalDrafts } from "../lib/requirementGoals";
 import { api, ApiError, type GoalKind, type OptDone, type OptEval, type OptGoal, type ParamSpec } from "./api";
@@ -315,6 +319,14 @@ export async function startOptimize() {
   try {
     const base = paramPayload();
     for (const v of vary) delete base[v.key];
+    const saved = designFile();
+    let emerge: ReturnType<typeof emergeSolveRequest> | undefined;
+    if (isEmerge() && saved?.id === m.key) {
+      const probed = await api.health();
+      const source = emergeResearchSource(probed, saved);
+      if (hasDocumentResultScope(saved) && !source) throw new Error(t("emergeExp.serverUpdate"));
+      emerge = emergeSolveRequest(saved.design.ports, currentEmergeMapKind(saved.design.ports), source);
+    }
     const job = await api.submitOptimization({
       model: m.key,
       params: base,
@@ -334,6 +346,7 @@ export async function startOptimize() {
       max_evals: maxEvals(),
       method: method(),
       excite: excite(),
+      ...(emerge ? { emerge } : {}),
     });
     setNotice(null);
     attach(job);
