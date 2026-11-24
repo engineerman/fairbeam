@@ -869,7 +869,8 @@ class JobManager:
             except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
                 self._finish(job, "failed", error=str(exc), stderr_tail=stderr_tail[-20:])
 
-    def submit_research(self, body: dict, *, admitted_source: dict | None = None) -> Job:
+    def submit_research(self, body: dict, *, admitted_source: dict | None = None,
+                        sweep: dict | None = None) -> Job:
         from .research import prepare
         spec = prepare(body)
         design_model = (spec.get("design") or {}).get("model", {})
@@ -911,6 +912,7 @@ class JobManager:
         return self.submit(model=model, model_path="", threads=threads,
                            kind="research", research_input=spec,
                            model_id=design_model.get("id"),
+                           sweep=sweep,
                            name=(f"{design_model.get('name') or design_model.get('id')} · {label}"
                                  if label and spec.get('design') is not None else ""))
 

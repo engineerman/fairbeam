@@ -1652,6 +1652,8 @@ class App:
                 used_names.add(file_name)
             prepared.append((resolved, overrides, file_name, item))
         # All validation is complete before anything is queued.
+        if "emerge" in body:
+            return self._queue_emerge_sweep(body, m, prepared, sequences, sweep_id, name)
         for i, (resolved, overrides, file_name, item) in enumerate(prepared):
             job = self.manager.submit(
                 model=m["key"], model_id=(m.get("model") or {}).get("id"), model_path=m["path"], design_input=m.get("_queued_design"), params=resolved,
@@ -1663,6 +1665,85 @@ class App:
             jobs.append(job.to_dict())
         return {"sweep": {"id": sweep_id, "name": name, "sequences": sequences,
                            "axes": sequences[0]["axes"], "total": len(combos)}, "runs": jobs}
+
+    def _queue_emerge_sweep(self, body, m, prepared, sequences, sweep_id, name):
+        """One EMerge research job per sweep point. The saved design stays unchanged."""
+        emerge = body["emerge"]
+        if (not isinstance(emerge, dict) or set(emerge) - {"path", "settings", "source"}
+                or "path" not in emerge or "settings" not in emerge):
+            raise ApiError(422, "emerge sweep expects path, settings, and an optional source")
+        settings = emerge["settings"]
+        if not isinstance(settings, dict):
+            raise ApiError(422, "emerge settings must be an object")
+        try:
+            design = json.loads(m["_queued_design"])
+        except (ValueError, TypeError) as exc:
+            raise ApiError(422, f"the design file cannot be read: {exc}") from None
+        admitted = None
+        if "source" in emerge:
+            admitted = self._admitted_research_source(
+                {"backend": "emerge", "settings": settings, "design": design}, emerge["source"])
+        from .research import prepare
+        ready = []
+        for _resolved, _overrides, _file_name, item in prepared:
+            research_body = {
+                "backend": "emerge", "path": emerge["path"], "settings": settings,
+                "design": design, "param_overrides": dict(item["values"]),
+            }
+            try:
+                prepare(research_body)
+            except (ValueError, TypeError) as exc:
+                raise ApiError(422, str(exc)) from None
+            except OSError as exc:
+                raise ApiError(409, str(exc)) from None
+            ready.append((research_body, item))
+        jobs = []
+        for i, (research_body, item) in enumerate(ready):
+            try:
+                job = self.manager.submit_research(
+                    research_body, admitted_source=admitted,
+                    sweep={"id": sweep_id, "name": name, "index": i, "total": len(ready),
+                           "values": item["values"],
+                           "axes": sequences[item["sequence_index"]]["axes"],
+                           "sequence_index": item["sequence_index"],
+                           "sequence_name": item["sequence_name"]})
+            except (ValueError, TypeError) as exc:
+                raise ApiError(422, str(exc)) from None
+            except OSError as exc:
+                raise ApiError(409, str(exc)) from None
+            jobs.append(job.to_dict())
+        return {"sweep": {"id": sweep_id, "name": name, "sequences": sequences,
+                           "axes": sequences[0]["axes"], "total": len(ready)}, "runs": jobs}
+
+    def _admitted_research_source(self, body: dict, source) -> dict:
+        """Bind a research body to the saved workspace design. ``body["design"]`` must already be that design."""
+        if (not isinstance(source, dict) or set(source) != {"model_id", "workspace_hash", "backup_scope"}
+                or not isinstance(source.get("workspace_hash"), str)
+                or not re.fullmatch(r"[0-9a-f]{64}", source["workspace_hash"])
+                or not isinstance(source.get("backup_scope"), str)):
+            raise ValueError("research source requires a workspace model, hash and backup scope")
+        settings = body.get("settings")
+        backend = body.get("backend")
+        analysis = settings.get("analysis") if isinstance(settings, dict) else None
+        from .emerge_solver import EMERGE_DESIGN_ANALYSES
+        if not (
+            isinstance(settings, dict)
+            and (
+                (backend == "elmer" and analysis == "driven")
+                or (backend == "emerge" and analysis in EMERGE_DESIGN_ANALYSES)
+            )
+        ):
+            raise ValueError("workspace source binding is supported only for driven Elmer or EMerge runs")
+        self._require_backup_scope(source)
+        model_id = modelfiles.check_id(source.get("model_id"))
+        with modelfiles._transaction(self.models_dir, model_id):
+            saved = modelfiles.read_design_file(self.models_dir, model_id)
+            if saved["hash"] != source["workspace_hash"]:
+                raise ApiError(409, "the saved source changed; save and reopen the run settings")
+            source_hash = documents.design_digest(saved["design"])
+            if documents.design_digest(body.get("design")) != source_hash:
+                raise ApiError(409, "the research design does not match its saved workspace source")
+            return {**source, "design_sha256": source_hash}
 
     def submit_convergence(self, body: dict) -> dict:
         """A mesh convergence study of a saved design (fairbeam.convergence): the first density is
@@ -1920,37 +2001,10 @@ class App:
             if isinstance(body, dict) and "source" in body:
                 body = dict(body)
                 source = body.pop("source")
-                if (not isinstance(source, dict) or set(source) != {"model_id", "workspace_hash", "backup_scope"}
-                        or not isinstance(source.get("workspace_hash"), str)
-                        or not re.fullmatch(r"[0-9a-f]{64}", source["workspace_hash"])
-                        or not isinstance(source.get("backup_scope"), str)):
-                    raise ValueError("research source requires a workspace model, hash and backup scope")
-                settings = body.get("settings")
-                backend = body.get("backend")
-                analysis = settings.get("analysis") if isinstance(settings, dict) else None
-                from .emerge_solver import EMERGE_DESIGN_ANALYSES
-                # Driven Elmer and EMerge Design analyses (legacy + emerge_nport) bind to the workspace.
-                if not (
-                    isinstance(settings, dict)
-                    and (
-                        (backend == "elmer" and analysis == "driven")
-                        or (backend == "emerge" and analysis in EMERGE_DESIGN_ANALYSES)
-                    )
-                ):
-                    raise ValueError("workspace source binding is supported only for driven Elmer or EMerge runs")
-                self._require_backup_scope(source)
-                model_id = modelfiles.check_id(source.get("model_id"))
-                with modelfiles._transaction(self.models_dir, model_id):
-                    saved = modelfiles.read_design_file(self.models_dir, model_id)
-                    if saved["hash"] != source["workspace_hash"]:
-                        raise ApiError(409, "the saved source changed; save and reopen the run settings")
-                    source_hash = documents.design_digest(saved["design"])
-                    if documents.design_digest(body.get("design")) != source_hash:
-                        raise ApiError(409, "the research design does not match its saved workspace source")
-                    # Only this validated parameter may add source identity to the immutable
-                    # research input. Client flags or extra fields never establish ownership.
-                    admitted = {**source, "design_sha256": source_hash}
-                    return self.manager.submit_research(body, admitted_source=admitted).to_dict()
+                # Only this validated parameter may add source identity to the immutable
+                # research input. Client flags or extra fields never establish ownership.
+                admitted = self._admitted_research_source(body, source)
+                return self.manager.submit_research(body, admitted_source=admitted).to_dict()
             return self.manager.submit_research(body).to_dict()
         except (ValueError, TypeError) as exc:
             raise ApiError(400, str(exc)) from exc
