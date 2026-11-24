@@ -84,6 +84,8 @@ export const [dockTab, setDockTab] = createSignal<DockTab>("reflection");
 export const [hoverPart, setHoverPart] = createSignal<string | null>(null);
 /** designer mesh view: the solids fade so the FDTD mesh plane shows through */
 export const [solidFade, setSolidFade] = createSignal(false);
+/** the 3D view's Z section cut in model units (sectionCut.ts); null shows the whole model */
+export const [sectionZ, setSectionZ] = createSignal<number | null>(null);
 /** the 3D view's cursor position (mm) on the model or the ground plane; null off the view */
 export const [viewCursor, setViewCursor] = createSignal<{ x: number; y: number; z: number } | null>(null);
 /** the part selected in the designer: highlighted in the 3D view */

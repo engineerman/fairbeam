@@ -4,7 +4,10 @@ import { booleanFlash, booleanPreviewGeometry, FLASH_MS, operandBToken } from ".
 import { theme } from "../state";
 import { cssVar } from "../lib/cssvar";
 import { primitiveGeometry } from "./geometry";
+import { sectionClippingPlanes } from "./sectionCut";
 import type { Primitive } from "../types";
+
+const clippingPlanes = sectionClippingPlanes();
 
 /**
  * The Boolean set-up in the 3D view (designer/booleanPreview.ts): translucent A and B, the common
@@ -28,15 +31,15 @@ export function attachBooleanOverlay(scene: THREE.Scene, requestRender: () => vo
       if (!g) continue;
       if (fill > 0) {
         const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: fill, depthWrite: false,
-          depthTest: !through, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
+          depthTest: !through, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, clippingPlanes }));
         mesh.renderOrder = order;
         mesh.raycast = () => {};
         group.add(mesh);
       }
       const edges = new THREE.EdgesGeometry(g, 20);
       const material = dashed
-        ? new THREE.LineDashedMaterial({ color, transparent: true, opacity: edge, depthTest: false, depthWrite: false, dashSize: 0.6, gapSize: 0.35 })
-        : new THREE.LineBasicMaterial({ color, transparent: true, opacity: edge, depthTest: !through, depthWrite: false });
+        ? new THREE.LineDashedMaterial({ color, transparent: true, opacity: edge, depthTest: false, depthWrite: false, dashSize: 0.6, gapSize: 0.35, clippingPlanes })
+        : new THREE.LineBasicMaterial({ color, transparent: true, opacity: edge, depthTest: !through, depthWrite: false, clippingPlanes });
       const line = new THREE.LineSegments(edges, material);
       if (dashed) {
         const box = new THREE.Box3().setFromBufferAttribute(g.getAttribute("position") as THREE.BufferAttribute);
@@ -93,10 +96,10 @@ export function attachBooleanOverlay(scene: THREE.Scene, requestRender: () => vo
         for (const p of flash.shapes) {
           const g = primitiveGeometry(p);
           if (!g) continue;
-          const fill = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+          const fill = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthTest: false, depthWrite: false, side: THREE.DoubleSide, clippingPlanes });
           const mesh = new THREE.Mesh(g, fill);
           mesh.renderOrder = 40; mesh.raycast = () => {};
-          const edge = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0, depthTest: false, depthWrite: false });
+          const edge = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0, depthTest: false, depthWrite: false, clippingPlanes });
           const line = new THREE.LineSegments(new THREE.EdgesGeometry(g, 20), edge);
           line.renderOrder = 41; line.raycast = () => {};
           flashGroup.add(mesh, line);

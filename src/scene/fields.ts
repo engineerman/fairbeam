@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { Bundle, FieldFrequency, FieldPlane } from "../types";
 import { rampColor } from "./pattern";
 import { instantaneousMagnitude, padMaskEdge, smoothCurrentMap } from "./currentAnimation";
+import { sectionClippingPlanes } from "./sectionCut";
 
 function decodePhasors(text: string): Int8Array {
   const raw = Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
@@ -104,7 +105,7 @@ function quad(plane: FieldPlane, offset: number, map: THREE.Texture): THREE.Mesh
     g,
     new THREE.MeshBasicMaterial({
       map, transparent: true, side: THREE.DoubleSide, depthWrite: false, toneMapped: false, alphaTest: 0.5,
-      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8, clippingPlanes: sectionClippingPlanes(),
     }),
   );
   m.renderOrder = 2;
