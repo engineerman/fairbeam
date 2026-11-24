@@ -97,7 +97,7 @@ function fieldStops(): THREE.Color[] {
 
 /** The nearest hit, but a metal face wins over a dielectric face at the same depth: a patch or
  *  trace drawn on a substrate's top face is coplanar with it, and the ray would otherwise pick
- *  whichever mesh it tested first. Faces cut away by the section cut are not hit. */
+ *  whichever mesh it tested first. */
 function pickHit(hits: THREE.Intersection[], cutZ: number | null): THREE.Intersection | undefined {
   const kept = hits.filter((h) => sectionKeepsPoint(cutZ, h.point.z));
   const first = kept[0];
@@ -108,7 +108,6 @@ function pickHit(hits: THREE.Intersection[], cutZ: number | null): THREE.Interse
 
 export default function Viewport() {
   const localRegions = createMemo(() => localMeshReport(bundle()));
-  /** the resolved Z section cut of the shown bundle: null while the whole model is shown */
   const sectionCut = createMemo(() => { const b = bundle(); return b ? sectionCutZ(b.domain, sectionZ()) : null; });
   let host!: HTMLDivElement;
   const [view, setView] = createSignal<ViewName | null>("iso");
@@ -799,12 +798,13 @@ export default function Viewport() {
       requestRender();
     }));
 
-    // every clipped material holds the shared plane array: moving the cut touches no material.
-    // A new domain that no longer holds the stored cut moves the stored value with it.
+    createEffect(on(bundle, (b) => {
+      if (!b) return;
+      const cut = sectionCutZ(b.domain, untrack(sectionZ));
+      if (cut !== untrack(sectionZ)) setSectionZ(cut);
+    }));
     createEffect(() => {
-      const cut = sectionCut();
-      if (bundle() && cut !== sectionZ()) setSectionZ(cut);
-      syncSectionPlane(cut);
+      syncSectionPlane(sectionCut());
       requestRender();
     });
 
@@ -1587,7 +1587,7 @@ export default function Viewport() {
             <div class="vp-hud vp-section">
               <span class="readout">{text()}</span>
               <input type="range" min={domain().min[2]} max={domain().max[2]} step={(domain().max[2] - domain().min[2]) / 1000}
-                value={sectionZ() ?? domain().max[2]} aria-label={t("viewport.section.aria")} aria-valuetext={text()}
+                value={sectionCut() ?? domain().max[2]} aria-label={t("viewport.section.aria")} aria-valuetext={text()}
                 onInput={(e) => setSectionZ(sectionCutZ(domain(), Number(e.currentTarget.value)))} />
               <Show when={sectionCut() !== null}>
                 <button class="btn btn-sm" onClick={() => setSectionZ(null)}>{t("viewport.section.reset")}</button>

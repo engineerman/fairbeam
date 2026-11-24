@@ -1,6 +1,3 @@
-// The Z section cut: which slider values cut the model, which points survive the cut, and the one plane
-// array every clipped material shares.
-//   node --experimental-strip-types scripts/check-section-cut.mjs
 import assert from "node:assert/strict";
 import { buildParts } from "../src/scene/geometry.ts";
 import { sectionClippingPlanes, sectionCutZ, sectionKeepsPoint, syncSectionPlane } from "../src/scene/sectionCut.ts";
@@ -42,8 +39,6 @@ assert.equal(planes[0].constant, 0.25);
 syncSectionPlane(null);
 assert.equal(planes.length, 0, "turning the cut off empties the shared array");
 
-// every solid the 3D view draws follows the cut, including a part's second shape (its own material clone),
-// approximated shapes (wireframes) and cut-outs
 const shape = { kind: "linpoly", normal: 2, elevation: 0, length: 1, points: [[0, 0], [4, 0], [4, 3]], priority: 1, bbox: [[0, 0, 0], [4, 3, 1]], exact: true };
 const built = buildParts({ parts: [
   { name: "strip", type: "Metal", bbox: shape.bbox, primitives: [shape, { ...shape, elevation: 2 }, { ...shape, exact: false }] },
