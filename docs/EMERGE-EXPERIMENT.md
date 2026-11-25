@@ -209,13 +209,17 @@ separate research files; Design runs also write a shared Results bundle (S11 / Z
 In the app, open **Run**, choose **EMerge FEM · Experimental** (shown when health `emerge` ≥ 3),
 set the band and resolution, accept the approximates required by the draft ports, and submit.
 `backend` is `"emerge"` and `analysis` is `"emerge_nport"`. The server classifies the Design into
-`geometry_kind` `driven_lumped`, `planar_microstrip`, or `coaxial_tem` (or rejects with the
+`geometry_kind` `driven_lumped`, `planar_microstrip`, `stripline`, or `coaxial_tem` (or rejects with the
 failed class checks). Port count may be **1…8** (`N_MAX`); ports must be contiguous `1…N` and
 all the same allowed type for that class. All-coaxial drafts also require `accept_coaxial_tem`
 (see Stage B above). Shared Results get a complete N×N experimental `sparams` matrix
 (`fairbeam.emerge-result/2`). openEMS remains available in the same dialog. The historical Level B
 and B2 subsections below document the geometry recipes and recorded native numbers; they are not
 separate Run brands anymore.
+
+## Stripline sandwich
+
+The experimental path also admits a stripline sandwich. The sandwich is one dielectric, with a ground on each face and the strip between those grounds. Lumped ports run from one ground to the strip. The air box uses the same z as the dielectric and adds padding in x and y. The lid and the floor are PEC. The four sides are a second-order ABC. Results stay `results_exported`.
 
 ## Level B: bounded Design subset (driven discrete port)
 

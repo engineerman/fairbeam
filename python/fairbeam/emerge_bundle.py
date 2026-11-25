@@ -113,7 +113,7 @@ def nport_result_bundle(design, result):
     geometry_kind = result.get("geometry_kind")
     if geometry_kind not in GEOMETRY_KINDS:
         raise ValueError(
-            "geometry_kind must be driven_lumped, planar_microstrip, or coaxial_tem")
+            "geometry_kind must be driven_lumped, planar_microstrip, coaxial_tem, or stripline")
     settings = result["settings"]
     case = admit_geometry(design, settings, geometry_kind)
     if geometry_kind == "planar_microstrip":
@@ -162,6 +162,28 @@ def nport_result_bundle(design, result):
             default_z.append(
                 (eta0 / (2.0 * math.pi * math.sqrt(float(port["er"]))))
                 * math.log(float(port["r_o"]) / float(port["r_i"])))
+        experimental_extra = {}
+    elif geometry_kind == "stripline":
+        bundle = _base_preview_bundle(design, settings, case, result)
+        bundle["solver"] = dict(
+            engine="EMerge", method="Frequency-domain FEM (experimental)",
+            excitation=dict(
+                type="Harmonic lumped ground-to-strip terminals",
+                f_min=settings["f_min_hz"], f_max=settings["f_max_hz"], dc_free=True),
+            boundaries={
+                "x-": "Second-order absorbing", "x+": "Second-order absorbing",
+                "y-": "Second-order absorbing", "y+": "Second-order absorbing",
+                "z-": "PEC", "z+": "PEC",
+            },
+            end_criteria_db=0, max_timesteps=0)
+        limitations = list(result.get("limitations", case["limitations"]))
+        pec = list(result.get("pec_approximations", case["pec_approximations"]))
+        port_map = result.get("port_map")
+        if not port_map:
+            from fairbeam_emerge import port_map_from_planar_case
+            port_map = port_map_from_planar_case(case)
+        terminals = sorted(case["terminals"], key=lambda t: t["number"])
+        default_z = [t["z0"] for t in terminals]
         experimental_extra = {}
     else:
         bundle = _base_preview_bundle(design, settings, case, result)

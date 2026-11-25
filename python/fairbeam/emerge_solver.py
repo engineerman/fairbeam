@@ -1,9 +1,9 @@
-"""Unified EMerge N-port Design admission (classify driven vs planar vs coax).
+"""Unified EMerge N-port Design admission (classify driven, planar, stripline, coax).
 
 Single entry for ``analysis: "emerge_nport"``. Classifies into ``geometry_kind``
-``driven_lumped``, ``planar_microstrip``, or ``coaxial_tem``, then reuses
-``emerge_design`` / ``emerge_planar`` / ``emerge_coax`` builders. Worker ``kind``
-stays ``design`` | ``planar`` | ``coax``.
+``driven_lumped``, ``planar_microstrip``, ``stripline``, or ``coaxial_tem``, then reuses
+``emerge_design`` / ``emerge_planar`` / ``emerge_stripline`` / ``emerge_coax`` builders.
+Worker ``kind`` stays ``design`` | ``planar`` | ``stripline`` | ``coax``.
 
 Never imports ``emerge``, ``gmsh`` or ``emsutil``.
 """
@@ -11,12 +11,14 @@ from .emerge_coax import admit as admit_coax
 from .emerge_design import admit as admit_driven
 from .emerge_limits import N_MAX
 from .emerge_planar import admit as admit_planar
+from .emerge_stripline import admit as admit_stripline
 
 ANALYSIS = "emerge_nport"
 GEOMETRY_DRIVEN = "driven_lumped"
 GEOMETRY_PLANAR = "planar_microstrip"
 GEOMETRY_COAX = "coaxial_tem"
-GEOMETRY_KINDS = (GEOMETRY_DRIVEN, GEOMETRY_PLANAR, GEOMETRY_COAX)
+GEOMETRY_STRIPLINE = "stripline"
+GEOMETRY_KINDS = (GEOMETRY_DRIVEN, GEOMETRY_PLANAR, GEOMETRY_COAX, GEOMETRY_STRIPLINE)
 # Client / job analysis tokens that bind a Design to the EMerge experimental path.
 EMERGE_DESIGN_ANALYSES = frozenset({ANALYSIS})
 
@@ -35,6 +37,12 @@ _COAX_KEYS = frozenset({
     "analysis", "accept_coaxial_tem", "padding_mm", "resolution",
     "f_min_hz", "f_max_hz", "points", "field_cut_frequencies_hz",
 })
+_STRIPLINE_KEYS = frozenset({
+    "analysis", "accept_finite_feed", "padding_mm", "resolution", "f_min_hz", "f_max_hz",
+    "points", "approximate_metals", "refine_conductor_edges", "field_cut_frequencies_hz",
+})
+# The Run dialog sends these. The stripline child rejects unknown keys.
+_STRIPLINE_DROPPED = ("enclosure", "air_height_mm", "feed_width_mm")
 
 
 def _port_types(design):
@@ -57,6 +65,13 @@ def _child_settings(settings, allowed):
     return out
 
 
+def _stripline_child_settings(settings):
+    child = _child_settings(settings, _STRIPLINE_KEYS)
+    for key in _STRIPLINE_DROPPED:
+        child.pop(key, None)
+    return child
+
+
 def _stamp(case, geometry_kind):
     out = dict(case)
     out["analysis"] = ANALYSIS
@@ -68,13 +83,15 @@ def admit_geometry(design, settings, geometry_kind):
     """Admit ``design`` forcing ``geometry_kind`` (bundle re-admit / tests)."""
     if geometry_kind not in GEOMETRY_KINDS:
         raise ValueError(
-            "geometry_kind must be driven_lumped, planar_microstrip, or coaxial_tem")
+            "geometry_kind must be driven_lumped, planar_microstrip, coaxial_tem, or stripline")
     if not isinstance(settings, dict):
         raise ValueError("Settings must be an object")
     if geometry_kind == GEOMETRY_PLANAR:
         case = admit_planar(design, _child_settings(settings, _PLANAR_KEYS))
     elif geometry_kind == GEOMETRY_COAX:
         case = admit_coax(design, _child_settings(settings, _COAX_KEYS))
+    elif geometry_kind == GEOMETRY_STRIPLINE:
+        case = admit_stripline(design, _stripline_child_settings(settings))
     else:
         case = admit_driven(design, _child_settings(settings, _DRIVEN_KEYS))
     return _stamp(case, geometry_kind)
@@ -83,8 +100,9 @@ def admit_geometry(design, settings, geometry_kind):
 def admit(design, settings):
     """Classify and admit a Design for experimental EMerge N-port, or raise ``ValueError``.
 
-    Returns a case with worker ``kind`` ``design``|``planar``|``coax``, plus ``analysis``
-    ``emerge_nport`` and ``geometry_kind``. Soft port bound is ``N_MAX`` (via child admits).
+    Returns a case with worker ``kind`` ``design``|``planar``|``stripline``|``coax``, plus
+    ``analysis`` ``emerge_nport`` and ``geometry_kind``. Soft port bound is ``N_MAX``
+    (via child admits).
     """
     if not isinstance(settings, dict):
         raise ValueError("Settings must be an object")
@@ -109,15 +127,22 @@ def admit(design, settings):
         return admit_geometry(design, settings, GEOMETRY_COAX)
 
     # Classic CPW uses the planar worker (geometry_kind stays planar_microstrip).
+    # All-lumped tries planar, then the stripline sandwich, then the driven feed.
     try_planar = homogeneous in ("microstrip", "lumped", "cpw")
+    try_stripline = homogeneous == "lumped"
     try_driven = homogeneous == "lumped"
 
-    planar_err = driven_err = None
+    planar_err = stripline_err = driven_err = None
     if try_planar:
         try:
             return admit_geometry(design, settings, GEOMETRY_PLANAR)
         except ValueError as exc:
             planar_err = str(exc)
+    if try_stripline:
+        try:
+            return admit_geometry(design, settings, GEOMETRY_STRIPLINE)
+        except ValueError as exc:
+            stripline_err = str(exc)
     if try_driven:
         try:
             return admit_geometry(design, settings, GEOMETRY_DRIVEN)
@@ -130,6 +155,10 @@ def admit(design, settings):
     else:
         parts.append(
             "planar_microstrip: ports must be all microstrip, all lumped, or all cpw")
+    if try_stripline:
+        parts.append(f"stripline: {stripline_err}")
+    else:
+        parts.append("stripline: ports must be all lumped")
     if try_driven:
         parts.append(f"driven_lumped: {driven_err}")
     else:

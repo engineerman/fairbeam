@@ -1,4 +1,4 @@
-"""EMerge worker for the WR-90 fixture, admitted Designs, planar N-port, and coax cases.
+"""EMerge worker for the WR-90 fixture, admitted Designs, planar N-port, stripline, and coax cases.
 
 Runs INSIDE the external EMerge environment (``fairbeam_emerge.py`` starts it as a separate
 process with that environment's interpreter). This is the only Fairbeam file that imports EMerge;
@@ -75,6 +75,8 @@ def load_case(path):
         return _load_design_case(case)
     if case.get("kind") == "planar":
         return _load_planar_case(case)
+    if case.get("kind") == "stripline":
+        return _load_stripline_case(case)
     if case.get("kind") == "coax":
         return _load_coax_case(case)
     return _load_fixture_case(case)
@@ -344,6 +346,86 @@ def _load_planar_case(case):
     return case
 
 
+def _load_stripline_case(case):
+    """Structural check for a stripline sandwich. No enclosure key."""
+    if case.get("phasor_convention_out") != NATIVE_PHASOR:
+        raise ValueError("phasor_convention_out must be exp(+i omega t)")
+    if not _number(case.get("resolution")) or not 0 < case["resolution"] <= 0.5:
+        raise ValueError("resolution must be a wavelength fraction in (0, 0.5]")
+    if "metal_edge_m" in case and case["metal_edge_m"] is not None:
+        if not _number(case["metal_edge_m"]) or case["metal_edge_m"] <= 0:
+            raise ValueError("metal_edge_m must be a positive finite number when set")
+    frequencies = case.get("frequencies_hz")
+    if (not isinstance(frequencies, list) or len(frequencies) < 3
+            or not all(map(_number, frequencies)) or any(f <= 0 for f in frequencies)
+            or frequencies != sorted(frequencies)):
+        raise ValueError("frequencies_hz must be ascending positive finite numbers (at least 3)")
+    substrate = case.get("substrate")
+    if not isinstance(substrate, dict):
+        raise ValueError("substrate must be an object")
+    lo, hi = _point3(substrate.get("lo"), "substrate.lo"), _point3(substrate.get("hi"), "substrate.hi")
+    if any(hi[k] <= lo[k] for k in range(3)):
+        raise ValueError("substrate must have positive volume")
+    for key in ("eps_r", "mu_r", "tan_d"):
+        if not _number(substrate.get(key)) or (key != "tan_d" and substrate[key] <= 0) or substrate["tan_d"] < 0:
+            raise ValueError(f"substrate.{key} must be a valid material number")
+    grounds = case.get("grounds")
+    if not isinstance(grounds, dict):
+        raise ValueError("grounds must be an object")
+    for key in ("bottom_z", "top_z"):
+        if not _number(grounds.get(key)):
+            raise ValueError(f"grounds.{key} must be a finite number")
+    if not grounds["top_z"] > grounds["bottom_z"]:
+        raise ValueError("grounds.top_z must be above grounds.bottom_z")
+    traces = case.get("traces")
+    if not isinstance(traces, list) or not traces:
+        raise ValueError("traces must be a non-empty list")
+    for i, trace in enumerate(traces):
+        if not isinstance(trace, dict):
+            raise ValueError(f"traces[{i}] must be an object")
+        if not _number(trace.get("z")):
+            raise ValueError(f"traces[{i}].z must be a finite number")
+        xy = trace.get("xy")
+        if not isinstance(xy, list) or len(xy) < 3:
+            raise ValueError(f"traces[{i}].xy must have at least 3 vertices")
+        for j, point in enumerate(xy):
+            if (not isinstance(point, list) or len(point) != 2
+                    or not all(map(_number, point))):
+                raise ValueError(f"traces[{i}].xy[{j}] must be two finite numbers")
+        _optional_conductor(trace, f"traces[{i}]")
+    terminals = case.get("terminals")
+    if not isinstance(terminals, list) or not (1 <= len(terminals) <= N_MAX):
+        raise ValueError(f"terminals must be a list of 1 to {N_MAX} ports")
+    numbers = []
+    for i, port in enumerate(terminals):
+        if not isinstance(port, dict):
+            raise ValueError(f"terminals[{i}] must be an object")
+        lo, hi = _point3(port.get("lo"), f"terminals[{i}].lo"), _point3(port.get("hi"), f"terminals[{i}].hi")
+        flat = [k for k in range(3) if hi[k] == lo[k]]
+        if len(flat) != 1:
+            raise ValueError(f"terminals[{i}] must be flat on exactly one axis")
+        for key in ("width", "height", "z0"):
+            if not _number(port.get(key)) or port[key] <= 0:
+                raise ValueError(f"terminals[{i}].{key} must be a positive finite number")
+        if port.get("mapped_bc") != "LumpedPort":
+            raise ValueError(f"terminals[{i}].mapped_bc must be LumpedPort")
+        number = port.get("number")
+        if type(number) is not int or number < 1 or number > len(terminals):
+            raise ValueError(f"terminals[{i}].number must be an integer 1…{len(terminals)}")
+        numbers.append(number)
+    if set(numbers) != set(range(1, len(terminals) + 1)):
+        raise ValueError(f"terminals must be contiguous port numbers 1…{len(terminals)}")
+    air = case.get("air")
+    if not isinstance(air, dict):
+        raise ValueError("air must be an object")
+    air_lo, air_hi = _point3(air.get("lo"), "air.lo"), _point3(air.get("hi"), "air.hi")
+    if any(air_hi[k] <= air_lo[k] for k in range(3)):
+        raise ValueError("air must have positive volume")
+    if not isinstance(case.get("limitations"), list) or not isinstance(case.get("pec_approximations"), list):
+        raise ValueError("limitations and pec_approximations must be lists")
+    return case
+
+
 def _load_coax_case(case):
     if case.get("phasor_convention_out") != NATIVE_PHASOR:
         raise ValueError("phasor_convention_out must be exp(+i omega t)")
@@ -495,8 +577,8 @@ def _mesh_raw_block(mesh):
 def build_mesh_raw(case, emerge_version, mesh, elapsed_seconds):
     """Assemble mesh-only ``raw.json`` (no frequency sweep / S-parameters)."""
     kind = case.get("kind", "fixture")
-    if kind not in ("fixture", "design", "planar", "coax"):
-        raise ValueError("mesh-only case kind must be fixture, design, planar or coax")
+    if kind not in ("fixture", "design", "planar", "stripline", "coax"):
+        raise ValueError("mesh-only case kind must be fixture, design, planar, stripline or coax")
     return {"mesh_only": True, "kind": kind, "emerge_version": str(emerge_version),
             "elapsed_seconds": float(elapsed_seconds),
             "mesh": _mesh_raw_block(mesh),
@@ -782,6 +864,48 @@ def build_planar_raw(case, emerge_version, frequencies, s_params, mesh, elapsed_
     if mesh:
         raw["mesh"] = _mesh_raw_block(mesh)
     _raw_attach_field_cuts(raw, field_cuts=field_cuts, field_cut=field_cut)
+    return _attach_port_map(raw, [_port_map_entry(terminal) for terminal in terminals])
+
+
+def build_stripline_raw(case, emerge_version, frequencies, s_params, mesh, elapsed_seconds):
+    """Assemble stripline ``raw.json``. S-parameters are EMerge's, unmodified.
+
+    ``s_params`` maps ``"i,j"`` keys to complex sequences for all ``i,j in 1…n``.
+    There is no enclosure field.
+    """
+    expected = case["frequencies_hz"]
+    frequencies = match_frequencies(expected, frequencies)
+    count = len(frequencies)
+    terminals = sorted(case["terminals"], key=lambda t: t["number"])
+    n = len(terminals)
+    if n < 1 or n > N_MAX:
+        raise ValueError(f"stripline raw needs 1 to {N_MAX} terminals")
+    s_out = {}
+    for i in range(1, n + 1):
+        for j in range(1, n + 1):
+            key = f"{i},{j}"
+            if key not in s_params:
+                raise ValueError(f"missing S-parameter series {key}")
+            series = _series(s_params[key], f"S{key}", count)
+            s_out[key] = {"re": [v.real for v in series], "im": [v.imag for v in series]}
+    raw = {"kind": "stripline", "emerge_version": str(emerge_version), "frequency_hz": frequencies,
+           "s": s_out, "z_ref": [float(t["z0"]) for t in terminals],
+           "phasor_convention": NATIVE_PHASOR,
+           "native_phasor_convention": NATIVE_PHASOR,
+           "elapsed_seconds": float(elapsed_seconds),
+           "trace_count": len(case["traces"]),
+           "solver_setup": {"resolution": case["resolution"],
+                            "resolution_name": case.get("resolution_name"),
+                            **({"metal_edge_m": case["metal_edge_m"]}
+                              if case.get("metal_edge_m") is not None else {}),
+                            "abc_order": ABC_ORDER, "abc_type": ABC_TYPE,
+                            "sparam_cap_single": False, "sparam_cap_column": False,
+                            "sparam_enforce_reciprocity": False,
+                            **(case.get("_sweep_setup") or {"nthreads": _nthreads(case)})},
+           "limitations": list(case["limitations"]),
+           "pec_approximations": list(case["pec_approximations"])}
+    if mesh:
+        raw["mesh"] = _mesh_raw_block(mesh)
     return _attach_port_map(raw, [_port_map_entry(terminal) for terminal in terminals])
 
 
@@ -1142,6 +1266,86 @@ def solve_planar(case):
                             time.monotonic() - started, field_cuts=field_cuts)
 
 
+def solve_stripline(case):
+    """Build and solve an admitted stripline sandwich.
+
+    Air box is the background and matches the dielectric in z. The dielectric box
+    carries ``em.Material``. Each trace is an ``XYPolygon`` at its z. Metal is PEC
+    or ``ThinConductor`` through ``_apply_metal_bc``. After commit, PEC is on the
+    air lid and floor, second-order ABC is on the four sides, and each plate is a
+    ``LumpedPort`` with ``direction=ZAX``. The dielectric bottom is not a separate PEC.
+    """
+    nthreads = _nthreads(case)
+    _prepare_env(nthreads)
+    import numpy as np
+    import emerge as em
+
+    started = time.monotonic()
+    sim = em.Simulation("fairbeam_emerge_stripline", loglevel="INFO", save_file=False, write_log=False)
+    sim.settings.mw_cap_sp_single = False
+    sim.settings.mw_cap_sp_col = False
+    sim.settings.mw_recip_sp = False
+
+    air = _box(em, case["air"]["lo"], case["air"]["hi"]).background()
+    substrate = case["substrate"]
+    _box(em, substrate["lo"], substrate["hi"]).set_material(
+        em.Material(substrate["eps_r"], substrate["mu_r"], substrate["tan_d"]))
+    metals = []
+    for i, trace in enumerate(case["traces"]):
+        xs = [float(p[0]) for p in trace["xy"]]
+        ys = [float(p[1]) for p in trace["xy"]]
+        cs = em.GCS.displace(0.0, 0.0, float(trace["z"]))
+        metal = em.geo.XYPolygon(xs, ys).geo(cs=cs, name=f"Cu_{i}")
+        sigma, thickness_m = _optional_conductor(trace, f"traces[{i}]")
+        if sigma is None:
+            metal.set_material(em.lib.PEC)
+        else:
+            metal.set_material(em.Material(cond=sigma))
+        metals.append((metal, sigma, thickness_m))
+    terminals = []
+    for port in sorted(case["terminals"], key=lambda t: t["number"]):
+        flat = [k for k in range(3) if port["hi"][k] == port["lo"][k]]
+        if len(flat) != 1:
+            raise ValueError(f"terminal {port['number']} must be flat on exactly one axis")
+        if port.get("mapped_bc") != "LumpedPort":
+            raise ValueError(
+                f"terminal {port['number']} mapped_bc must be LumpedPort, got {port.get('mapped_bc')!r}")
+        terminals.append((port, _plate(em, port["lo"], port["hi"], flat[0])))
+
+    sim.set_resolution(case["resolution"])
+    sim.mw.set_frequency(list(case["frequencies_hz"]))
+    sim.commit_geometry()
+
+    sim.mw.bc.PEC(air.top)
+    sim.mw.bc.PEC(air.bottom)
+    for face in ("left", "right", "front", "back"):
+        sim.mw.bc.AbsorbingBoundary(air.face(face), order=ABC_ORDER, abctype=ABC_TYPE)
+    for metal, sigma, thickness_m in metals:
+        _apply_metal_bc(sim, em, metal, sigma, thickness_m)
+    for port, plate in terminals:
+        sim.mw.bc.LumpedPort(
+            plate, port["number"], width=port["width"], height=port["height"],
+            direction=em.ZAX, Z0=port["z0"])
+    edge = case.get("metal_edge_m")
+    if edge is not None:
+        for metal, _sigma, _thick in metals:
+            sim.mesher.set_boundary_size(metal, edge, growth_rate=3.0)
+
+    sim.generate_mesh()
+    mesh = mesh_counts(sim)
+    if case.get("mesh_only"):
+        return build_mesh_raw(case, em.__version__, mesh, time.monotonic() - started)
+    data, sweep = _run_frequency_sweep(sim, case)
+    case = {**case, "_sweep_setup": sweep}
+
+    grid = data.scalar.grid
+    frequencies = np.asarray(data.scalar.axis("freq"), dtype=float).reshape(-1)
+    n_ports = len(terminals)
+    s_params = _extract_s_matrix(grid, n_ports)
+    return build_stripline_raw(case, em.__version__, frequencies.tolist(), s_params, mesh,
+                               time.monotonic() - started)
+
+
 def solve_coax(case):
     """Build and solve an admitted coax N-port case with EMerge ``CoaxPort``.
 
@@ -1228,11 +1432,13 @@ def solve_coax(case):
 
 
 def solve(case):
-    """Dispatch to the fixture, design, planar or coax solver."""
+    """Dispatch to the fixture, design, planar, stripline or coax solver."""
     if case.get("kind") == "design":
         return solve_design(case)
     if case.get("kind") == "planar":
         return solve_planar(case)
+    if case.get("kind") == "stripline":
+        return solve_stripline(case)
     if case.get("kind") == "coax":
         return solve_coax(case)
     return solve_fixture(case)

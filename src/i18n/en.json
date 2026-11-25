@@ -5167,7 +5167,7 @@
   "emergeExp.setupHint": "EMerge is optional. Use Install EMerge or set its Python environment in Experimental solvers, then check capability before running.",
   "emergeExp.unavailable": "EMerge is not ready on this device. Open Set up EMerge, install it if needed, then check capability before retrying.",
   "emergeExp.serverUpdate": "This local server does not support the unified EMerge experimental workflow. Close it and open the current Fairbeam test application.",
-  "emergeExp.scope": "Experimental FEM for 1 to 8 Design ports of one type: Discrete/lumped on axis-aligned boxes and sheets, homogeneous microstrip or Discrete ports on a single-layer board, or homogeneous coaxial ports (analytic CoaxPort TEM). Generates a full experimental S-matrix. Curved geometry, mixed port types, multilayer, vias and far field are not supported.",
+  "emergeExp.scope": "Experimental FEM for 1 to 8 Design ports of one type: Discrete/lumped on axis-aligned boxes and sheets, homogeneous microstrip or Discrete ports on a single-layer board, a stripline sandwich with the strip between two grounds, or homogeneous coaxial ports (analytic CoaxPort TEM). Generates a full experimental S-matrix. Curved geometry, mixed port types, multilayer, vias and far field are not supported.",
   "emergeExp.limitations": "Experimental only: second-order absorbing walls (not PML), no far field, no gain, not a mesh-convergence certificate, and dielectric loss uses a constant loss tangent.",
   "emergeExp.f_min_hz": "Start frequency (GHz)",
   "emergeExp.f_max_hz": "Stop frequency (GHz)",

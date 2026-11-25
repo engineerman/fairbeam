@@ -188,6 +188,14 @@ class EmergeResearchValidation(unittest.TestCase):
             emerge_nport_result(1, geometry_kind="driven_lumped"), "emerge")
         self.assertEqual(driven["geometry_kind"], "driven_lumped")
         self.assertTrue(research.completed_result(driven))
+        sandwich = research.validate_result(
+            emerge_nport_result(2, geometry_kind="stripline"), "emerge")
+        self.assertEqual(sandwich["geometry_kind"], "stripline")
+        self.assertNotIn("enclosure", sandwich)
+        self.assertTrue(research.completed_result(sandwich))
+        with self.assertRaisesRegex(ValueError, "stripline"):
+            research.validate_result(
+                emerge_nport_result(2, geometry_kind="not_a_kind"), "emerge")
         with self.assertRaisesRegex(ValueError, "results_validated"):
             research.validate_result(emerge_nport_result(status="results_validated"), "emerge")
         bad = emerge_nport_result(2)

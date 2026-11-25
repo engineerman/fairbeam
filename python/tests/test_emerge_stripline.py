@@ -5,8 +5,10 @@ import sys
 import unittest
 from pathlib import Path
 
+import fairbeam_emerge as fem
 from fairbeam import emerge_stripline
 from fairbeam.emerge_planar import METAL_EDGE_MM
+from fairbeam.emerge_solver import ANALYSIS, admit as solver_admit
 from fairbeam.emerge_stripline import admit
 from fairbeam.filter_synthesis.hairpin_stripline_bp import (
     HairpinStriplineBpSpec,
@@ -147,3 +149,44 @@ class TestStriplineAdmit(unittest.TestCase):
         self.assertFalse(found & {"emerge", "gmsh", "emsutil"}, found)
         self.assertNotIn("emerge", sys.modules)
         self.assertIn("fairbeam.emerge_stripline", sys.modules)
+
+    def test_solver_classifies_hairpin_and_exports_without_enclosure(self):
+        case = solver_admit(self.hairpin(), dict(
+            analysis=ANALYSIS, accept_finite_feed=True, accept_lumped_terminals=True,
+            padding_mm=10, enclosure="open", air_height_mm=20, feed_width_mm=1,
+            resolution="coarse", f_min_hz=1.7e9, f_max_hz=2.3e9, points=3,
+            approximate_metals=False, refine_conductor_edges=True))
+        self.assertEqual(case["kind"], "stripline")
+        self.assertEqual(case["geometry_kind"], "stripline")
+        self.assertNotIn("enclosure", case)
+        self.assertNotIn("air_height_mm", case)
+        self.assertTrue(fem.stripline_case_ok(case))
+        count = len(case["frequencies_hz"])
+        n = len(case["terminals"])
+        s = {f"{i},{j}": {"re": [0.1] * count, "im": [0.0] * count}
+             for i in range(1, n + 1) for j in range(1, n + 1)}
+        raw = {
+            "kind": "stripline",
+            "frequency_hz": list(case["frequencies_hz"]),
+            "s": s,
+            "z_ref": [t["z0"] for t in sorted(case["terminals"], key=lambda t: t["number"])],
+            "phasor_convention": "exp(+i omega t)",
+            "elapsed_seconds": 0.1,
+            "mesh": {"nodes": 4, "tetrahedra": 8},
+            "limitations": list(case["limitations"]),
+            "pec_approximations": list(case["pec_approximations"]),
+        }
+        result = fem.assess_stripline(raw, case)
+        self.assertEqual(result["schema"], fem.NPORT_RESULT_SCHEMA)
+        self.assertEqual(result["geometry_kind"], "stripline")
+        self.assertEqual(result["status"], "results_exported")
+        self.assertIs(result["precision_converged"], False)
+        self.assertIs(result["gain_qualified"], False)
+        self.assertNotIn("enclosure", result)
+        self.assertEqual(set(result["s"]), {f"{i},{j}" for i in range(1, n + 1) for j in range(1, n + 1)})
+        mesh = fem.assess_mesh(
+            {"mesh_only": True, "kind": "stripline",
+             "mesh": {"nodes": 4, "tetrahedra": 8}, "elapsed_seconds": 0.2},
+            {"kind": "stripline", "resolution": case["resolution"]})
+        self.assertEqual(mesh["status"], "mesh_exported")
+        self.assertEqual(mesh["kind"], "stripline")

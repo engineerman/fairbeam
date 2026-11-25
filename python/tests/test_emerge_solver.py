@@ -5,14 +5,18 @@ import unittest
 from fairbeam.design import blank_design
 from fairbeam.emerge_limits import N_MAX
 from fairbeam.emerge_solver import (
-    ANALYSIS, GEOMETRY_COAX, GEOMETRY_DRIVEN, GEOMETRY_PLANAR, admit, admit_geometry,
+    ANALYSIS, GEOMETRY_COAX, GEOMETRY_DRIVEN, GEOMETRY_PLANAR, GEOMETRY_STRIPLINE,
+    admit, admit_geometry,
+)
+from fairbeam.filter_synthesis.hairpin_stripline_bp import (
+    HairpinStriplineBpSpec, synthesize_hairpin_stripline_bp,
 )
 from test_emerge_coax import coax_design, coax_settings
 
 from test_emerge_design import three_lumped_ports
 from test_emerge_planar import (
-    hairpin, one_microstrip_port, simple_cpw_line, simple_n_port_board,
-    settings as planar_settings,
+    discrete_settings, hairpin, one_microstrip_port, simple_cpw_line, simple_n_port_board,
+    settings as planar_settings, with_discrete_ports,
 )
 
 
@@ -84,6 +88,7 @@ class EmergeSolverAdmit(unittest.TestCase):
             admit(design, settings)
         message = str(ctx.exception)
         self.assertIn("planar_microstrip:", message)
+        self.assertIn("stripline:", message)
         self.assertIn("driven_lumped:", message)
         self.assertNotRegex(message, r"(?i)antenna")
         self.assertNotRegex(message, r"(?i)pick the other")
@@ -116,6 +121,30 @@ class EmergeSolverAdmit(unittest.TestCase):
         board = simple_n_port_board(N_MAX + 1)
         with self.assertRaisesRegex(ValueError, str(N_MAX)):
             admit(board, nport_planar_settings())
+
+    def test_classifies_microstrip_discrete_board_as_planar(self):
+        case = admit(with_discrete_ports(hairpin()), discrete_settings())
+        self.assertEqual(case["geometry_kind"], GEOMETRY_PLANAR)
+        self.assertEqual(case["kind"], "planar")
+
+    def test_classifies_hairpin_stripline(self):
+        design = synthesize_hairpin_stripline_bp(
+            HairpinStriplineBpSpec(f0_hz=2e9, order=3, bw_hz=0.2e9)).design
+        case = admit(design, dict(
+            analysis=ANALYSIS, accept_finite_feed=True, accept_lumped_terminals=True,
+            padding_mm=10, enclosure="open", air_height_mm=20, feed_width_mm=1,
+            resolution="coarse", f_min_hz=1.7e9, f_max_hz=2.3e9, points=3,
+            approximate_metals=False, refine_conductor_edges=True))
+        self.assertEqual(case["geometry_kind"], GEOMETRY_STRIPLINE)
+        self.assertEqual(case["kind"], "stripline")
+        self.assertNotIn("enclosure", case)
+        self.assertNotIn("air_height_mm", case)
+        self.assertNotIn("feed_width_mm", case)
+
+    def test_failed_microstrip_says_stripline_needs_lumped_ports(self):
+        with self.assertRaises(ValueError) as ctx:
+            admit(hairpin(), nport_planar_settings(enclosure="nope"))
+        self.assertIn("stripline: ports must be all lumped", str(ctx.exception))
 
     def test_classifies_all_coaxial_as_coaxial_tem(self):
         case = admit(coax_design(), coax_settings())

@@ -313,6 +313,36 @@ class EmergeNportBundle(unittest.TestCase):
         self.assertEqual(bundle["experimental"]["geometry_kind"], "planar_microstrip")
         self.assertEqual(bundle["mesh"]["tetrahedra"], 400)
 
+    def test_stripline_result_is_legal_and_unknown_kind_fails(self):
+        from fairbeam.filter_synthesis.hairpin_stripline_bp import (
+            HairpinStriplineBpSpec, synthesize_hairpin_stripline_bp,
+        )
+        design = synthesize_hairpin_stripline_bp(
+            HairpinStriplineBpSpec(f0_hz=2e9, order=3, bw_hz=0.2e9)).design
+        run_settings = dict(
+            analysis="emerge_nport", accept_finite_feed=True, accept_lumped_terminals=True,
+            padding_mm=10, enclosure="open", air_height_mm=20, feed_width_mm=1,
+            resolution="coarse", f_min_hz=1.7e9, f_max_hz=2.3e9, points=3,
+            approximate_metals=False, refine_conductor_edges=True)
+        result = synthetic_nport_result(
+            2, geometry_kind="stripline", settings=run_settings,
+            frequency_hz=[1.7e9, 2.0e9, 2.3e9], pec_approximations=[])
+        result.pop("enclosure", None)
+        bundle = nport_result_bundle(design, result)
+        self.assertEqual(bundle["experimental"]["geometry_kind"], "stripline")
+        self.assertEqual(
+            bundle["solver"]["excitation"]["type"],
+            "Harmonic lumped ground-to-strip terminals")
+        bounds = bundle["solver"]["boundaries"]
+        self.assertEqual(bounds["z-"], "PEC")
+        self.assertEqual(bounds["z+"], "PEC")
+        for key in ("x-", "x+", "y-", "y+"):
+            self.assertEqual(bounds[key], "Second-order absorbing")
+        self.assertNotIn("enclosure", bundle["solver"])
+        bad = {**result, "geometry_kind": "not_a_kind"}
+        with self.assertRaisesRegex(ValueError, "stripline"):
+            nport_result_bundle(design, bad)
+
 
 class EmergeFieldCut(unittest.TestCase):
     def test_to_field_plane_rejects_bad_schema(self):

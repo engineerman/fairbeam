@@ -264,7 +264,8 @@ def validate_result(value, backend):
             kind = value.get("geometry_kind")
             if kind not in fairbeam_emerge.GEOMETRY_KINDS:
                 raise ValueError(
-                    "emerge N-port geometry_kind must be driven_lumped, planar_microstrip, or coaxial_tem")
+                    "emerge N-port geometry_kind must be driven_lumped, planar_microstrip, "
+                    "coaxial_tem, or stripline")
             s_block = value.get("s")
             if not isinstance(s_block, dict):
                 raise ValueError("emerge N-port s must be an object")
@@ -409,6 +410,9 @@ def execute(snapshot, outdir, checksum):
             kind = spec["normalized"].get("kind")
             if kind == "planar":
                 result = fairbeam_emerge.run_planar(
+                    outdir, spec["normalized"], root=spec["path"], experimental=True)
+            elif kind == "stripline":
+                result = fairbeam_emerge.run_stripline(
                     outdir, spec["normalized"], root=spec["path"], experimental=True)
             elif kind == "coax":
                 result = fairbeam_emerge.run_coax(

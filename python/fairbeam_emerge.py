@@ -1,9 +1,9 @@
-"""Opt-in external EMerge research adapter (WR-90 fixture, Designs, planar, coax); stdlib only.
+"""Opt-in external EMerge research adapter (WR-90 fixture, Designs, planar, stripline, coax); stdlib only.
 
 This adapter never imports EMerge. It finds an external EMerge Python environment, writes
 ``case.json`` and starts ``fairbeam_emerge_worker.py`` in that environment as a separate process.
 Only the worker imports EMerge. Fixture raw S-parameters are checked against the analytic
-straight-waveguide reference; Design / planar / coax raw S-parameters are checked against their
+straight-waveguide reference; Design / planar / stripline / coax raw S-parameters are checked against their
 exported-result schemas only (``results_exported``, never validated).
 """
 import argparse
@@ -39,12 +39,14 @@ RESULT_SCHEMA = "fairbeam.emerge-fixture-result/1"
 MANIFEST_SCHEMA = "fairbeam-emerge-fixture-1"
 DESIGN_MANIFEST_SCHEMA = "fairbeam-emerge-design-1"
 PLANAR_MANIFEST_SCHEMA = "fairbeam-emerge-planar-1"
+STRIPLINE_MANIFEST_SCHEMA = "fairbeam-emerge-stripline-1"
 COAX_MANIFEST_SCHEMA = "fairbeam-emerge-coax-1"
 NPORT_RESULT_SCHEMA = "fairbeam.emerge-result/2"
-GEOMETRY_KINDS = ("driven_lumped", "planar_microstrip", "coaxial_tem")
+GEOMETRY_KINDS = ("driven_lumped", "planar_microstrip", "coaxial_tem", "stripline")
 GEOMETRY_DRIVEN = "driven_lumped"
 GEOMETRY_PLANAR = "planar_microstrip"
 GEOMETRY_COAX = "coaxial_tem"
+GEOMETRY_STRIPLINE = "stripline"
 MESH_RESULT_SCHEMA = "fairbeam.emerge-mesh-result/1"
 MESH_SURFACE_SCHEMA = "fairbeam.emerge-mesh-surface/1"
 MESH_SURFACE_MAX_NODES = 100_000
@@ -364,8 +366,9 @@ def _mesh_ok(mesh):
 
 def assess_mesh(raw, case):
     """Check mesh-only raw output; status is always ``mesh_exported`` when counts are finite."""
-    if not isinstance(case, dict) or case.get("kind") not in ("design", "planar", "coax", "fixture"):
-        raise ValueError("mesh-only case must be design, planar, coax or fixture")
+    if not isinstance(case, dict) or case.get("kind") not in (
+            "design", "planar", "stripline", "coax", "fixture"):
+        raise ValueError("mesh-only case must be design, planar, stripline, coax or fixture")
     if not isinstance(raw, dict) or raw.get("mesh_only") is not True:
         raise ValueError("mesh-only raw must set mesh_only true")
     if raw.get("kind") is not None and raw.get("kind") != case.get("kind"):
@@ -704,6 +707,152 @@ def assess_planar(raw, case):
     if isinstance(raw.get("port_map"), list) and raw["port_map"]:
         port_map = list(raw["port_map"])
     result = {"schema": NPORT_RESULT_SCHEMA, "geometry_kind": GEOMETRY_PLANAR,
+            "status": "results_exported",
+            "frequency_hz": expected,
+            "s": {key: {"re": [v.real for v in series], "im": [v.imag for v in series]}
+                  for key, series in s.items()},
+            "settings": settings, "phasor_convention": PHASOR,
+            "native_phasor_convention": native, **context,
+            "precision_converged": False, "gain_qualified": False,
+            "limitations": limitations, "pec_approximations": pec}
+    if port_map:
+        result["port_map"] = port_map
+    return result
+
+
+def stripline_case_ok(case):
+    """Structural check of an admitted stripline case. Enclosure is not required."""
+    if not isinstance(case, dict) or case.get("kind") != "stripline":
+        raise ValueError("Stripline case must have kind 'stripline'")
+    if case.get("phasor_convention_out") != PHASOR:
+        raise ValueError("phasor_convention_out must be exp(+i omega t)")
+    if not _number(case.get("resolution")) or not 0 < case["resolution"] <= 0.5:
+        raise ValueError("resolution must be a wavelength fraction in (0, 0.5]")
+    if "metal_edge_m" in case and case["metal_edge_m"] is not None:
+        if not _number(case["metal_edge_m"]) or case["metal_edge_m"] <= 0:
+            raise ValueError("metal_edge_m must be a positive finite number when set")
+    frequencies = case.get("frequencies_hz")
+    if (not isinstance(frequencies, list) or len(frequencies) < 3
+            or not all(map(_number, frequencies)) or any(f <= 0 for f in frequencies)):
+        raise ValueError("frequencies_hz must be at least three positive finite numbers")
+    if list(frequencies) != sorted(frequencies):
+        raise ValueError("frequencies_hz must be ascending")
+    substrate, traces, terminals, air = (case.get("substrate"), case.get("traces"),
+                                         case.get("terminals"), case.get("air"))
+    grounds = case.get("grounds")
+    if not isinstance(substrate, dict) or not isinstance(air, dict) or not isinstance(grounds, dict):
+        raise ValueError("Stripline case needs substrate, grounds and air objects")
+    for key in ("bottom_z", "top_z"):
+        if not _number(grounds.get(key)):
+            raise ValueError(f"grounds.{key} must be a finite number")
+    if not grounds["top_z"] > grounds["bottom_z"]:
+        raise ValueError("grounds.top_z must be above grounds.bottom_z")
+    if not isinstance(traces, list) or not traces:
+        raise ValueError("Stripline case needs a non-empty traces list")
+    if not isinstance(terminals, list) or not (1 <= len(terminals) <= PLANAR_N_MAX):
+        raise ValueError(f"Stripline case needs 1 to {PLANAR_N_MAX} terminals")
+    numbers = []
+    for port in terminals:
+        if not isinstance(port, dict) or type(port.get("number")) is not int:
+            raise ValueError("Each terminal needs an integer number")
+        if port.get("mapped_bc") != "LumpedPort":
+            raise ValueError("stripline terminal mapped_bc must be LumpedPort")
+        if not _number(port.get("z0")) or port["z0"] <= 0:
+            raise ValueError("terminal z0 must be a positive finite number")
+        for key in ("width", "height"):
+            if not _number(port.get(key)) or port[key] <= 0:
+                raise ValueError(f"terminal.{key} must be a positive finite number")
+        numbers.append(port["number"])
+    n = len(terminals)
+    if set(numbers) != set(range(1, n + 1)):
+        raise ValueError(f"terminals must be contiguous port numbers 1…{n}")
+    if not isinstance(case.get("limitations"), list) or not isinstance(case.get("pec_approximations"), list):
+        raise ValueError("limitations and pec_approximations must be lists")
+    return True
+
+
+def assess_stripline(raw, case):
+    """Check stripline raw N×N S. Status is ``results_exported`` when the series are finite."""
+    stripline_case_ok(case)
+    if not isinstance(raw, dict):
+        raise ValueError("Raw result must be an object")
+    expected = [float(f) for f in case["frequencies_hz"]]
+    frequencies = raw.get("frequency_hz")
+    if (not isinstance(frequencies, list) or not all(map(_number, frequencies))
+            or [float(f) for f in frequencies] != expected):
+        raise ValueError("Raw frequencies must equal the case frequency list")
+    native = raw.get("phasor_convention")
+    if native != PHASOR:
+        raise ValueError(f"phasor_convention must be {PHASOR}")
+    if "native_phasor_convention" in raw and raw["native_phasor_convention"] != PHASOR:
+        raise ValueError(f"native_phasor_convention must be {PHASOR}")
+    count = len(expected)
+    terminals = sorted(case["terminals"], key=lambda t: t["number"])
+    n = len(terminals)
+    s_block = raw.get("s")
+    if not isinstance(s_block, dict):
+        raise ValueError("Raw s must be an object")
+    s = {}
+    for i in range(1, n + 1):
+        for j in range(1, n + 1):
+            key = f"{i},{j}"
+            entry = s_block.get(key)
+            if not isinstance(entry, dict):
+                raise ValueError(f"s[{key}] must be an object with re and im")
+            re_vals, im_vals = entry.get("re"), entry.get("im")
+            if (not isinstance(re_vals, list) or not isinstance(im_vals, list)
+                    or len(re_vals) != count or len(im_vals) != count
+                    or not all(map(_number, re_vals)) or not all(map(_number, im_vals))):
+                raise ValueError(f"s[{key}] must hold {count} finite re/im samples")
+            s[key] = [complex(float(r), float(i_)) for r, i_ in zip(re_vals, im_vals)]
+    for key, series in s.items():
+        if any(abs(v) > S_ABS_MAX for v in series):
+            raise ValueError(f"|S{key}| exceeds {S_ABS_MAX}")
+    for j in range(1, n + 1):
+        power = []
+        for k in range(count):
+            power.append(sum(abs(s[f"{i},{j}"][k]) ** 2 for i in range(1, n + 1)))
+        if any(p > PLANAR_COLUMN_POWER_MAX for p in power):
+            raise ValueError(f"column {j} power exceeds {PLANAR_COLUMN_POWER_MAX}")
+    for i in range(1, n + 1):
+        for j in range(i + 1, n + 1):
+            recip = [abs(a - b) for a, b in zip(s[f"{i},{j}"], s[f"{j},{i}"])]
+            if any(d > PLANAR_RECIPROCITY_MAX for d in recip):
+                raise ValueError(
+                    f"|S{i},{j} − S{j},{i}| exceeds {PLANAR_RECIPROCITY_MAX}")
+    z_ref = raw.get("z_ref")
+    if z_ref is None:
+        z_ref = [t["z0"] for t in terminals]
+    if (not isinstance(z_ref, list) or len(z_ref) != n
+            or not all(_number(v) and v > 0 for v in z_ref)):
+        raise ValueError(f"z_ref must be {n} positive finite numbers")
+    context = {"z_ref": [float(v) for v in z_ref]}
+    if "emerge_version" in raw:
+        if not isinstance(raw["emerge_version"], str):
+            raise ValueError("emerge_version must be a string")
+        context["emerge_version"] = raw["emerge_version"]
+    if "elapsed_seconds" in raw:
+        if not _number(raw["elapsed_seconds"]) or raw["elapsed_seconds"] < 0:
+            raise ValueError("elapsed_seconds must be a finite non-negative number")
+        context["elapsed_seconds"] = float(raw["elapsed_seconds"])
+    if "mesh" in raw:
+        context["mesh"] = _mesh_ok(raw["mesh"])
+    _attach_field_cuts(context, raw)
+    settings = {"resolution": case["resolution"], "frequencies_hz": expected}
+    if case.get("metal_edge_m") is not None:
+        settings["metal_edge_m"] = case["metal_edge_m"]
+    if "resolution_name" in case:
+        settings["resolution_name"] = case["resolution_name"]
+    limitations = list(case["limitations"])
+    if isinstance(raw.get("limitations"), list):
+        limitations = list(raw["limitations"])
+    pec = list(case["pec_approximations"])
+    if isinstance(raw.get("pec_approximations"), list):
+        pec = list(raw["pec_approximations"])
+    port_map = port_map_from_planar_case(case)
+    if isinstance(raw.get("port_map"), list) and raw["port_map"]:
+        port_map = list(raw["port_map"])
+    result = {"schema": NPORT_RESULT_SCHEMA, "geometry_kind": GEOMETRY_STRIPLINE,
             "status": "results_exported",
             "frequency_hz": expected,
             "s": {key: {"re": [v.real for v in series], "im": [v.imag for v in series]}
@@ -1085,6 +1234,82 @@ def run_planar(out, case, *, root=None, experimental=False, threads=None):
         raise
 
 
+def run_stripline(out, case, *, root=None, experimental=False, threads=None):
+    """Run an admitted stripline sandwich through the EMerge worker (opt-in; fresh ``out``)."""
+    if not experimental:
+        raise ValueError("Explicit --experimental opt-in is required")
+    payload = with_nthreads(case, threads)
+    stripline_case_ok(payload)
+    mesh_only = payload.get("mesh_only") is True
+    if payload.get("mesh_only") not in (None, False, True):
+        raise ValueError("mesh_only must be boolean when present")
+    python, site = discover(root)
+    if not WORKER.is_file():
+        raise FileNotFoundError(f"EMerge worker script not found: {WORKER}")
+    directory = Path(out).expanduser().resolve()
+    directory.mkdir(parents=True, exist_ok=False)
+    nthreads = payload["nthreads"]
+    timeout_s = MESH_WORKER_TIMEOUT_S if mesh_only else PLANAR_WORKER_TIMEOUT_S
+    manifest = {"schema": STRIPLINE_MANIFEST_SCHEMA, "backend": "emerge-experimental",
+                "physics": "stripline", "kind": "stripline", "mesh_only": mesh_only,
+                "resolution": payload.get("resolution_name", payload["resolution"]),
+                "resolution_value": payload["resolution"], "threads": nthreads, "status": "inputs_generated",
+                "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "input_provenance": "admitted stripline case from emerge_stripline.admit",
+                "phasor_convention": PHASOR, "python": str(python), "python_sha256": digest(python),
+                "emerge_version": emerge_version(site), "generator_sha256": digest(__file__)}
+
+    def save():
+        (directory / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    (directory / "case.json").write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n",
+                                         encoding="utf-8")
+    shutil.copyfile(WORKER, directory / WORKER.name)
+    manifest["worker_sha256"] = digest(directory / WORKER.name)
+    manifest["case_sha256"] = digest(directory / "case.json")
+    save()
+    env = _worker_env(nthreads)
+    try:
+        manifest["status"] = "solver_started"
+        save()
+        start = time.monotonic()
+        try:
+            process = subprocess.run([str(python), "-I", "-X", "utf8", WORKER.name, "case.json"],
+                                     cwd=directory, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
+                                     timeout=timeout_s,
+                                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+        except subprocess.TimeoutExpired as exc:
+            (directory / "worker.log").write_text(_text(exc.stdout), encoding="utf-8")
+            raise RuntimeError(f"worker exceeded {timeout_s} second limit") from exc
+        (directory / "worker.log").write_text(_text(process.stdout), encoding="utf-8")
+        manifest["worker_seconds"] = time.monotonic() - start
+        manifest["worker_exit_code"] = process.returncode
+        if process.returncode:
+            raise RuntimeError(f"worker failed (exit {process.returncode}); inspect worker.log")
+        if not (directory / "raw.json").is_file():
+            raise RuntimeError("worker exited 0 but wrote no raw.json; inspect worker.log")
+        manifest["status"] = "solver_returned"
+        save()
+        raw = json.loads((directory / "raw.json").read_text(encoding="utf-8"))
+        result = assess_mesh(raw, payload) if mesh_only else assess_stripline(raw, case)
+        result["raw_sha256"] = {"raw.json": digest(directory / "raw.json")}
+        (directory / "result.json").write_text(json.dumps(result, indent=2, allow_nan=False) + "\n",
+                                               encoding="utf-8")
+        manifest["status"] = result["status"]
+        save()
+        expected = "mesh_exported" if mesh_only else "results_exported"
+        if result["status"] != expected:
+            raise ValueError("Stripline result was not exported; raw output retained")
+        return result
+    except BaseException as exc:
+        if manifest["status"] not in ("results_exported", "mesh_exported"):
+            manifest["status"] = "interrupted" if isinstance(exc, KeyboardInterrupt) else "failed"
+        manifest["error"] = str(exc)
+        save()
+        raise
+
+
 def run_coax(out, case, *, root=None, experimental=False, threads=None):
     """Run an admitted coax N-port case through the EMerge worker (opt-in; fresh ``out``)."""
     if not experimental:
@@ -1179,6 +1404,10 @@ def main(argv=None):
     planar.add_argument("--experimental", action="store_true", help="explicitly opt into research execution")
     planar.add_argument("--case", type=Path, required=True, help="admitted planar case JSON")
     planar.add_argument("--out", type=Path, required=True, help="fresh output directory")
+    stripline = commands.add_parser("stripline", help="run an admitted stripline sandwich through EMerge")
+    stripline.add_argument("--experimental", action="store_true", help="explicitly opt into research execution")
+    stripline.add_argument("--case", type=Path, required=True, help="admitted stripline case JSON")
+    stripline.add_argument("--out", type=Path, required=True, help="fresh output directory")
     coax = commands.add_parser("coax", help="run an admitted coax N-port case through EMerge")
     coax.add_argument("--experimental", action="store_true", help="explicitly opt into research execution")
     coax.add_argument("--case", type=Path, required=True, help="admitted coax case JSON")
@@ -1196,6 +1425,9 @@ def main(argv=None):
         elif args.command == "planar":
             case = json.loads(Path(args.case).read_text(encoding="utf-8"))
             result = run_planar(args.out, case, root=args.root, experimental=args.experimental)
+        elif args.command == "stripline":
+            case = json.loads(Path(args.case).read_text(encoding="utf-8"))
+            result = run_stripline(args.out, case, root=args.root, experimental=args.experimental)
         else:
             case = json.loads(Path(args.case).read_text(encoding="utf-8"))
             result = run_coax(args.out, case, root=args.root, experimental=args.experimental)

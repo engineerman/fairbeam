@@ -5083,7 +5083,7 @@
   "emergeExp.setupHint": "EMerge isteğe bağlıdır. Deneysel çözücüler bölümünde EMerge'i kur düğmesini kullanın veya Python ortamını belirtip kullanılabilirliğini kontrol edin; ardından çalıştırın.",
   "emergeExp.unavailable": "EMerge bu cihazda hazır değil. EMerge'i ayarla bölümünü açın, gerekiyorsa kurun, ardından kullanılabilirliğini kontrol ederek yeniden deneyin.",
   "emergeExp.serverUpdate": "Bu yerel sunucu birleşik EMerge deneysel akışını desteklemiyor. Sunucuyu kapatıp güncel Fairbeam test uygulamasını açın.",
-  "emergeExp.scope": "Aynı türde 1 ile 8 Tasarım portu için deneysel FEM: eksenlere paralel kutular ve levhalarda Ayrık port, tek katmanlı kartta homojen mikroşerit ya da Ayrık portlar, veya homojen koaksiyel portlar (analitik CoaxPort TEM). Tam deneysel S-matrisi üretir. Eğri geometri, karışık port türleri, çok katman, via ve uzak alan desteklenmez.",
+  "emergeExp.scope": "Aynı türde 1 ile 8 Tasarım portu için deneysel FEM: eksenlere paralel kutular ve levhalarda Ayrık port, tek katmanlı kartta homojen mikroşerit ya da Ayrık portlar, iki toprak arasında şerit bulunan stripline sandviç, veya homojen koaksiyel portlar (analitik CoaxPort TEM). Tam deneysel S-matrisi üretir. Eğri geometri, karışık port türleri, çok katman, via ve uzak alan desteklenmez.",
   "emergeExp.limitations": "Yalnızca deneysel: ikinci mertebe soğurucu duvarlar (PML değil), uzak alan yok, kazanç yok, mesh yakınsama belgesi değil; dielektrik kayıp sabit kayıp tanjantı kullanır.",
   "emergeExp.f_min_hz": "Başlangıç frekansı (GHz)",
   "emergeExp.f_max_hz": "Bitiş frekansı (GHz)",
