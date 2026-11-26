@@ -182,12 +182,14 @@ function Content() {
         if (hasDocumentResultScope(f) && !source) throw new Error(t("emergeExp.serverUpdate"));
         emerge = emergeSolveRequest(draft.ports, currentEmergeMapKind(draft.ports), source);
       }
+      const settings = { ...runSettings() };
+      if (emerge) delete settings.engine;
       const result = await api.submitSweep({
         model: f.id,
         params: base,
         sequences,
         ...(designCells() ? { cells: designCells() } : {}),
-        ...runSettings(),
+        ...settings,
         ...(emerge ? { emerge } : {}),
       });
       setRunId(result.sweep.id);
@@ -481,28 +483,30 @@ function Content() {
               </Show>
             </div>
           </div>
-          {/* the engine and threads of every run of the sweep, like Mesh convergence and the Run dialog */}
-          <div class="sd-run cluster-sm">
-            <Show when={engines().length > 1}>
-              <label class="rp-mini">{t("run.engine")}
-                <select class="rp-select" aria-label={t("run.engine")} value={eng()} disabled={active()} onChange={(e) => setEngine(e.currentTarget.value)}>
-                  <For each={engines()}>{(e) => <option value={e}>{e === "gpu" ? "GPU" : "CPU"}</option>}</For>
-                </select>
-              </label>
-            </Show>
-            <Show when={eng() === "cpu"} fallback={<span class="rp-hint">{t("run.gpuNote")}</span>}>
-              <span class="rp-mini sd-threads">{t("run.threads")}
-                <span class="cluster-sm">
-                  <label class="gs-check"><input type="checkbox" checked={threads() === 0} disabled={active()}
-                    onChange={(e) => setThreads(e.currentTarget.checked ? 0 : Math.min(cpu(), lastManualThreads() || health()?.default_threads || 1))} /> {t("run.threads.auto")}</label>
-                  <Show when={threads() !== 0}>
-                    <input autocomplete="off" class="rp-input mono sd-threads-n" inputmode="numeric" aria-label={t("run.threads")} value={threads()} disabled={active()}
-                      onInput={(e) => { const n = Number(e.currentTarget.value); if (Number.isInteger(n) && n >= 1 && n <= cpu()) setThreads(n); }} />
-                  </Show>
+          <Show when={!isEmerge()} fallback={<p class="note">{t("sweep.pointEmerge")}</p>}>
+            {/* the engine and threads of every run of the sweep, like Mesh convergence and the Run dialog */}
+            <div class="sd-run cluster-sm">
+              <Show when={engines().length > 1}>
+                <label class="rp-mini">{t("run.engine")}
+                  <select class="rp-select" aria-label={t("run.engine")} value={eng()} disabled={active()} onChange={(e) => setEngine(e.currentTarget.value)}>
+                    <For each={engines()}>{(e) => <option value={e}>{e === "gpu" ? "GPU" : "CPU"}</option>}</For>
+                  </select>
+                </label>
+              </Show>
+              <Show when={eng() === "cpu"} fallback={<span class="rp-hint">{t("run.gpuNote")}</span>}>
+                <span class="rp-mini sd-threads">{t("run.threads")}
+                  <span class="cluster-sm">
+                    <label class="gs-check"><input type="checkbox" checked={threads() === 0} disabled={active()}
+                      onChange={(e) => setThreads(e.currentTarget.checked ? 0 : Math.min(cpu(), lastManualThreads() || health()?.default_threads || 1))} /> {t("run.threads.auto")}</label>
+                    <Show when={threads() !== 0}>
+                      <input autocomplete="off" class="rp-input mono sd-threads-n" inputmode="numeric" aria-label={t("run.threads")} value={threads()} disabled={active()}
+                        onInput={(e) => { const n = Number(e.currentTarget.value); if (Number.isInteger(n) && n >= 1 && n <= cpu()) setThreads(n); }} />
+                    </Show>
+                  </span>
                 </span>
-              </span>
-            </Show>
-          </div>
+              </Show>
+            </div>
+          </Show>
           <div class="sd-summary">
             <button
               class="btn btn-ghost btn-sm"
@@ -518,11 +522,15 @@ function Content() {
               {t("sweep.cells", { count: plan().count, max: MAX_SWEEP_CELLS })}
               {plan().warning ? ` · ${plan().warning}` : ""}
               {plan().estimateSeconds != null
-                ? ` · ${t("sweep.estimated", { time: durationText(plan().estimateSeconds!), engine: eng() === "gpu" ? "GPU" : "CPU" })}`
+                ? ` · ${isEmerge()
+                  ? t("sweep.estimatedEmerge", { time: durationText(plan().estimateSeconds!) })
+                  : t("sweep.estimated", { time: durationText(plan().estimateSeconds!), engine: eng() === "gpu" ? "GPU" : "CPU" })}`
                 : ""}
             </span>
           </div>
-          <PreflightNote cells={designCells()} engine={eng()} />
+          <Show when={!isEmerge()}>
+            <PreflightNote cells={designCells()} engine={eng()} />
+          </Show>
           <Show when={plan().error || notice()}>
             <p class="status-block status-critical" role="alert">
               <CircleAlert size={14} aria-hidden="true" />
@@ -545,7 +553,8 @@ function Content() {
           </Show>
           {/* one sweep at a time from here: Start waits while this sweep runs, then offers to run it again */}
           <button
-            class="btn btn-primary rp-start-btn"
+            class="btn rp-start-btn"
+            classList={{ "btn-primary": !isEmerge(), "btn-primary-emerge": isEmerge() }}
             onClick={start}
             disabled={submitting() || active() || !!plan().error}
           >

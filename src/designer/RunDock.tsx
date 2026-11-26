@@ -29,7 +29,7 @@ import { differingParams, differs, madeLabels } from "./resultTabs";
 import type { RunMetrics } from "./runSummary";
 import { RunQualityBadge, RunQualityBanner } from "./RunQualityView";
 import { createEtaPresenter } from "./etaPresentation";
-import { ETA_MIN_DECAY_DB, isEmergeResearchJob, normalizeDockPhase, pulseNote as livePulseNote, runFraction } from "../runner/liveRun";
+import { ETA_MIN_DECAY_DB, isEmergeOptimizeJob, isEmergeResearchJob, normalizeDockPhase, pulseNote as livePulseNote, runFraction } from "../runner/liveRun";
 import { slowHint, watchSpeed } from "./slowRun";
 import { estimateTime } from "./meshStats";
 import { fmt, t } from "../i18n";
@@ -212,7 +212,7 @@ function RunProgress() {
         <div class="cluster-sm rdk-run-head">
           <StatusBadge status={job().status} />
           <span class="mono">{job().label ?? job().model_id ?? job().model}</span>
-          <span class="muted">· {engineThreadsText(job().engine, liveInfo().threads ?? job().threads)}</span>
+          <span class="muted">· {emerge() || isEmergeOptimizeJob(job()) ? "EMerge" : engineThreadsText(job().engine, liveInfo().threads ?? job().threads)}</span>
           <Show when={!done()}>
             <button class="btn btn-ghost btn-sm rdk-push" onClick={() => void cancelJob(job().id)} disabled={stopping().has(job().id)} title={t("runDock.stop.title")}>
               <Square size={13} aria-hidden="true" /> {stopping().has(job().id) ? t("runQueue.stopping") : t("runDock.stopRun")}

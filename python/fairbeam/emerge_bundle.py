@@ -57,6 +57,56 @@ def _pack_nport_sparams(s_block, z_refs):
     return port_results, sparams
 
 
+def _resolved_planar_ports(design):
+    """Microstrip and CPW ports as the viewer stores them, with expressions evaluated.
+
+    The openEMS preview build cannot take these ports: ``to_bundle`` runs the FDTD
+    planar mesh gates, which must not reject an EMerge result. The saved bundle still
+    needs ``number``, ``excite``, and numeric ends so a comparison can address
+    ``results.ports`` by that number.
+    """
+    from .design import DesignError, resolve_names, evaluate
+
+    params = design.get("params") if isinstance(design, dict) else None
+    values = {p["key"]: p["default"] for p in params or []
+              if isinstance(p, dict) and "expr" not in p and "key" in p and "default" in p}
+    try:
+        names = resolve_names(design if isinstance(design, dict) else {}, values)
+    except (DesignError, TypeError, ValueError, KeyError):
+        return []
+
+    def num(value):
+        return float(evaluate(value, names))
+
+    out = []
+    for po in (design.get("ports") or []) if isinstance(design, dict) else []:
+        if not isinstance(po, dict) or po.get("type") not in ("microstrip", "cpw"):
+            continue
+        try:
+            start = [num(v) for v in po["start"]]
+            stop = [num(v) for v in po["stop"]]
+            ref = num(po.get("reference_ohm", 50))
+            feed = num(po.get("feed_shift", 0))
+            meas = num(po["measurement_shift"])
+            record = {
+                "type": po["type"], "number": int(po["number"]),
+                "start": start, "stop": stop,
+                "direction": po["direction"],
+                "excitation_direction": po["excitation_direction"],
+                "conductor": po.get("conductor") or "PEC",
+                "feed_shift": feed, "measurement_shift": meas,
+                "termination": po.get("termination", "open"),
+                "reference_ohm": ref, "R": ref,
+                "excite": bool(po.get("excite", True)),
+            }
+            if po["type"] == "cpw":
+                record["gap"] = num(po["gap"])
+        except (DesignError, TypeError, ValueError, KeyError):
+            continue
+        out.append(record)
+    return out
+
+
 def _base_preview_bundle(design, settings, case, result, *, name_suffix=" · EMerge FEM"):
     from .preview import build_preview
 
@@ -70,13 +120,15 @@ def _base_preview_bundle(design, settings, case, result, *, name_suffix=" · EMe
     # (e.g. "three cells across each CPW gap") are unrelated to the FEM tetrahedra
     # already in ``result`` and must not fail packaging after a successful EMerge solve.
     # Mesh / domain / solver fields below replace whatever preview would have written.
-    # Keep lumped/coax/waveguide ports so driven-class export can still widen feed boxes.
+    # Lumped, coax, and waveguide ports stay on the drawing so driven-class export can
+    # still widen feed boxes. Microstrip and CPW are resolved onto the bundle afterwards.
     drawing["ports"] = [
         p for p in (drawing.get("ports") or [])
         if not isinstance(p, dict) or p.get("type") not in ("microstrip", "cpw")
     ]
     bundle = build_preview(None, {}, design=drawing)["bundle"]
     bundle.pop("preview", None)
+    bundle["ports"] = list(bundle.get("ports") or []) + _resolved_planar_ports(design)
     bundle["name"] += name_suffix
     air_lo = [float(v) * 1000 for v in case["air"]["lo"]]
     air_hi = [float(v) * 1000 for v in case["air"]["hi"]]

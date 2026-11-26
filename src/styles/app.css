@@ -160,7 +160,8 @@ svg.lucide { flex: none; stroke-width: var(--al-icon-stroke); }
 .header-more-menu .menu-item { width: 100%; gap: var(--al-space-2); white-space: nowrap; }
 .header-more-menu .menu-item svg { width: var(--al-icon-sm); height: var(--al-icon-sm); flex: none; color: var(--al-text-2); }
 .header-more-menu .menu-sep { width: auto; height: 1px; margin: var(--al-space-1) 0; }
-.header-actions .btn-primary { margin-left: var(--al-space-2); }
+.header-actions .btn-primary,
+.header-actions .btn-primary-emerge { margin-left: var(--al-space-2); }
 
 /* ------------------------------------------------------------------ controls */
 .btn {
@@ -177,8 +178,11 @@ svg.lucide { flex: none; stroke-width: var(--al-icon-stroke); }
 .btn[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 .btn-primary { background: var(--al-action); color: var(--al-action-text); }
 .btn-primary:hover:not(:disabled, [aria-disabled="true"]) { background: var(--al-action-hover); }
+.btn-primary-emerge { background: var(--al-action-emerge); color: var(--al-action-emerge-text); }
+.btn-primary-emerge:hover:not(:disabled, [aria-disabled="true"]) { background: var(--al-action-emerge-hover); }
 /* a disabled primary drops to the neutral disabled look; a faded copper reads as muddy brown in dark */
-.btn-primary:disabled, .btn-primary[aria-disabled="true"] { background: var(--al-surface-3); color: var(--al-text-disabled); opacity: 1; }
+.btn-primary:disabled, .btn-primary[aria-disabled="true"],
+.btn-primary-emerge:disabled, .btn-primary-emerge[aria-disabled="true"] { background: var(--al-surface-3); color: var(--al-text-disabled); opacity: 1; }
 .btn-ghost { border-color: var(--al-border); color: var(--al-text); }
 .btn-ghost:hover:not(:disabled, [aria-disabled="true"]) { background: var(--al-surface-2); border-color: var(--al-border-strong); }
 .btn-ghost[aria-pressed="true"] { background: var(--al-surface-3); border-color: var(--al-border-strong); }
@@ -921,7 +925,8 @@ input[type="range"] { height: var(--al-control-h-sm); margin: 0; accent-color: v
   .brand-lockup { width: 20px; }
   .example-picker-trigger > svg:first-child { display: none; }
   .header-actions { gap: 0; }
-  .header-actions .btn-primary { margin-left: var(--al-space-1); }
+  .header-actions .btn-primary,
+  .header-actions .btn-primary-emerge { margin-left: var(--al-space-1); }
   /* buttons with a .btn-label collapse to their icon */
   .btn-label { display: none; }
   .btn:has(> .btn-label) { width: var(--al-control-h); padding: 0; }

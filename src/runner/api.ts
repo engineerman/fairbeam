@@ -468,7 +468,7 @@ export interface Job {
     source?: { model_id: string; workspace_hash: string; backup_scope: string; design_sha256: string } };
   /** Omitted by polling summaries; explicit researchRun details include the result. */
   result?: ResearchResult | null;
-  optimize?: { vary: OptVary[]; goals: OptGoal[]; max_evals: number; method: string; excite?: string } | null;
+  optimize?: { vary: OptVary[]; goals: OptGoal[]; max_evals: number; method: string; excite?: string; emerge?: { path: string; settings: Record<string, unknown> } } | null;
   /** display name given by the user (the bundle file name is its slug, `name`) */
   label: string | null;
   sweep: JobSweep | null;

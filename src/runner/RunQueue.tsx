@@ -5,6 +5,7 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { Eye, ListX, Square, X } from "lucide-solid";
 import { isTerminal, type Job } from "./api";
+import { isEmergeOptimizeJob } from "./liveRun";
 import { isDesignBoundResearch } from "./researchState";
 import { cancelJob, clearQueue, jobs, live, serverActivity, stopping } from "./store";
 import { ago, paramSummary, StatusBadge } from "./status";
@@ -108,7 +109,7 @@ export function RunQueue(props: { followed: string | null; onFollow: (job: Job) 
                   <StatusBadge status={j.status} compact />
                   <span class="rp-hrow-text">
                     <span class="rp-hrow-name"><span class="mono">{jobName(j)}</span> <Show when={j.kind !== "research"}><span class="muted">{paramSummary(j)}</span></Show></span>
-                    <span class="rp-hrow-sub mono">{ago(j.created)}<Show when={j.kind !== "research"}>{" · "}{engineThreadsText(j.engine, j.info?.threads ?? j.threads, true)}</Show></span>
+                    <span class="rp-hrow-sub mono">{ago(j.created)}<Show when={j.kind !== "research"}>{" · "}{isEmergeOptimizeJob(j) ? "EMerge" : engineThreadsText(j.engine, j.info?.threads ?? j.threads, true)}</Show></span>
                   </span>
                 </span>
                 <Show when={props.followed !== j.id || live.job?.id !== j.id}>

@@ -321,7 +321,9 @@ export async function startOptimize() {
     for (const v of vary) delete base[v.key];
     const saved = designFile();
     let emerge: ReturnType<typeof emergeSolveRequest> | undefined;
-    if (isEmerge() && saved?.id === m.key) {
+    if (isEmerge()) {
+      // A missing design must not fall through to fairbeam optimize (openEMS), including GPU.
+      if (!saved || saved.id !== m.key) throw new Error(t("sweep.err.noDesign"));
       const probed = await api.health();
       const source = emergeResearchSource(probed, saved);
       if (hasDocumentResultScope(saved) && !source) throw new Error(t("emergeExp.serverUpdate"));
@@ -330,8 +332,10 @@ export async function startOptimize() {
     const job = await api.submitOptimization({
       model: m.key,
       params: base,
-      threads: threadsForEngine(optEngine() || "cpu", threads() || health()?.default_threads || 1),
-      engine: optEngine() || undefined,
+      threads: isEmerge()
+        ? (threads() || health()?.default_threads || 1)
+        : threadsForEngine(optEngine() || "cpu", threads() || health()?.default_threads || 1),
+      ...(isEmerge() ? {} : { engine: optEngine() || undefined }),
       ...(meshStats(meshSource())?.nodes ? { cells: meshStats(meshSource())!.nodes } : {}),
       ...(runName().trim() ? { name: runName().trim() } : {}),
       vary: vary.map((v) => ({ key: v.key, min: Number(v.min), max: Number(v.max), start: Number(v.start) })),

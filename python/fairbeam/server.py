@@ -1915,8 +1915,11 @@ class App:
                          "method": method, "excite": excite}
         if emerge_session is not None:
             optimize_spec["emerge"] = emerge_session
+        # A GPU/CPU engine on this request is the openEMS build. An EMerge search must not
+        # keep that label, or the queue reads as an openEMS run.
+        engine = None if emerge_session is not None else st["engine"]
         job = self.manager.submit(model=m["key"], model_id=model_id, model_path=m["path"], design_input=m.get("_queued_design"), params=resolved,
-                                  overrides=fixed, threads=st["threads"], engine=st["engine"],
+                                  overrides=fixed, threads=st["threads"], engine=engine,
                                   end_criteria_db=st["end_criteria_db"], name=name, label=label, kind="optimize",
                                   optimize=optimize_spec)
         return job.to_dict()

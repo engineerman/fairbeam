@@ -5,6 +5,8 @@ import { createStore } from "solid-js/store";
 import { pinAll } from "../compare/store";
 import { api, ApiError, isTerminal, type Job, type SweepAxisRequest } from "./api";
 import { t } from "../i18n";
+import { isEmerge } from "../designer/activeEngine";
+import { emergeSweepAttach } from "./emergeSweepAttach";
 import { attach, currentModel, jobs, values, openResult, paramPayload, refreshRuns, runSettings, setFieldErrors, setNotice, setSubmitError, setSubmitting, specs, submitting } from "./store";
 
 export const MAX_SWEEP_RUNS = 25;
@@ -101,7 +103,13 @@ export async function startSweep() {
     const sweep: SweepAxisRequest[] = axes.map((a, index) => ({ key: a.key, values: plan.per[index].values }));
     const base = paramPayload();
     for (const a of axes) delete base[a.key];
-    const res = await api.submitSweep({ model: m.key, params: base, sweep, ...runSettings() });
+    const settings = { ...runSettings() };
+    const emerge = isEmerge() ? await emergeSweepAttach() : null;
+    if (isEmerge()) {
+      if (!emerge) throw new Error(t("sweep.err.noDesign"));
+      delete settings.engine;
+    }
+    const res = await api.submitSweep({ model: m.key, params: base, sweep, ...settings, ...(emerge ? { emerge } : {}) });
     setNotice(null);
     await refreshRuns();
     if (res.runs[0]) attach(res.runs[0]);

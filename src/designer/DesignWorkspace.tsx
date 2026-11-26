@@ -38,6 +38,7 @@ import RunDock from "./RunDock";
 import { meshView, setMeshView, toggleMeshView } from "./MeshView";
 import { hasEmergeFemOverlay } from "./emergeFemMesh";
 import { emergeAdmitResolution, emergeSettings } from "./emergeSettings";
+import "./emergeSweepBridge";
 import PanelBoundary from "../components/PanelBoundary";
 import { useModal } from "../lib/dialog";
 const [simSettingsPending, setSimSettingsPending] = createSignal(true);

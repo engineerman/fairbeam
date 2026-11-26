@@ -272,6 +272,6 @@ export default function EmergeRun(props: { close: () => void }) {
     </fieldset>
     <Show when={error()}><div ref={alert} class="status-block status-critical" role="alert"><p>{error()}</p></div></Show>
     <Show when={diagnostic()}><details><summary>{t("common.details")}</summary><p class="note">{diagnostic()}</p></details></Show>
-    <div class="dialog-actions"><button class="btn btn-primary" type="submit" disabled={busy() || invalid()}>{busy() ? t("run.starting") : t("run.saveAndRun")}</button></div>
+    <div class="dialog-actions"><button class="btn btn-primary-emerge" type="submit" disabled={busy() || invalid()}>{busy() ? t("run.starting") : t("run.saveAndRun")}</button></div>
   </form>;
 }

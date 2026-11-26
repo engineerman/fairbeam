@@ -193,6 +193,15 @@ class EmergeOptimizeQueue(unittest.TestCase):
         self.assertNotIn("-m fairbeam optimize", " ".join(cmd))
         self.assertEqual(cmd[1:3], ["-m", "fairbeam.emerge_optimize"])
 
+    def test_openems_gpu_engine_is_not_kept_on_an_emerge_search(self):
+        self.app._settings = lambda body, errors: dict(
+            threads=1, engine="gpu", end_criteria_db=None, label=None, points=None, name=None)
+        job = self._optimize("s11_max")
+        self.assertIsNone(job["engine"])
+        cmd = self.m.default_command(self.m.get(job["id"]))
+        self.assertEqual(cmd[1:3], ["-m", "fairbeam.emerge_optimize"])
+        self.assertNotIn("--engine", cmd)
+
     def test_goal_frequency_outside_the_emerge_band_is_rejected(self):
         with self.assertRaises(ApiError) as caught:
             self._optimize("s11_max", at=9.0)
