@@ -1,5 +1,6 @@
 """Research admission, immutable inputs and worker dispatch through the ordinary job queue."""
 import argparse
+import copy
 import hashlib
 import json
 import math
@@ -93,15 +94,74 @@ def probe(body):
     return {**result, "backend": backend}
 
 
+def _independent_params(design):
+    params = design.get("params") if isinstance(design, dict) else None
+    if not isinstance(params, list):
+        return {}
+    return {p["key"]: p for p in params
+            if isinstance(p, dict) and isinstance(p.get("key"), str) and "expr" not in p}
+
+
+def design_with_param_overrides(design, overrides):
+    """Return a design copy whose independent defaults are ``overrides``.
+
+    The saved design stays untouched. EMerge bakes geometry from those defaults
+    (``resolve_params(..., {})`` in the planar, driven, and coax admits) and the
+    results drawing reads the same copy. Empty overrides return ``design`` itself.
+    """
+    if not isinstance(overrides, dict):
+        raise ValueError("param_overrides must be an object")
+    if not overrides:
+        return design
+    if any(not isinstance(key, str) for key in overrides):
+        raise ValueError("param_overrides keys must be parameter names")
+    if not isinstance(design, dict):
+        raise ValueError("param_overrides require a design")
+    copied = copy.deepcopy(design)
+    params = _independent_params(copied)
+    unknown = sorted(set(overrides) - set(params))
+    if unknown:
+        raise ValueError("param_overrides only accepts independent parameters; unknown: " + ", ".join(unknown))
+    for key, value in overrides.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ValueError(f"param_overrides[{key}] must be a finite number")
+        params[key]["default"] = float(value)
+    return copied
+
+
+def _clean_param_overrides(body, backend):
+    if "param_overrides" not in body:
+        return {}
+    raw = body.get("param_overrides")
+    if not isinstance(raw, dict):
+        raise ValueError("param_overrides must be an object")
+    if not raw:
+        return {}
+    if backend != "emerge":
+        raise ValueError("param_overrides are supported for EMerge designs only")
+    design_with_param_overrides(body.get("design"), raw)
+    return {key: float(value) for key, value in raw.items()}
+
+
+def emerge_drawing_design(spec):
+    """Design passed to the EMerge results drawing. Overrides stay off ``spec["design"]``."""
+    design = spec.get("design")
+    overrides = spec.get("param_overrides") or {}
+    if not overrides:
+        return design
+    return design_with_param_overrides(design, overrides)
+
+
 def prepare(body):
     """Validate and pin selected binaries before publishing anything to the queue."""
-    if not isinstance(body, dict) or set(body) - {"backend", "path", "settings", "design"}:
+    if not isinstance(body, dict) or set(body) - {"backend", "path", "settings", "design", "param_overrides"}:
         raise ValueError("research run expects backend, path, settings and optional design")
     backend = backend_name(body.get("backend"))
     path = requested_path(body.get("path"))
     settings = body.get("settings", {})
     if not isinstance(settings, dict):
         raise ValueError("settings must be an object")
+    param_overrides = _clean_param_overrides(body, backend)
     encode(body)
     if len(encode(body)) > MAX_SNAPSHOT_BYTES:
         raise ValueError("research input snapshot exceeds 1 MiB")
@@ -144,7 +204,10 @@ def prepare(body):
             raise ValueError("mesh_only must be boolean")
         if body.get("design") is not None:
             from .emerge_solver import admit as admit_emerge
-            normalized = admit_emerge(body["design"], admit_settings)
+            # Geometry is baked here. Overrides live on a copy's independent defaults;
+            # spec.design below stays the saved design for source binding.
+            admit_design = design_with_param_overrides(body["design"], param_overrides)
+            normalized = admit_emerge(admit_design, admit_settings)
             if mesh_only:
                 normalized = {**normalized, "mesh_only": True}
         else:
@@ -176,6 +239,8 @@ def prepare(body):
             "settings": settings, "design": body.get("design"), "normalized": normalized,
             "binary_sha256": pins,
             "pin_scope": "selected native executables and adjacent libraries; system dependencies unpinned"}
+    if param_overrides:
+        spec["param_overrides"] = param_overrides
     raw = encode(spec)
     if len(raw) > MAX_SNAPSHOT_BYTES:
         raise ValueError("normalized research snapshot exceeds 1 MiB")
@@ -442,7 +507,7 @@ def execute(snapshot, outdir, checksum):
         value['bundle_sha256'] = hashlib.sha256(bundle_bytes).hexdigest()
     elif value.get('schema') == 'fairbeam.emerge-result/2':
         from .emerge_bundle import export_emerge_bundle
-        bundle_bytes = encode(export_emerge_bundle(spec['design'], value))
+        bundle_bytes = encode(export_emerge_bundle(emerge_drawing_design(spec), value))
         (outdir / 'bundle.json').write_bytes(bundle_bytes)
         value['bundle_sha256'] = hashlib.sha256(bundle_bytes).hexdigest()
     target = outdir / "result.json"

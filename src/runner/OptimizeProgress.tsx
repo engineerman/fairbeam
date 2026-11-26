@@ -15,6 +15,7 @@ type Evaluation = ReturnType<typeof optEvals>[number];
 /** An evaluation's status (an i18n key); a skipped one was never simulated (the design checks refused it). */
 const statusOf = (e: Evaluation) => (e.skipped ? "opt.status.skipped" : e.error ? "opt.status.failed" : e.met ? "opt.status.met" : "opt.status.evaluated");
 
+import { isEmergeOptimizeJob } from "./liveRun";
 import { reasonText } from "./optimizationText";
 
 /** Live card of an optimization job: cost per evaluation, the evaluations table, best point. */
@@ -175,7 +176,7 @@ export default function OptimizeProgress() {
           </Show>
         </dd>
         <dt>{t("run.engine")}</dt>
-        <dd class="mono">{(optEvals()[0]?.metrics.engine ?? job().engine ?? "cpu").toUpperCase()}</dd>
+        <dd class="mono">{isEmergeOptimizeJob(job()) ? "EMerge" : (optEvals()[0]?.metrics.engine ?? job().engine ?? "cpu").toUpperCase()}</dd>
         <dt>{t("opt.progress.elapsed")}</dt>
         <dd class="mono">{seconds(latest()?.elapsed_s ?? elapsed())}{eta() != null ? ` · ${t("opt.progress.eta", { time: seconds(eta()!) })}` : ""}</dd>
       </dl>

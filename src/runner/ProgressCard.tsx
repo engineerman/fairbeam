@@ -221,7 +221,7 @@ export default function ProgressCard() {
         </Show>
         {/* a GPU run has no thread count to show (the job's 1 is a placeholder) */}
         <dt>{t("run.engine")}</dt>
-        <dd class="mono">{engineThreadsText(liveInfo().engine ?? job().engine, liveInfo().threads ?? job().threads)}</dd>
+        <dd class="mono">{emerge() ? "EMerge" : engineThreadsText(liveInfo().engine ?? job().engine, liveInfo().threads ?? job().threads)}</dd>
       </dl>
 
       <Show when={!emerge() && (series().length || !done())}>

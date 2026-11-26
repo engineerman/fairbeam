@@ -2,6 +2,7 @@ import { For, onMount, Show } from "solid-js";
 import { CircleAlert, LoaderCircle, Plus, Target, X } from "lucide-solid";
 import { seconds } from "../lib/format";
 import { radioGroupKeys } from "../lib/a11y";
+import { isEmerge } from "../designer/activeEngine";
 import type { GoalKind } from "./api";
 import {
   addGoal,
@@ -42,6 +43,9 @@ import NumberField from "../components/NumberField";
 import { PreflightNote } from "../designer/PreflightNote";
 import { methodName } from "../designer/optimizationResults";
 import { meshStats } from "../designer/meshStats";
+
+const EMERGE_HIDDEN_GOALS = new Set<GoalKind>(["dmax_min", "realized_gain_min", "efficiency_min"]);
+const antennaGoalPresets = () => GOAL_PRESETS.filter((p) => !p.multi && !(isEmerge() && EMERGE_HIDDEN_GOALS.has(p.kind)));
 
 /** The target field's label: an i18n key, or a symbol that stays as it is */
 const TARGET_LABEL: Record<GoalKind, string> = {
@@ -152,7 +156,7 @@ export default function OptimizePanel(props: { onStarted?: (job: import("./api")
                 <select class="rp-select rp-select-sm op-grow" aria-label={t("opt.goalN", { n: i() + 1 })} value={g.kind}
                   onChange={(e) => setGoalKind(i(), e.currentTarget.value as GoalKind)}>
                   <optgroup label={t("opt.group.antenna")}>
-                    <For each={GOAL_PRESETS.filter((p) => !p.multi)}>{(p) => <option value={p.kind}>{t(p.label)}</option>}</For>
+                    <For each={antennaGoalPresets()}>{(p) => <option value={p.kind}>{t(p.label)}</option>}</For>
                   </optgroup>
                   <optgroup label={t("opt.group.multi")}>
                     <For each={GOAL_PRESETS.filter((p) => p.multi)}>
@@ -239,14 +243,14 @@ export default function OptimizePanel(props: { onStarted?: (job: import("./api")
           <NumberField class="rp-input op-evals" min="1" max={MAX_OPT_EVALS} step="1" value={maxEvals()}
             onInput={(e) => setMaxEvals(Math.round(Number(e.currentTarget.value)))} aria-invalid={!!err("max_evals")} />
         </label>
-        <Show when={engines().length > 1}>
+        <Show when={!isEmerge() && engines().length > 1}>
           <div class="seg seg-sm" role="radiogroup" aria-label={t("run.engine")} onKeyDown={radioGroupKeys}>
             <For each={engines()}>
               {(e) => <button class="seg-btn" role="radio" aria-checked={optEngine() === e} tabindex={optEngine() === e ? 0 : -1} onClick={() => setOptEngine(e)}>{e.toUpperCase()}</button>}
             </For>
           </div>
         </Show>
-        <Show when={optEngine() !== "gpu"}>
+        <Show when={!isEmerge() && optEngine() !== "gpu"}>
           <label class="rp-inline-field">
             <span>{t("run.threads")}</span>
             <select class="rp-select rp-select-sm" value={threads()} onChange={(e) => setThreads(Number(e.currentTarget.value))}>
@@ -255,7 +259,7 @@ export default function OptimizePanel(props: { onStarted?: (job: import("./api")
             </select>
           </label>
         </Show>
-        <Show when={optEngine() === "gpu"}>
+        <Show when={!isEmerge() && optEngine() === "gpu"}>
           <span class="note">{t("run.gpuNote")}</span>
         </Show>
         <label class="rp-inline-field" title={methodTitle(optPlan().method)}>
@@ -277,7 +281,7 @@ export default function OptimizePanel(props: { onStarted?: (job: import("./api")
         <p class="rp-error" role="alert"><CircleAlert size={12} aria-hidden="true" /> {err("max_evals")}</p>
       </Show>
       <p class="note">
-        {nDriven() > 1 ? t("opt.note.evalMulti", { n: nDriven() }) : t("opt.note.eval")}
+        {isEmerge() ? t("opt.note.evalEmerge") : nDriven() > 1 ? t("opt.note.evalMulti", { n: nDriven() }) : t("opt.note.eval")}
         <Show when={estimate()} fallback={<> {t("opt.note.noEstimate")}</>}>
           {" "}{t("opt.note.atMost")} <span class="mono">{seconds(estimate()!)}</span>
           <Show when={nDriven() > 1} fallback={<> {t("opt.note.basis", { evals: maxEvals(), time: seconds(lastEvalSeconds()!) })}</>}>
@@ -289,11 +293,13 @@ export default function OptimizePanel(props: { onStarted?: (job: import("./api")
         <span>{t("opt.name")} <span class="muted">{t("opt.name.optional")}</span></span>
         <input autocomplete="off" id="op-name" class="rp-input rp-input-text" type="text" maxlength="80" value={runName()} placeholder={t("opt.name.placeholder")} onInput={(e) => setRunName(e.currentTarget.value)} />
       </label>
-      <PreflightNote cells={meshStats(meshSource())?.nodes} engine={optEngine() || "cpu"} />
+      <Show when={!isEmerge()}>
+        <PreflightNote cells={meshStats(meshSource())?.nodes} engine={optEngine() || "cpu"} />
+      </Show>
       <Show when={submitError()}>
         <p class="status-block status-critical" role="alert"><CircleAlert size={14} aria-hidden="true" /> <span>{submitError()}</span></p>
       </Show>
-      <button class="btn btn-primary rp-start-btn" onClick={async () => { const job = await startOptimize(); if (job) props.onStarted?.(job); }} disabled={submitting() || !optPlan().ok}>
+      <button class="btn rp-start-btn" classList={{ "btn-primary": !isEmerge(), "btn-primary-emerge": isEmerge() }} onClick={async () => { const job = await startOptimize(); if (job) props.onStarted?.(job); }} disabled={submitting() || !optPlan().ok}>
         <Show when={submitting()} fallback={<Target size={14} aria-hidden="true" />}>
           <LoaderCircle size={14} class="rs-spin" aria-hidden="true" />
         </Show>

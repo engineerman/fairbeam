@@ -36,6 +36,7 @@ import {
   type EmergeMapKind,
 } from "./emergePortMapPreview";
 import { setEmergeMode } from "./activeEngine";
+import { emergeNportSettings, emergeResearchSource, setSessionEmergeMapKind } from "./emergeRunRequest";
 
 const BAND_KEYS = ["f_min_hz", "f_max_hz", "points"] as const;
 
@@ -118,7 +119,10 @@ export default function EmergeRun(props: { close: () => void }) {
     const rawType = first?.type;
     const type = rawType == null ? "lumped" : String(rawType);
     const allowed = new Set(mapOptionsFor(type, hint).map((o) => o.kind));
-    setMapKind((cur) => (cur != null && allowed.has(cur) ? cur : next));
+    const cur = mapKind();
+    const resolved = cur != null && allowed.has(cur) ? cur : next;
+    if (resolved !== cur) setMapKind(resolved);
+    setSessionEmergeMapKind(resolved);
   });
 
   const invalid = () => {
@@ -174,43 +178,9 @@ export default function EmergeRun(props: { close: () => void }) {
       const target = await prepareSavedDesign(() => alive);
       if (!alive) return;
       if (!target?.isCurrent()) throw Error(t("run.err.notSaved"));
-      const v = values();
-      const settings: Record<string, unknown> = {
-        analysis: "emerge_nport",
-        resolution: emergeAdmitResolution(),
-        f_min_hz: Number(v.f_min_hz) * 1e9,
-        f_max_hz: Number(v.f_max_hz) * 1e9,
-        points: Number(v.points),
-      };
-      if (showCoax()) {
-        // Coax child admit allow-list is narrow; only send Stage B keys.
-        settings.accept_coaxial_tem = true;
-        settings.padding_mm = Number(v.padding_mm);
-      } else {
-        settings.approximate_metals = approxMetals();
-        settings.refine_conductor_edges = emergeSettings().refine_conductor_edges;
-        if (needFinite()) settings.accept_finite_feed = true;
-        // Exclusive map: WavePort XOR LumpedPort (server: modal wins if both were set).
-        if ((needLumped() || needModal()) && mapKind() === "wave") settings.accept_modal_ports = true;
-        else if ((needLumped() || needModal()) && mapKind() === "lumped") settings.accept_lumped_terminals = true;
-        // Union of planar + driven keys so the server can classify either way.
-        if (showPlanar()) {
-          settings.enclosure = enclosure();
-          settings.air_height_mm = Number(v.air_height_mm);
-        }
-        if (showDriven()) {
-          settings.feed_width_mm = Number(v.feed_width_mm);
-          // Always send padding for driven fallback; emerge_solver strips it for shielded planar.
-          settings.padding_mm = Number(v.padding_mm);
-        } else if (enclosure() === "open") {
-          settings.padding_mm = Number(v.padding_mm);
-        }
-      }
-      const cutHz = fieldCutFrequenciesHzFromText(emergeSettings().field_cut_frequencies_ghz);
-      if (cutHz) settings.field_cut_frequencies_hz = cutHz;
+      const settings = emergeNportSettings(draft.ports, mapKind());
       const saved = target.file;
-      const source = health.research_source && saved.backup_scope
-        ? { model_id: saved.id, workspace_hash: saved.hash, backup_scope: saved.backup_scope } : undefined;
+      const source = emergeResearchSource(health, saved);
       if (hasDocumentResultScope(saved) && !source) throw Error(t("emergeExp.serverUpdate"));
       if (!target.isCurrent()) return;
       const job = await api.researchStart({
@@ -298,10 +268,10 @@ export default function EmergeRun(props: { close: () => void }) {
       <Show when={!showCoax()}>
         <label class="gs-check"><input type="checkbox" checked={approxMetals()} onChange={e => setApproxMetals(e.currentTarget.checked)} />{t("emergeExp.approximateMetals")}</label>
       </Show>
-      <EmergePortMapPreview path={previewPath()} mapKind={mapKind()} onMapKind={setMapKind} />
+      <EmergePortMapPreview path={previewPath()} mapKind={mapKind()} onMapKind={(kind) => { setMapKind(kind); setSessionEmergeMapKind(kind); }} />
     </fieldset>
     <Show when={error()}><div ref={alert} class="status-block status-critical" role="alert"><p>{error()}</p></div></Show>
     <Show when={diagnostic()}><details><summary>{t("common.details")}</summary><p class="note">{diagnostic()}</p></details></Show>
-    <div class="dialog-actions"><button class="btn btn-primary" type="submit" disabled={busy() || invalid()}>{busy() ? t("run.starting") : t("run.saveAndRun")}</button></div>
+    <div class="dialog-actions"><button class="btn btn-primary-emerge" type="submit" disabled={busy() || invalid()}>{busy() ? t("run.starting") : t("run.saveAndRun")}</button></div>
   </form>;
 }

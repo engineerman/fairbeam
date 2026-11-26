@@ -4,13 +4,15 @@ import { isTerminal } from "./api";
 import { closeRunPanel, live, openRunPanel, runOpen, setRunOpen } from "./store";
 import { setRunDialogOpen } from "./designRun";
 import { runPythonFromStart } from "./startPython";
+import { isEmerge } from "../designer/activeEngine";
 import { file as designFile } from "../designer/store";
 import { appMode } from "../workspace";
 import { t } from "../i18n";
 
-/** Header button. In the designer it is the screen's one primary (copper) action: it opens the Run
- * dialog for the open design (the CST export beside it is secondary). On Start it is the secondary
- * "Run a Python model…" that opens the Run panel, the runner for Python model files. */
+/** Header button. In the designer it is the screen's one primary action. Copper means openEMS.
+ * The EMerge accent means EMerge. It opens the Run dialog for the open design (the CST export
+ * beside it is secondary). On Start it is the secondary "Run a Python model…" that opens the
+ * Run panel, the runner for Python model files. */
 export default function RunToggle() {
   const busy = () => !!live.job && !isTerminal(live.job.status);
   const designing = () => appMode() === "design" && !!designFile();
@@ -21,7 +23,7 @@ export default function RunToggle() {
     <button
       id="run-toggle"
       class="btn"
-      classList={{ "btn-primary": designing(), "btn-ghost": !designing(), "rs-toggle-on": toggles() && runOpen() }}
+      classList={{ "btn-primary": designing() && !isEmerge(), "btn-primary-emerge": designing() && isEmerge(), "btn-ghost": !designing(), "rs-toggle-on": toggles() && runOpen() }}
       aria-expanded={toggles() ? runOpen() : undefined}
       aria-controls={toggles() ? "run-panel" : undefined}
       aria-haspopup={designing() ? "dialog" : undefined}

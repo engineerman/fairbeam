@@ -9,6 +9,7 @@ import { cancelSweep, historyItems, sweepLongCsv, summaryRows, type SummaryRow, 
 import { saveDownload } from "../lib/download";
 import { useModal } from "../lib/dialog";
 import SweepSummaryMulti, { isMultiPortGroup } from "./SweepSummaryMulti";
+import { isEmergeOptimizeJob } from "./liveRun";
 import { ClearQueueButton, engineThreadsText, jobName, QueueButton } from "./RunQueue";
 import { t } from "../i18n";
 import SweepTrend from './SweepTrendPanel';
@@ -101,7 +102,7 @@ function JobRow(props: { job: Job; inSweep?: boolean }) {
             <span class="rp-hrow-sub mono">
               {ago(j().created)}
               <Show when={j().duration_s !== null && isTerminal(j().status)}> · {seconds(j().duration_s)}</Show>
-              <Show when={j().kind !== "research"}>{" · "}{engineThreadsText(j().engine, j().info?.threads ?? j().threads, true)}</Show>
+              <Show when={j().kind !== "research"}>{" · "}{isEmergeOptimizeJob(j()) ? "EMerge" : engineThreadsText(j().engine, j().info?.threads ?? j().threads, true)}</Show>
             </span>
           </span>
         </button>

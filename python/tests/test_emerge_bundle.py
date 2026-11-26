@@ -178,6 +178,13 @@ class EmergeNportBundle(unittest.TestCase):
         self.assertEqual(bundle["results"]["ports"]["1"]["s11_re"], [0.2, 0.2, 0.2])
         self.assertEqual(bundle["results"]["ports"]["2"]["s11_re"], [0.1, 0.1, 0.1])
         self.assertIn("not conjugated", bundle["experimental"]["phasor_convention"])
+        ports = bundle["ports"]
+        self.assertEqual([p["number"] for p in ports], [1, 2])
+        self.assertEqual([p["type"] for p in ports], ["microstrip", "microstrip"])
+        self.assertEqual([p["excite"] for p in ports], [True, False])
+        self.assertEqual(ports[0]["R"], ports[0]["reference_ohm"])
+        self.assertTrue(all(isinstance(v, float) for p in ports for v in (*p["start"], *p["stop"])))
+        self.assertEqual(ports[0]["start"][2], 1.6)
 
     def test_open_enclosure_uses_absorbing_sides(self):
         design = json.loads(HAIRPIN.read_text(encoding="utf-8"))

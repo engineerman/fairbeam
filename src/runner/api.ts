@@ -468,7 +468,7 @@ export interface Job {
     source?: { model_id: string; workspace_hash: string; backup_scope: string; design_sha256: string } };
   /** Omitted by polling summaries; explicit researchRun details include the result. */
   result?: ResearchResult | null;
-  optimize?: { vary: OptVary[]; goals: OptGoal[]; max_evals: number; method: string; excite?: string } | null;
+  optimize?: { vary: OptVary[]; goals: OptGoal[]; max_evals: number; method: string; excite?: string; emerge?: { path: string; settings: Record<string, unknown> } } | null;
   /** display name given by the user (the bundle file name is its slug, `name`) */
   label: string | null;
   sweep: JobSweep | null;
@@ -628,10 +628,10 @@ export const api = {
   cancel: (id: string) => call<Job>("POST", `/runs/${encodeURIComponent(id)}/cancel`, {}),
   /** cancel every queued run; the running one keeps running (stop it with cancel) */
   clearQueue: () => call<{ cancelled: string[]; runs: Job[] }>("POST", "/queue/clear", {}),
-  submitOptimization: (body: { model: string; params: Record<string, ParamValue>; threads: number; engine?: string; name?: string; vary: OptVary[]; goals: OptGoal[]; max_evals: number; cells?: number; method?: string; excite?: string }) =>
+  submitOptimization: (body: { model: string; params: Record<string, ParamValue>; threads: number; engine?: string; name?: string; vary: OptVary[]; goals: OptGoal[]; max_evals: number; cells?: number; method?: string; excite?: string; emerge?: { path: string; settings: Record<string, unknown>; source?: { model_id: string; workspace_hash: string; backup_scope: string } } }) =>
     call<Job>("POST", "/optimizations", withThreads(body)),
   saveOptimizationBest: (id: string) => call<{ file: string }>("POST", `/optimizations/${encodeURIComponent(id)}/save-best`, {}),
-  submitSweep: (body: { model: string; params: Record<string, ParamValue>; threads: number; engine?: string; name?: string; end_criteria_db?: number; sweep?: SweepAxisRequest[]; cells?: number; sequences?: { name: string; sweep: SweepAxisRequest[] }[] }) =>
+  submitSweep: (body: { model: string; params: Record<string, ParamValue>; threads: number; engine?: string; name?: string; end_criteria_db?: number; sweep?: SweepAxisRequest[]; cells?: number; sequences?: { name: string; sweep: SweepAxisRequest[] }[]; emerge?: { path: string; settings: Record<string, unknown>; source?: { model_id: string; workspace_hash: string; backup_scope: string } } }) =>
     call<{ sweep: { id: string; name: string; axes: SweepAxis[]; total: number }; runs: Job[] }>("POST", "/sweeps", withThreads(body)),
   cancelSweep: (id: string) => call<{ runs: Job[] }>("POST", `/sweeps/${encodeURIComponent(id)}/cancel`, {}),
   /** a mesh convergence study of a saved design; stop it with cancelSweep(study.id) */

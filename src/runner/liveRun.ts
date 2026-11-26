@@ -16,6 +16,13 @@ export function isEmergeResearchJob(
   return !!job && job.kind === "research" && job.research?.backend === "emerge";
 }
 
+/** An optimize job whose candidates are EMerge solves, not ``fairbeam optimize`` (openEMS). */
+export function isEmergeOptimizeJob(
+  job: { kind?: string; optimize?: { emerge?: unknown } | null } | null | undefined,
+): boolean {
+  return !!job && job.kind === "optimize" && job.optimize?.emerge != null;
+}
+
 /**
  * Map research-only phase names onto the openEMS dock spine so the strip and bar advance.
  * openEMS phases pass through unchanged. Unknown names fall back to queued (honest empty strip).
